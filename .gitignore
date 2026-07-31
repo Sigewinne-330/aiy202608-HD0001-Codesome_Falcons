@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+
+# WorkBuddy
+.workbuddy/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
