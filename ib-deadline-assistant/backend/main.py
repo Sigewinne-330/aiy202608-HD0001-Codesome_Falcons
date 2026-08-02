@@ -1,7 +1,14 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from routers import auth, tasks, deadlines, chat, calendar
+
+# 配置日志输出到控制台（INFO 级别，用于调试 LLM 返回）
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 app = FastAPI(
     title=settings.APP_NAME,

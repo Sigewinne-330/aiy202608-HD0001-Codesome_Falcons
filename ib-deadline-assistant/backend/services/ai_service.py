@@ -5,34 +5,54 @@
 import json
 import logging
 from typing import Optional, List, Dict, Any, AsyncGenerator
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 from config import settings
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """你是长期任务规划师，一位专为需要管理复杂长期任务的人打造的时间规划师。
-你的核心使命：根据用户的目标和截止日期，帮助用户科学规划执行时间线，将大目标拆解为分阶段的、可执行的小步骤。
-
-你有以下能力：
-1. **任务时间线规划**：根据任务类型、规模和截止日期，生成分阶段的执行计划（如：准备阶段、执行阶段、检查阶段、收尾阶段），每个阶段有明确的起止时间和具体行动
-2. **任务拆解**：将大型长期任务拆解为可执行的小步骤，包含时间预估和优先级建议
-3. **进度管理**：帮用户追踪任务执行进度，及时调整计划
-4. **方法建议**：提供任务执行技巧、时间管理方法、效率提升策略
-5. **情绪支持**：理解处理长期任务过程中的压力和拖延，给予鼓励和实用的应对建议
-
-回复风格：
+SYSTEM_PROMPT = """回复风格：
 - 简洁实用，但要温暖有同理心
 - 给出具体可操作的建议，而非空泛的鼓励
 - 帮用户把大目标拆解成具体的、分阶段的小任务
 - 使用中文回复，重点突出时间节点和交付物
-- 绝对不要提"API Key"、"DeepSeek"、"配置密钥"、"模型"等和你自身技术实现相关的内容，你就是一个纯粹的任务规划助手"""
+- 绝对不要提"API Key"、"DeepSeek"、"配置密钥"、"模型"等和你自身技术实现相关的内容，你就是一个纯粹的任务规划助手
+
+⚠️ 重要规则 — 当用户要求拆解任务、规划时间线、或创建子任务时：
+你必须在回复的最后附上一个 JSON 代码块（用 ```json ``` 包裹），格式如下：
+```json
+{
+  "title": "父任务标题",
+  "subject": "科目（如数学/物理/化学，不知道就填null）",
+  "deadline": "截止日期 YYYY-MM-DD（用户没给就填null）",
+  "priority": "high/medium/low/urgent",
+  "description": "任务整体描述",
+  "subtasks": [
+    {
+      "name": "子任务名称",
+      "description": "具体行动描述",
+      "notice_time": "该子任务建议完成日期 YYYY-MM-DD",
+      "level": "high/medium/low/urgent",
+      "estimated_hours": 预估小时数
+    }
+  ]
+}
+```
+如果用户的提问不涉及任务拆解（比如纯聊、方法论问答），则不需要附带这个 JSON。
+JSON 块必须放在回复的**最末尾**，前面是自然语言回复。"""
 
 
 def _make_client(api_key: str, base_url: str) -> Optional[OpenAI]:
-    """创建 OpenAI 兼容客户端"""
+    """创建同步 OpenAI 兼容客户端"""
     if not api_key:
         return None
     return OpenAI(api_key=api_key, base_url=base_url)
+
+
+def _make_async_client(api_key: str, base_url: str) -> Optional[AsyncOpenAI]:
+    """创建异步 OpenAI 兼容客户端（用于流式对话）"""
+    if not api_key:
+        return None
+    return AsyncOpenAI(api_key=api_key, base_url=base_url)
 
 
 def _parse_json(raw: str) -> List[Dict[str, Any]]:
@@ -60,6 +80,8 @@ class AIService:
     def __init__(self):
         self.ark_client = _make_client(settings.ARK_API_KEY, settings.ARK_BASE_URL)
         self.ds_client = _make_client(settings.DEEPSEEK_API_KEY, settings.DEEPSEEK_BASE_URL)
+        self.ark_async = _make_async_client(settings.ARK_API_KEY, settings.ARK_BASE_URL)
+        self.ds_async = _make_async_client(settings.DEEPSEEK_API_KEY, settings.DEEPSEEK_BASE_URL)
 
         if self.ark_client:
             logger.info(f"Ark client ready, model={settings.ARK_MODEL}")
@@ -128,9 +150,9 @@ class AIService:
         message: str,
         history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator[str, None]:
-        """流式对话，逐块 yield 文本。优先 Ark，降级 DeepSeek，再降级 mock。"""
-        client, model = self._select_call()
-        if not client:
+        """流式对话，逐块 yield 文本。使用 AsyncOpenAI 非阻塞迭代。"""
+        # 没有任何客户端 → mock
+        if not self.ark_async and not self.ds_async:
             for chunk in self._mock_response(message):
                 yield chunk
             return
@@ -142,28 +164,39 @@ class AIService:
 
         # 先试 Ark，失败降级 DeepSeek
         for cli, mdl in [
-            (self.ark_client, settings.ARK_MODEL),
-            (self.ds_client, settings.DEEPSEEK_MODEL),
+            (self.ark_async, settings.ARK_MODEL),
+            (self.ds_async, settings.DEEPSEEK_MODEL),
         ]:
             if not cli:
                 continue
             try:
-                stream = cli.chat.completions.create(
+                kwargs = {}
+                # 关闭深度思考模式（仅 Ark 支持该参数），加速首字返回
+                if cli is self.ark_async:
+                    kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+                stream = await cli.chat.completions.create(
                     model=mdl,
                     messages=messages,
                     temperature=0.7,
                     max_tokens=2048,
                     stream=True,
+                    **kwargs,
                 )
-                for chunk in stream:
+                engine = "Ark" if cli is self.ark_async else "DeepSeek"
+                logger.info(f"[LLM-STREAM] engine={engine}, model={mdl} 开始流式返回")
+                full_content = []
+                async for chunk in stream:
                     delta = chunk.choices[0].delta if chunk.choices else None
                     if delta and delta.content:
-                        yield delta.content
+                        full_content.append(delta.content)
+                        logger.info(f"[LLM-CHUNK] {delta.content!r}")
+                        yield delta.content  # 保持流式逐块返回
+                logger.info(f"[LLM-DONE] 完整返回（{len(''.join(full_content))} 字符）:\n{''.join(full_content)}")
                 return  # 成功，结束
             except Exception as e:
-                engine = "Ark" if cli is self.ark_client else "DeepSeek"
+                engine = "Ark" if cli is self.ark_async else "DeepSeek"
                 logger.warning(f"{engine} stream failed: {e}")
-                if cli is self.ark_client:
+                if cli is self.ark_async:
                     continue
                 yield f"抱歉，AI 服务暂时不可用。错误：{e}"
                 return

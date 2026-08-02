@@ -43,19 +43,41 @@
             <v-avatar size="32" color="primary" class="mt-1">
               <v-icon size="18" color="white">mdi-robot</v-icon>
             </v-avatar>
-            <div class="assistant-message pa-3">
-              <div class="text-body-2 message-content" v-html="renderMarkdown(msg.content)" />
+            <div class="assistant-message-wrapper" style="max-width: 92%;">
+              <div class="assistant-message pa-3">
+                <!-- 流式传输中：空内容 loading -->
+                <div v-if="msg.streaming && !msg.content" class="d-flex align-center">
+                  <v-progress-circular indeterminate size="16" width="2" color="primary" />
+                  <span class="text-caption text-grey ml-2">思考中...</span>
+                </div>
+                <!-- 有内容时始终用 Markdown 渲染 -->
+                <div v-else class="text-body-2 message-content"
+                  :key="'md-' + i + '-' + (msg.streaming ? 1 : 0)"
+                  v-html="renderMarkdown(msg.content)" />
+              </div>
+              <!-- 提取到任务 JSON 时显示操作按钮 -->
+              <div v-if="!msg.streaming && msg.taskData" class="d-flex align-center pa-2" style="border-top: 1px solid #E0E0E0;">
+                <v-icon size="18" color="primary" class="mr-1">mdi-clipboard-list-outline</v-icon>
+                <span class="text-caption mr-2">
+                  检测到 {{ msg.taskData.subtasks?.length || 0 }} 个子任务
+                </span>
+                <v-spacer />
+                <v-btn
+                  v-if="!msg.taskSaved"
+                  size="x-small"
+                  color="primary"
+                  variant="tonal"
+                  prepend-icon="mdi-plus"
+                  :loading="msg.saving"
+                  @click="saveTaskFromChat(i)"
+                >
+                  添加到任务列表
+                </v-btn>
+                <v-chip v-else size="x-small" color="success" variant="tonal" prepend-icon="mdi-check">
+                  已添加
+                </v-chip>
+              </div>
             </div>
-          </div>
-        </div>
-        <!-- 加载动画 -->
-        <div v-if="loading" class="d-flex align-start gap-2 mb-2">
-          <v-avatar size="32" color="primary">
-            <v-icon size="18" color="white">mdi-robot</v-icon>
-          </v-avatar>
-          <div class="assistant-message pa-3">
-            <v-progress-circular indeterminate size="16" width="2" color="primary" />
-            <span class="text-caption text-grey ml-2">思考中...</span>
           </div>
         </div>
       </div>
@@ -92,7 +114,49 @@
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
-import { marked } from 'marked'
+import MarkdownIt from 'markdown-it'
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
+
+// 开启 html，允许 KaTeX 生成的 HTML 直接嵌入
+const md = new MarkdownIt({ html: true, breaks: true, linkify: true })
+
+/** 将 LaTeX 公式渲染为 KaTeX HTML */
+function renderMath(text) {
+  // 块级公式 $$...$$
+  text = text.replace(/\$\$([\s\S]+?)\$\$/g, (m, tex) => {
+    try {
+      return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false })
+    } catch {
+      return m
+    }
+  })
+  // 块级公式 \[...\]
+  text = text.replace(/\\\[([\s\S]+?)\\\]/g, (m, tex) => {
+    try {
+      return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false })
+    } catch {
+      return m
+    }
+  })
+  // 行内公式 \(...\)
+  text = text.replace(/\\\(([\s\S]+?)\\\)/g, (m, tex) => {
+    try {
+      return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false })
+    } catch {
+      return m
+    }
+  })
+  // 行内公式 $...$（单个 $，避免误伤）
+  text = text.replace(/(?<!\\)\$([^$\n]+?)\$/g, (m, tex) => {
+    try {
+      return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false })
+    } catch {
+      return m
+    }
+  })
+  return text
+}
 
 const messages = ref([])
 const input = ref('')
@@ -108,13 +172,34 @@ const suggestions = [
 
 const API_BASE = '/api'
 
+// ---- Markdown / JSON 处理 ----
+
 function renderMarkdown(text) {
   try {
-    return marked.parse(text)
+    // 去掉末尾的 JSON 代码块
+    const clean = text.replace(/```json[\s\S]*?```\s*$/, '').trim()
+    // 先渲染 LaTeX 公式，再交给 markdown-it
+    return md.render(renderMath(clean || text))
   } catch {
     return text
   }
 }
+
+/** 从 AI 回复中提取任务 JSON */
+function extractTaskJson(content) {
+  try {
+    const match = content.match(/```json\s*([\s\S]*?)\s*```\s*$/)
+    if (!match) return null
+    const data = JSON.parse(match[1])
+    // 验证必要字段
+    if (!data.title || !Array.isArray(data.subtasks)) return null
+    return data
+  } catch {
+    return null
+  }
+}
+
+// ---- 消息发送 / 流式 ----
 
 async function sendMessage() {
   const content = input.value.trim()
@@ -167,11 +252,22 @@ async function sendMessage() {
         if (!line.startsWith('data: ')) continue
         const data = line.slice(6)
         if (data === '[DONE]') continue
-        if (data.startsWith('[ERROR]')) {
-          messages.value[aiIndex].content = '出错了：' + data.slice(8)
-          continue
+        // 新格式：JSON 编码（chunk 内换行被转义，SSE 帧不再被破坏）
+        try {
+          const parsed = JSON.parse(data)
+          if (typeof parsed === 'string') {
+            messages.value[aiIndex].content += parsed
+          } else if (parsed && parsed.error) {
+            messages.value[aiIndex].content = '出错了：' + parsed.error
+          }
+        } catch {
+          // 兼容旧格式：[ERROR] 前缀或裸文本
+          if (data.startsWith('[ERROR]')) {
+            messages.value[aiIndex].content = '出错了：' + data.slice(8)
+          } else {
+            messages.value[aiIndex].content += data
+          }
         }
-        messages.value[aiIndex].content += data
         scheduleScroll()
       }
     }
@@ -180,13 +276,51 @@ async function sendMessage() {
       messages.value[aiIndex].content = '网络请求失败，请检查后端是否启动。'
     }
   } finally {
-    // 流式结束，切换到 markdown 渲染
-    messages.value[aiIndex].streaming = false
+    // 用新对象替换，强制 Vue 重新渲染 v-html
+    const old = messages.value[aiIndex]
+    messages.value[aiIndex] = { ...old, streaming: false }
     loading.value = false
     abortController = null
+
+    // 尝试提取任务 JSON
+    const taskData = extractTaskJson(messages.value[aiIndex].content)
+    if (taskData) {
+      messages.value[aiIndex].taskData = taskData
+      messages.value[aiIndex].taskSaved = false
+    }
+
     scrollToBottom()
   }
 }
+
+// ---- 保存任务到 MySQL ----
+
+async function saveTaskFromChat(index) {
+  const msg = messages.value[index]
+  if (!msg.taskData || msg.saving) return
+
+  msg.saving = true
+  try {
+    const res = await fetch(`${API_BASE}/chat/save-tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(msg.taskData),
+    })
+    const result = await res.json()
+    if (result.ok) {
+      msg.taskSaved = true
+      msg.savedInfo = result
+    } else {
+      alert('保存失败，请重试')
+    }
+  } catch {
+    alert('保存失败，请检查后端是否启动')
+  } finally {
+    msg.saving = false
+  }
+}
+
+// ---- 其他操作 ----
 
 function sendSuggestion(text) {
   input.value = text
@@ -197,6 +331,11 @@ function stopGeneration() {
   if (abortController) {
     abortController.abort()
     loading.value = false
+    // 将最后一个 streaming 消息标记为完成，触发 markdown 渲染
+    const last = messages.value[messages.value.length - 1]
+    if (last && last.streaming) {
+      last.streaming = false
+    }
   }
 }
 
@@ -244,7 +383,6 @@ onMounted(() => {
 .assistant-message {
   background: #F3F4F6;
   border-radius: 4px 16px 16px 16px;
-  max-width: 92%;
   word-break: break-word;
 }
 
