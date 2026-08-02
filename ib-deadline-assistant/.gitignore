@@ -1,0 +1,30 @@
+# 环境配置（含密钥）
+.env
+backend/config.py
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node
+node_modules/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 日志 & 数据
+*.log
+*.db
+*.sqlite
