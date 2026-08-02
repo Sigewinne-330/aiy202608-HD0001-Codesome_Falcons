@@ -8,7 +8,6 @@ from database import get_db
 from models.user import User
 from models.task import Task as TaskModel, TaskStatus
 from models.deadline import Deadline as DeadlineModel, DeadlineStatus
-from models.sub_task import SubTask as SubTaskModel
 from services.auth import get_current_user
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
@@ -81,14 +80,13 @@ def get_calendar_data(
         DeadlineModel.due_date <= end_date,
     ).order_by(DeadlineModel.due_date.asc(), DeadlineModel.priority.desc()).all()
 
-    # 查询该时间段内的所有子任务（关联 task 表获取 user_id）
-    sub_tasks = db.query(SubTaskModel).join(
-        TaskModel, SubTaskModel.task_id == TaskModel.id
-    ).filter(
+    # 查询该时间段内的所有子任务（tasks 表中 parent_id IS NOT NULL 的记录）
+    sub_tasks = db.query(TaskModel).filter(
         TaskModel.user_id == current_user.id,
-        SubTaskModel.notice_time >= start_date,
-        SubTaskModel.notice_time <= end_date,
-    ).order_by(SubTaskModel.notice_time.asc(), SubTaskModel.level.desc()).all()
+        TaskModel.parent_id.isnot(None),
+        TaskModel.deadline >= start_date,
+        TaskModel.deadline <= end_date,
+    ).order_by(TaskModel.deadline.asc(), TaskModel.priority.desc()).all()
 
     # 按日期分组
     from collections import defaultdict
@@ -122,15 +120,15 @@ def get_calendar_data(
         day_map[date_key]["count"] += 1
 
     for st in sub_tasks:
-        if st.notice_time:
-            date_key = st.notice_time.isoformat()
+        if st.deadline:
+            date_key = st.deadline.isoformat()
             item = CalendarDayItem(
                 id=st.id,
-                title=st.name,
+                title=st.title,
                 type="task",
-                priority=st.level.value if st.level else "medium",
+                priority=st.priority.value if st.priority else "medium",
                 status=st.status.value if st.status else "todo",
-                subject=None,
+                subject=st.subject,
             )
             day_map[date_key]["tasks"].append(item)
             day_map[date_key]["count"] += 1

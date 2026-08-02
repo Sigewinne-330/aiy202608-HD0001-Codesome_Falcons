@@ -1,19 +1,177 @@
+"""Chat router — 支持 OpenAI function calling 的 AI 对话端点
+
+核心流程：
+  用户消息 → 构建 messages（system + history + user）
+    → 调 AI（带 tools）
+    → 如果 AI 返回 tool_calls → 执行工具 → 结果喂回 AI → 循环
+    → AI 返回最终文本 → 保存到聊天历史 → 返回
+"""
 import json
+import logging
+from datetime import date
+from typing import List, Dict, Any
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import List
-from datetime import date
+
 from database import get_db
 from models.user import User
-from models.task import Task as TaskModel, Priority, TaskStatus
-from models.sub_task import SubTask as SubTaskModel
 from models.chat import ChatHistory as ChatHistoryModel, MessageRole
-from schemas.chat import ChatMessage, ChatResponse, ChatHistoryResponse, ChatTaskSave
+from schemas.chat import ChatMessage, ChatResponse, ChatHistoryResponse
 from services.auth import get_current_user
-from services.ai_service import ai_service
+from services.ai_service import ai_service, SYSTEM_PROMPT
+from services.task_tools_schema import TASK_TOOLS
+from services import task_tools
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+# 最大工具调用轮次，防止无限循环
+MAX_TOOL_ROUNDS = 5
+
+# 工具名 → 执行函数的映射
+TOOL_DISPATCH: Dict[str, Any] = {
+    "create_task": task_tools.create_task,
+    "list_tasks": task_tools.list_tasks,
+    "delete_task": task_tools.delete_task,
+    "create_subtask": task_tools.create_subtask,
+    "list_subtasks": task_tools.list_subtasks,
+    "delete_subtask": task_tools.delete_subtask,
+}
+
+
+def _with_date_prefix(user_message: str) -> str:
+    """在用户消息前添加当前日期，帮助 AI 理解相对时间（如"今天"、"下周"）"""
+    today = date.today().isoformat()  # YYYY-MM-DD
+    return f"[当前日期：{today}]\n\n{user_message}"
+
+
+def _build_messages(
+    user_message: str,
+    history: List[Dict[str, str]],
+) -> List[Dict[str, Any]]:
+    """构建带 system prompt 的完整消息列表，用户消息自动附加当前日期"""
+    return [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        *history,
+        {"role": "user", "content": _with_date_prefix(user_message)},
+    ]
+
+
+async def _run_tool_loop(
+    messages: List[Dict[str, Any]],
+    db: Session,
+    user_id: int,
+) -> str:
+    """执行工具调用循环：调 AI → 执行工具 → 喂回结果 → 重复，直到 AI 返回最终文本。
+
+    Args:
+        messages: 初始消息列表（已含 system + history + user）
+        db: 数据库会话
+        user_id: 当前用户 ID
+
+    Returns:
+        AI 的最终文本回复
+    """
+    for _round in range(MAX_TOOL_ROUNDS):
+        choice = await ai_service.chat_with_tools(messages, TASK_TOOLS)
+
+        # AI 要求调用工具
+        if choice.finish_reason == "tool_calls" and choice.message.tool_calls:
+            assistant_msg = choice.message.model_dump()
+            messages.append(assistant_msg)
+
+            for tc in choice.message.tool_calls:
+                func_name = tc.function.name
+                try:
+                    func_args = json.loads(tc.function.arguments)
+                except json.JSONDecodeError:
+                    func_args = {}
+
+                logger.info(f"Tool call: {func_name}({func_args})")
+
+                # 执行工具函数
+                handler = TOOL_DISPATCH.get(func_name)
+                if handler:
+                    try:
+                        result = handler(db=db, user_id=user_id, **func_args)
+                    except Exception as e:
+                        result = {"error": f"工具执行失败: {e}"}
+                        logger.error(f"Tool {func_name} execution error: {e}")
+                else:
+                    result = {"error": f"未知工具: {func_name}"}
+
+                # 把工具结果追加到对话
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": json.dumps(result, ensure_ascii=False),
+                })
+
+            continue  # 继续下一轮，让 AI 基于工具结果生成回复
+
+        # AI 返回了最终文本
+        return choice.message.content or ""
+
+    # 超过最大轮次
+    return "抱歉，处理过程中超过了最大工具调用次数，请简化你的请求后重试。"
+
+
+# ═══════════════════════════════════════════════════════════════
+# 端点
+# ═══════════════════════════════════════════════════════════════
+
+@router.post("", response_model=ChatResponse)
+async def chat(
+    data: ChatMessage,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """主对话端点 — 支持 Function Calling。
+
+    当用户消息涉及任务管理（创建、查询、删除任务/子任务）时，
+    AI 会自动调用对应工具操作数据库，然后基于结果生成自然语言回复。
+    """
+    # 获取最近 20 条历史记录
+    recent_history = (
+        db.query(ChatHistoryModel)
+        .filter(ChatHistoryModel.user_id == current_user.id)
+        .order_by(ChatHistoryModel.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    recent_history.reverse()
+
+    history = [
+        {"role": h.role.value, "content": h.content}
+        for h in recent_history
+    ]
+
+    # 构建消息并执行工具调用循环
+    messages = _build_messages(data.content, history)
+    reply = await _run_tool_loop(messages, db, current_user.id)
+
+    # 保存用户消息
+    user_msg = ChatHistoryModel(
+        user_id=current_user.id,
+        role=MessageRole.user,
+        content=data.content,
+    )
+    db.add(user_msg)
+
+    # 保存 AI 回复
+    assistant_msg = ChatHistoryModel(
+        user_id=current_user.id,
+        role=MessageRole.assistant,
+        content=reply,
+    )
+    db.add(assistant_msg)
+    db.commit()
+    db.refresh(assistant_msg)
+
+    return ChatResponse.model_validate(assistant_msg)
 
 
 @router.post("/stream")
@@ -22,11 +180,22 @@ async def chat_stream(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """流式对话 — SSE 格式逐字返回 AI 回复"""
+    """流式对话 — 先执行工具调用循环拿到最终回复，再 SSE 逐字推流"""
+    uid = current_user.id
+
+    # 先保存用户消息
+    user_msg = ChatHistoryModel(
+        user_id=uid,
+        role=MessageRole.user,
+        content=data.content,
+    )
+    db.add(user_msg)
+    db.commit()
+
     # 获取历史
     recent_history = (
         db.query(ChatHistoryModel)
-        .filter(ChatHistoryModel.user_id == current_user.id)
+        .filter(ChatHistoryModel.user_id == uid)
         .order_by(ChatHistoryModel.created_at.desc())
         .limit(20)
         .all()
@@ -37,35 +206,34 @@ async def chat_stream(
         for h in recent_history
     ]
 
-    # 先保存用户消息
-    user_msg = ChatHistoryModel(
-        user_id=current_user.id,
-        role=MessageRole.user,
-        content=data.content,
-    )
-    db.add(user_msg)
-    db.commit()
+    # 构建消息 + 执行工具调用循环（非流式，拿到完整回复）
+    messages = _build_messages(data.content, history)
+    try:
+        reply = await _run_tool_loop(messages, db, uid)
+    except Exception as e:
+        reply = f"抱歉，处理请求时出错：{e}"
+        logger.error(f"Tool loop error in stream: {e}")
 
     async def generate():
-        full_content = ""
         try:
-            async for chunk in ai_service.chat_stream(data.content, history):
-                full_content += chunk
-                # JSON 编码：chunk 内的换行等特殊字符会被转义，不破坏 SSE 帧结构
-                yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+            for ch in reply:
+                yield f"data: {json.dumps(ch, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
         finally:
-            # 保存完整 AI 回复
-            if full_content:
+            from database import SessionLocal
+            save_db = SessionLocal()
+            try:
                 assistant_msg = ChatHistoryModel(
-                    user_id=current_user.id,
+                    user_id=uid,
                     role=MessageRole.assistant,
-                    content=full_content,
+                    content=reply,
                 )
-                db.add(assistant_msg)
-                db.commit()
+                save_db.add(assistant_msg)
+                save_db.commit()
+            finally:
+                save_db.close()
 
     return StreamingResponse(
         generate(),
@@ -75,6 +243,16 @@ async def chat_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.get("/tools")
+def list_tools(current_user: User = Depends(get_current_user)):
+    """列出所有可用工具（供前端调试/展示）"""
+    tool_names = [
+        {"name": t["function"]["name"], "description": t["function"]["description"]}
+        for t in TASK_TOOLS
+    ]
+    return {"count": len(tool_names), "tools": tool_names}
 
 
 @router.get("/history", response_model=ChatHistoryResponse)
@@ -108,74 +286,3 @@ def clear_history(
     ).delete()
     db.commit()
     return {"ok": True}
-
-
-@router.post("/save-tasks")
-def save_tasks_from_chat(
-    data: ChatTaskSave,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """从聊天中提取的任务数据，一键创建父任务 + 子任务并写入 sub_tasks 表"""
-    # 解析截止日期
-    try:
-        task_deadline = date.fromisoformat(data.deadline) if data.deadline else None
-    except ValueError:
-        task_deadline = None
-
-    # 创建父任务
-    parent_task = TaskModel(
-        user_id=current_user.id,
-        title=data.title,
-        description=data.description or "",
-        subject=data.subject,
-        priority=Priority(data.priority) if data.priority in [e.value for e in Priority] else Priority.medium,
-        deadline=task_deadline,
-        estimated_hours=sum(st.estimated_hours for st in data.subtasks),
-        status=TaskStatus.todo,
-    )
-    db.add(parent_task)
-    db.flush()  # 获取 parent_task.id
-
-    # 创建子任务（写入 sub_tasks 表）
-    created_subtasks = []
-    for st in data.subtasks:
-        try:
-            notice = date.fromisoformat(st.notice_time) if st.notice_time else None
-        except ValueError:
-            notice = None
-
-        sub = SubTaskModel(
-            task_id=parent_task.id,
-            name=st.name,
-            description=st.description or "",
-            notice_time=notice,
-            level=Priority(st.level) if st.level in [e.value for e in Priority] else Priority.medium,
-            status=TaskStatus.todo,
-        )
-        db.add(sub)
-        created_subtasks.append({
-            "id": None,  # commit 后才能拿到 id
-            "name": st.name,
-            "notice_time": st.notice_time,
-            "level": st.level,
-        })
-
-    db.commit()
-    db.refresh(parent_task)
-
-    # 拿回子任务 id
-    saved_subs = db.query(SubTaskModel).filter(
-        SubTaskModel.task_id == parent_task.id
-    ).all()
-    for i, s in enumerate(saved_subs):
-        if i < len(created_subtasks):
-            created_subtasks[i]["id"] = s.id
-
-    return {
-        "ok": True,
-        "task_id": parent_task.id,
-        "task_title": parent_task.title,
-        "subtask_count": len(saved_subs),
-        "subtasks": created_subtasks,
-    }

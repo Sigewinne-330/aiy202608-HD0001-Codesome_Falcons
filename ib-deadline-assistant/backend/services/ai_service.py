@@ -1,6 +1,14 @@
 """AI service - 长期任务规划助手
 使用 OpenAI 兼容接口，优先 Ark（豆包），降级 DeepSeek。
 只需在 config 中配置模型名和 API key 即可切换/增加引擎。
+
+架构分层：
+  模块级工具函数（_make_client, _parse_json）
+    → AIService 类
+      → 引擎管理层（__init__, reload, _select_call）
+      → 对话层（chat, chat_stream）—— 自然语言交互
+      → 结构化输出层（plan_task_timeline, breakdown_task）—— 生成数据库可写入的 JSON
+      → 失败策略：引擎均不可用时直接抛出 RuntimeError，不再使用 Mock 兜底
 """
 import json
 import logging
@@ -10,39 +18,82 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """回复风格：
-- 简洁实用，但要温暖有同理心
-- 给出具体可操作的建议，而非空泛的鼓励
+# =============================================================================
+# 模块常量：SYSTEM_PROMPT — 定义 AI 助手的角色、能力边界和回复风格
+# 每次调用聊天接口时作为 system message 发送
+# =============================================================================
+SYSTEM_PROMPT = """# 角色
+你是"长期任务规划师"，一位专为需要管理复杂长期任务的人打造的时间管理助手。
+你可以通过工具直接操作用户的任务数据库——创建、查询、删除任务和子任务。
+你的核心使命：根据用户的目标和截止日期，帮助用户科学规划执行时间线，将大目标拆解为分阶段的、可执行的小步骤。
+
+# 可用工具
+
+你有以下 6 个工具可以调用，每个工具对应一个具体的数据库操作：
+
+## 任务相关（tasks 表）
+1. **create_task** — 创建新任务。参数：title(必填), description, subject, deadline, priority, estimated_hours, parent_id
+2. **list_tasks** — 查询任务列表（返回所有字段）。参数：status, parent_id, limit
+3. **delete_task** — 删除任务及所有子任务。参数：task_id(必填)
+
+## 子任务相关（通过 tasks 表 parent_id 实现）
+4. **create_subtask** — 为某个任务创建子任务/步骤。参数：task_id(必填), name(必填), description, notice_time, level, status
+5. **list_subtasks** — 查询子任务列表（返回所有字段）。参数：task_id, status, limit
+6. **delete_subtask** — 删除子任务。参数：subtask_id(必填)
+
+# 工具调用规则（必须严格遵守）
+
+## 规则一：创建任务前必须收集完整信息
+当用户要求创建任务但未提供以下关键信息时，**必须先追问，不得直接调用 create_task**：
+- **截止日期（deadline）**：作为任务规划师，截止日期是核心信息。用户说"创建一个学习Python的任务"时，你必须问："这个任务什么时候截止？"
+- **优先级（priority）**：如果用户没有明确，可以追问，也可以根据上下文合理推断后直接创建
+- **预估工时（estimated_hours）**：可选，但如果用户提供了相关信息（如"大概需要两周"），应转换为小时数
+
+正确流程：用户说"帮我记一下，要写毕业论文" → 追问"好的！请问截止日期是什么时候？优先级是高中低哪一档？预估需要多长时间？" → 用户回答后再调用 create_task
+
+## 规则二：查询前先理解用户意图
+- 用户说"看看我的任务" → 调用 list_tasks（不传参数）
+- 用户说"还有哪些没做完的" → 调用 list_tasks(status="todo") + list_tasks(status="in_progress")
+- 用户说"毕业论文有哪些子步骤" → 如果知道 task_id 则调 list_subtasks(task_id=xxx)，否则先调 list_tasks 找到毕业论文的 id，再调 list_subtasks
+
+## 规则三：删除前必须二次确认
+- 删除操作不可逆。在调用 delete_task 或 delete_subtask 之前，**必须先向用户确认**："确认要删除 '[任务名称]' 吗？此操作不可恢复。"
+- 只有在用户明确表示确认（如"确认"、"是的"、"删吧"）之后，才能调用删除工具
+- 如果用户说"删除毕业论文"但你不知道 task_id，先调 list_tasks 查到 id，向用户确认，确认后再删除
+
+## 规则四：用户提到任务名而非 ID 时
+用户通常不知道任务 ID。当用户说"把毕业论文标记为完成"时：
+1. 先调 list_tasks 或 search 找到"毕业论文"的 task_id
+2. 然后执行后续操作（创建子任务、删除等）
+- 注意：create_task 的 parent_id 和 create_subtask 的 task_id 都必须先用 list_tasks 查出来
+
+## 规则五：子任务必须关联到已有任务
+- 创建子任务时 task_id 是必填的。如果用户说"给毕业论文加个子任务：查文献"，但你还不知道毕业论文的 task_id，必须先调 list_tasks 找到它
+- 如果用户说的任务名不存在，告知用户该任务不存在，建议先创建
+
+## 规则六：一次操作尽量只做一件事
+- 不要在一次回复中连续调用多个无关工具。如果用户同时提了多个需求（如"创建任务A，删除任务B，看看任务C的子任务"），逐个处理，先完成第一个再处理下一个
+- 查询类工具可以组合使用（如同时查 list_tasks 的不同状态）
+
+## 规则七：工具调用失败时的处理
+- 如果工具返回 error，如实告知用户错误原因，并给出建议
+- 例如 delete_task 返回"任务不存在或无权操作"，告诉用户该任务可能已被删除，建议调用 list_tasks 确认
+
+# 回复风格
+- 使用中文，简洁实用但温暖有同理心
+- 操作成功后简要告知结果（如"已创建任务'毕业论文'，截止 2026-08-30 ✓"）
+- 操作失败时清晰说明原因和建议
 - 帮用户把大目标拆解成具体的、分阶段的小任务
-- 使用中文回复，重点突出时间节点和交付物
-- 绝对不要提"API Key"、"DeepSeek"、"配置密钥"、"模型"等和你自身技术实现相关的内容，你就是一个纯粹的任务规划助手
-
-⚠️ 重要规则 — 当用户要求拆解任务、规划时间线、或创建子任务时：
-你必须在回复的最后附上一个 JSON 代码块（用 ```json ``` 包裹），格式如下：
-```json
-{
-  "title": "父任务标题",
-  "subject": "科目（如数学/物理/化学，不知道就填null）",
-  "deadline": "截止日期 YYYY-MM-DD（用户没给就填null）",
-  "priority": "high/medium/low/urgent",
-  "description": "任务整体描述",
-  "subtasks": [
-    {
-      "name": "子任务名称",
-      "description": "具体行动描述",
-      "notice_time": "该子任务建议完成日期 YYYY-MM-DD",
-      "level": "high/medium/low/urgent",
-      "estimated_hours": 预估小时数
-    }
-  ]
-}
-```
-如果用户的提问不涉及任务拆解（比如纯聊、方法论问答），则不需要附带这个 JSON。
-JSON 块必须放在回复的**最末尾**，前面是自然语言回复。"""
+- **严格禁止**：绝对不要提及"API Key"、"DeepSeek"、"模型"、"工具调用"、"function calling"、配置密钥等自身技术实现相关内容。你就是一个纯粹的、真实的任务规划助手，用户不需要知道你背后有 AI 模型或工具系统"""
 
 
+# =============================================================================
+# 模块级工具：_make_client — OpenAI 兼容客户端工厂
+# 职责：用 api_key + base_url 创建统一的客户端实例，key 为空时返回 None
+# 被调用：AIService.__init__()
+# =============================================================================
 def _make_client(api_key: str, base_url: str) -> Optional[OpenAI]:
-    """创建同步 OpenAI 兼容客户端"""
+    """创建同步 OpenAI 兼容客户端（用于 chat、工具调用、结构化输出）"""
     if not api_key:
         return None
     return OpenAI(api_key=api_key, base_url=base_url)
@@ -55,9 +106,19 @@ def _make_async_client(api_key: str, base_url: str) -> Optional[AsyncOpenAI]:
     return AsyncOpenAI(api_key=api_key, base_url=base_url)
 
 
+# =============================================================================
+# 模块级工具：_parse_json — 防御式 JSON 清洗解析器
+# 职责：清洗 AI 返回的原始文本（去除 ```json 包裹、语言标识），解析为列表
+# 被调用：plan_task_timeline(), breakdown_task()
+# 核心逻辑：
+#   1. 检测并剥离 markdown 代码块标记（``` ... ```）
+#   2. 去除 "json" 语言前缀
+#   3. json.loads() 解析，非列表或解析失败统一返回 []
+# =============================================================================
 def _parse_json(raw: str) -> List[Dict[str, Any]]:
     """解析 AI 返回的 JSON（处理 ```json 包裹）"""
     content = raw.strip()
+    # 清洗：剥离 markdown 代码块 ` ```json ... ``` `
     if content.startswith("```"):
         lines = content.split("\n")
         content = "\n".join(lines[1:])
@@ -66,6 +127,7 @@ def _parse_json(raw: str) -> List[Dict[str, Any]]:
         content = content.strip()
         if content.startswith("json"):
             content = content[4:].strip()
+    # 解析：JSONDecodeError 不抛异常，返回空列表保证调用链不中断
     try:
         result = json.loads(content)
         return result if isinstance(result, list) else []
@@ -74,54 +136,77 @@ def _parse_json(raw: str) -> List[Dict[str, Any]]:
         return []
 
 
+# =============================================================================
+# AIService — AI 服务主类
+# =============================================================================
+# 整体职责：封装对多个 AI 引擎的调用，提供对话、流式对话、结构化输出三种
+#         接口，内置优先级链（Ark → DeepSeek）和自动降级机制，均失败则直接报错
+# =============================================================================
 class AIService:
-    """AI 服务 — 引擎优先级：Ark > DeepSeek > Mock"""
+    """AI 服务 — 引擎优先级：Ark > DeepSeek，均失败则直接报错"""
+
+    # =========================================================================
+    # 引擎管理层：负责多个 AI 客户端的初始化、选择和热重载
+    # 方法：__init__, reload, _any_client, _select_call
+    # =========================================================================
 
     def __init__(self):
+        """初始化：按配置创建 Ark 和 DeepSeek 两个客户端，任一未配 key 则为 None"""
         self.ark_client = _make_client(settings.ARK_API_KEY, settings.ARK_BASE_URL)
         self.ds_client = _make_client(settings.DEEPSEEK_API_KEY, settings.DEEPSEEK_BASE_URL)
         self.ark_async = _make_async_client(settings.ARK_API_KEY, settings.ARK_BASE_URL)
         self.ds_async = _make_async_client(settings.DEEPSEEK_API_KEY, settings.DEEPSEEK_BASE_URL)
 
+        # 日志：告知运维当前哪些引擎可用
         if self.ark_client:
             logger.info(f"Ark client ready, model={settings.ARK_MODEL}")
         if self.ds_client:
             logger.info(f"DeepSeek client ready, model={settings.DEEPSEEK_MODEL}")
         if not self.ark_client and not self.ds_client:
-            logger.warning("No AI API key configured, using mock mode")
+            logger.error("No AI API key configured, all AI calls will fail")
 
     def reload(self):
         """重新加载客户端（API key 更新后调用）"""
         self.__init__()
 
     def _any_client(self) -> Optional[OpenAI]:
-        """返回第一个可用的客户端"""
+        """返回第一个可用的客户端（用于简单探测）"""
         return self.ark_client or self.ds_client
 
     def _select_call(self) -> tuple[Optional[OpenAI], str]:
-        """选择引擎：返回 (client, model_name)"""
+        """选择引擎：按优先级 Ark → DeepSeek 返回 (client, model_name)
+        返回值两个都用 Optional：以便调用方统一判断无引擎可用的降级路径
+        """
         if self.ark_client:
             return self.ark_client, settings.ARK_MODEL
         if self.ds_client:
             return self.ds_client, settings.DEEPSEEK_MODEL
         return None, ""
 
+    # =========================================================================
+    # 对话层：提供同步和流式两种自然语言对话能力
+    # 职责：构建 messages（system + history + user），调 AI，降级兜底
+    # 调用方：routers/chat.py 的 /api/chat 端点
+    # =========================================================================
+
     async def chat(
         self,
         message: str,
         history: Optional[List[Dict[str, str]]] = None,
     ) -> str:
-        """发送对话消息"""
+        """同步对话：一次性返回完整回复。适用场景：非实时交互、后端批量处理"""
         client, model = self._select_call()
         if not client:
-            return self._mock_response(message)
+            raise RuntimeError("所有 AI 引擎均未配置 API Key，无法完成对话。请检查 ARK_API_KEY 或 DEEPSEEK_API_KEY 配置。")
 
+        # 构建消息：system prompt(角色) + 历史对话 + 当前用户消息
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         if history:
             messages.extend(history)
         messages.append({"role": "user", "content": message})
 
-        # 先试 Ark，失败降级 DeepSeek
+        # 降级链路：Ark 失败 → DeepSeek，均失败则抛出异常
+        last_error = None
         for attempt, (cli, mdl) in enumerate([
             (self.ark_client, settings.ARK_MODEL),
             (self.ds_client, settings.DEEPSEEK_MODEL),
@@ -139,11 +224,11 @@ class AIService:
             except Exception as e:
                 engine = "Ark" if cli is self.ark_client else "DeepSeek"
                 logger.warning(f"{engine} chat failed: {e}")
+                last_error = e
                 if cli is self.ark_client:
                     continue  # 降级到 DeepSeek
-                return f"抱歉，AI 服务暂时不可用。错误：{e}"
 
-        return self._mock_response(message)
+        raise RuntimeError(f"所有 AI 引擎调用均失败，无法完成对话。最后错误：{last_error}")
 
     async def chat_stream(
         self,
@@ -151,18 +236,18 @@ class AIService:
         history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator[str, None]:
         """流式对话，逐块 yield 文本。使用 AsyncOpenAI 非阻塞迭代。"""
-        # 没有任何客户端 → mock
+        # 没有任何客户端 → 直接报错
         if not self.ark_async and not self.ds_async:
-            for chunk in self._mock_response(message):
-                yield chunk
+            yield "抱歉，所有 AI 引擎均未配置 API Key，无法完成流式对话。"
             return
 
+        # 构建消息：与 chat() 一致
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         if history:
             messages.extend(history)
         messages.append({"role": "user", "content": message})
 
-        # 先试 Ark，失败降级 DeepSeek
+        # 降级链路同 chat()，区别在于用 stream=True 逐块产出
         for cli, mdl in [
             (self.ark_async, settings.ARK_MODEL),
             (self.ds_async, settings.DEEPSEEK_MODEL),
@@ -198,16 +283,72 @@ class AIService:
                 logger.warning(f"{engine} stream failed: {e}")
                 if cli is self.ark_async:
                     continue
-                yield f"抱歉，AI 服务暂时不可用。错误：{e}"
-                return
 
-        for chunk in self._mock_response(message):
-            yield chunk
+        # 所有引擎失败：直接报错
+        yield "抱歉，所有 AI 引擎调用均失败，无法完成流式对话。"
+
+    async def chat_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+    ) -> Any:
+        """带工具调用的对话：发送 messages + tools，返回原始 choice 对象。
+
+        与 chat() 的区别：
+        - 不构建 messages（调用方已构建好 system + history + user）
+        - 支持 tools 参数（OpenAI function calling）
+        - 直接返回 choices[0]，调用方可检查 tool_calls
+
+        调用方：routers/chat.py 的工具调用循环
+        """
+        client, model = self._select_call()
+        if not client:
+            raise RuntimeError("所有 AI 引擎均未配置 API Key，无法完成工具调用。")
+
+        last_error = None
+        for cli, mdl in [
+            (self.ark_client, settings.ARK_MODEL),
+            (self.ds_client, settings.DEEPSEEK_MODEL),
+        ]:
+            if not cli:
+                continue
+            try:
+                kwargs = {
+                    "model": mdl,
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 2048,
+                }
+                if tools:
+                    kwargs["tools"] = tools
+                    kwargs["tool_choice"] = "auto"
+
+                response = cli.chat.completions.create(**kwargs)
+                return response.choices[0]
+            except Exception as e:
+                engine = "Ark" if cli is self.ark_client else "DeepSeek"
+                logger.warning(f"{engine} chat_with_tools failed: {e}")
+                last_error = e
+                if cli is self.ark_client:
+                    continue
+
+        raise RuntimeError(f"所有 AI 引擎工具调用均失败。最后错误：{last_error}")
+
+    # =========================================================================
+    # 结构化输出层：要求 AI 返回结构化 JSON，解析后写入数据库
+    # 职责：构建 JSON schema prompt → 调 AI(temperature=0.5) → _parse_json() 清洗
+    # 调用方：routers/tasks.py 的 POST /api/tasks/plan 和 /api/tasks/breakdown
+    # 特点：temperature 降为 0.5 提高格式稳定性；空结果也会触发引擎降级
+    # =========================================================================
 
     async def plan_task_timeline(
         self, title: str, word_count: int = 0, deadline: str = "", description: str = ""
     ) -> List[Dict[str, Any]]:
-        """生成任务分段时间线计划"""
+        """时间线规划：根据截止日期倒推，生成 4-6 个阶段，每阶段含起止日期和交付物
+        被调用：POST /api/tasks/plan — 用户创建新任务时触发
+        返回结构：[{phase, description, start_date, end_date, estimated_hours, priority, deliverables}]"""
+
+        # 构建结构化 prompt：定义 JSON schema，要求只返回数组
         prompt = f"""请为以下长期任务生成一个分阶段的时间线计划。
 
 任务名称：{title}
@@ -227,6 +368,7 @@ class AIService:
 
 只返回 JSON 数组，不要其他内容。"""
 
+        # 降级重试：空结果也会触发引擎切换（因为 AI 可能返回了格式不合规的内容）
         for cli, mdl, name in [
             (self.ark_client, settings.ARK_MODEL, "Ark"),
             (self.ds_client, settings.DEEPSEEK_MODEL, "DeepSeek"),
@@ -240,21 +382,27 @@ class AIService:
                         {"role": "system", "content": "你是一个任务规划专家，只返回 JSON 数组。"},
                         {"role": "user", "content": prompt},
                     ],
-                    temperature=0.5,
+                    temperature=0.5,   # 低于聊天(0.7)，提高 JSON 格式稳定性
                     max_tokens=2048,
                 )
                 result = _parse_json(response.choices[0].message.content or "[]")
                 if result:
                     return result
+                # 解析为空 → 继续尝试下一个引擎
             except Exception as e:
                 logger.warning(f"{name} plan_task_timeline failed: {e}")
 
-        return self._mock_task_plan(title, word_count, deadline)
+        # 所有引擎失败：直接抛出异常
+        raise RuntimeError("所有 AI 引擎均无法完成任务时间线规划。请检查 API Key 配置或网络连接。")
 
     async def breakdown_task(
         self, title: str, description: str = "", subject: str = ""
     ) -> List[Dict[str, Any]]:
-        """拆解大型任务为子任务"""
+        """任务拆解：将一个大任务拆分为 4-6 个可执行的子任务
+        被调用：POST /api/tasks/breakdown — 用户对已有任务点击"AI 拆解"
+        返回结构：[{title, description, estimated_hours, priority}]"""
+
+        # 构建结构化 prompt：与 plan_task_timeline 不同，不涉及时间维度
         prompt = f"""请将以下长期任务拆解为 4-6 个可执行的子任务，按顺序排列。
 
 任务名称：{title}
@@ -264,6 +412,7 @@ class AIService:
 
 只返回 JSON 数组，不要其他内容。"""
 
+        # 降级重试：骨架与 plan_task_timeline() 完全一致
         for cli, mdl, name in [
             (self.ark_client, settings.ARK_MODEL, "Ark"),
             (self.ds_client, settings.DEEPSEEK_MODEL, "DeepSeek"),
@@ -277,73 +426,85 @@ class AIService:
                         {"role": "system", "content": "你是一个任务规划专家，只返回 JSON 数组。"},
                         {"role": "user", "content": prompt},
                     ],
-                    temperature=0.5,
+                    temperature=0.5,   # 低于聊天(0.7)，提高 JSON 格式稳定性
                     max_tokens=2048,
                 )
                 result = _parse_json(response.choices[0].message.content or "[]")
                 if result:
                     return result
+                # 解析为空 → 继续尝试下一个引擎
             except Exception as e:
                 logger.warning(f"{name} breakdown_task failed: {e}")
 
-        return self._mock_breakdown(title)
+        # 所有引擎失败：直接抛出异常
+        raise RuntimeError("所有 AI 引擎均无法完成任务拆解。请检查 API Key 配置或网络连接。")
 
-    # ---- Mock fallbacks ----
+    # =========================================================================
+    # [已废弃] Mock 降级层：原先用于无 API key 时的离线兜底
+    # 当前策略：所有引擎均失败时直接抛出 RuntimeError，不再使用 Mock
+    # =========================================================================
 
-    def _mock_response(self, message: str) -> str:
-        return (
-            f"👋 你好！我是长期任务规划师。\n\n"
-            f"目前没有配置 AI API Key，运行在 demo 模式下。\n\n"
-            f"设置以下环境变量即可启用：\n"
-            f"• ARK_API_KEY + ARK_MODEL（豆包，推荐）\n"
-            f"• DEEPSEEK_API_KEY + DEEPSEEK_MODEL（备选）\n\n"
-            f"你刚才说：「{message[:50]}...」\n\n"
-            f"配置 API Key 后我就能真正帮到你！"
-        )
+    # def _mock_response(self, message: str) -> str:
+    #     """Mock 对话回复：告知用户当前为 demo 模式，指导如何配置 API key"""
+    #     return (
+    #         f"👋 你好！我是长期任务规划师。\n\n"
+    #         f"目前没有配置 AI API Key，运行在 demo 模式下。\n\n"
+    #         f"设置以下环境变量即可启用：\n"
+    #         f"• ARK_API_KEY + ARK_MODEL（豆包，推荐）\n"
+    #         f"• DEEPSEEK_API_KEY + DEEPSEEK_MODEL（备选）\n\n"
+    #         f"你刚才说：「{message[:50]}...」\n\n"
+    #         f"配置 API Key 后我就能真正帮到你！"
+    #     )
 
-    def _mock_task_plan(self, title: str, word_count: int, deadline: str) -> List[Dict[str, Any]]:
-        from datetime import date, timedelta
-        today = date.today()
-        try:
-            due = date.fromisoformat(deadline) if deadline else today + timedelta(days=28)
-        except ValueError:
-            due = today + timedelta(days=28)
-        total_days = max((due - today).days, 14)
+    # def _mock_task_plan(self, title: str, word_count: int, deadline: str) -> List[Dict[str, Any]]:
+    #     """Mock 时间线规划：用纯算法按比例分配阶段"""
+    #     from datetime import date, timedelta
+    #     today = date.today()
+    #     try:
+    #         due = date.fromisoformat(deadline) if deadline else today + timedelta(days=28)
+    #     except ValueError:
+    #         due = today + timedelta(days=28)
+    #     total_days = max((due - today).days, 14)
+    #
+    #     phases_config = [
+    #         ("需求分析与准备", "明确目标，收集资料，调研背景", 0.15, "high", "需求文档、资料清单"),
+    #         ("方案设计", "梳理流程，制定详细方案", 0.10, "high", "执行方案"),
+    #         ("核心执行", "按方案推进核心工作", 0.35, "urgent", "核心产出物"),
+    #         ("检查与完善", "查漏补缺，优化细节", 0.20, "medium", "检查报告"),
+    #         ("最终完善", "检查格式和规范，做最终打磨", 0.10, "medium", "终稿"),
+    #         ("交付与收尾", "最终审核确认，总结复盘", 0.10, "low", "交付确认"),
+    #     ]
+    #
+    #     plan = []
+    #     current_start = today
+    #     for phase, desc, ratio, priority, deliverables in phases_config:
+    #         phase_days = max(int(total_days * ratio), 2)
+    #         phase_end = current_start + timedelta(days=phase_days - 1)
+    #         if phase == phases_config[-1][0]:
+    #             phase_end = due
+    #         plan.append({
+    #             "phase": phase, "description": desc,
+    #             "start_date": current_start.isoformat(),
+    #             "end_date": phase_end.isoformat(),
+    #             "estimated_hours": max(int(word_count * ratio / 200) if word_count else int(total_days * ratio * 0.8), 2),
+    #             "priority": priority, "deliverables": deliverables,
+    #         })
+    #         current_start = phase_end + timedelta(days=1)
+    #     return plan
 
-        phases_config = [
-            ("需求分析与准备", "明确目标，收集资料，调研背景", 0.15, "high", "需求文档、资料清单"),
-            ("方案设计", "梳理流程，制定详细方案", 0.10, "high", "执行方案"),
-            ("核心执行", "按方案推进核心工作", 0.35, "urgent", "核心产出物"),
-            ("检查与完善", "查漏补缺，优化细节", 0.20, "medium", "检查报告"),
-            ("最终完善", "检查格式和规范，做最终打磨", 0.10, "medium", "终稿"),
-            ("交付与收尾", "最终审核确认，总结复盘", 0.10, "low", "交付确认"),
-        ]
-
-        plan = []
-        current_start = today
-        for phase, desc, ratio, priority, deliverables in phases_config:
-            phase_days = max(int(total_days * ratio), 2)
-            phase_end = current_start + timedelta(days=phase_days - 1)
-            if phase == phases_config[-1][0]:
-                phase_end = due
-            plan.append({
-                "phase": phase, "description": desc,
-                "start_date": current_start.isoformat(),
-                "end_date": phase_end.isoformat(),
-                "estimated_hours": max(int(word_count * ratio / 200) if word_count else int(total_days * ratio * 0.8), 2),
-                "priority": priority, "deliverables": deliverables,
-            })
-            current_start = phase_end + timedelta(days=1)
-        return plan
-
-    def _mock_breakdown(self, title: str) -> List[Dict[str, Any]]:
-        return [
-            {"title": f"需求分析：{title}", "description": "明确目标，收集资料，梳理路径", "estimated_hours": 4, "priority": "high"},
-            {"title": f"方案制定：{title}", "description": "制定详细方案，分解各环节", "estimated_hours": 2, "priority": "high"},
-            {"title": f"核心执行：{title}", "description": "推进核心工作，完成主要产出", "estimated_hours": 8, "priority": "urgent"},
-            {"title": f"检查完善：{title}", "description": "回顾检查，查漏补缺，优化细节", "estimated_hours": 4, "priority": "medium"},
-            {"title": f"最终交付：{title}", "description": "最终确认，完成交付", "estimated_hours": 2, "priority": "medium"},
-        ]
+    # def _mock_breakdown(self, title: str) -> List[Dict[str, Any]]:
+    #     """Mock 任务拆解：返回固定的 5 阶段模板子任务列表"""
+    #     return [
+    #         {"title": f"需求分析：{title}", "description": "明确目标，收集资料，梳理路径", "estimated_hours": 4, "priority": "high"},
+    #         {"title": f"方案制定：{title}", "description": "制定详细方案，分解各环节", "estimated_hours": 2, "priority": "high"},
+    #         {"title": f"核心执行：{title}", "description": "推进核心工作，完成主要产出", "estimated_hours": 8, "priority": "urgent"},
+    #         {"title": f"检查完善：{title}", "description": "回顾检查，查漏补缺，优化细节", "estimated_hours": 4, "priority": "medium"},
+    #         {"title": f"最终交付：{title}", "description": "最终确认，完成交付", "estimated_hours": 2, "priority": "medium"},
+    #     ]
 
 
+# =============================================================================
+# 模块级单例：全局共享的 AI 服务实例
+# 被所有路由模块通过 `from services.ai_service import ai_service` 引用
+# =============================================================================
 ai_service = AIService()
