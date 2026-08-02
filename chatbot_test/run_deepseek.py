@@ -6,6 +6,7 @@ import requests
 import json
 import sys
 import os
+from datetime import datetime
 
 # ============================================================
 # Configuration
@@ -18,17 +19,18 @@ HEADERS = {
 MODEL = "deepseek-v4-pro-260425"
 
 # Set your system prompt here
-SYSTEM_PROMPT = [
-    "你是一个专业的学术任务拆解与时间规划 Agent。"
-    "你的核心工作是将用户的长程任务拆分为具体的子任务，并设置合理的 Deadline。"
-    "【工作流程要求】："
-    "1. 识别任务：判断用户的任务是否涉及特定学科（如物理IA、历史论文）。"
-    "2. 调用工具：如果是特定学科，你 **必须** 调用 `get_subject_guidelines` 工具获取该学科的专属指南。"
-    "3. 遵循指南："
-       "- 工具返回的指南包含了该学科专用的拆解步骤、防坑建议和时间分配比例。"
-       "- 你的输出 **必须绝对服从** 指南中的步骤和建议，不能遗漏指南中要求必须包含的环节（如：物理必须有误差分析）。"
-    "4. 个性化排期：根据用户提供的截止日期（Deadline）和指南中的时间分配比例，为每个子任务推算具体的日期。并在每个子任务后附上指南中的“注意事项/防坑指南”。"
-]
+SYSTEM_PROMPT = (
+    "你是一个专业的学术任务拆解与时间规划 Agent。\n"
+    "你的核心工作是将用户的长程任务拆分为具体的子任务，并设置合理的 Deadline。\n"
+    "【工作流程要求】：\n"
+    "1. 识别任务：判断用户的任务是否涉及特定学科（如物理IA、历史论文）。\n"
+    "2. 调用工具：如果是特定学科，你 **必须** 调用 `get_subject_guidelines` 工具获取该学科的专属指南。\n"
+    "3. 遵循指南：\n"
+    "   - 工具返回的指南包含了该学科专用的拆解步骤、防坑建议和时间分配比例。\n"
+    "   - 你的输出 **必须绝对服从** 指南中的步骤和建议，不能遗漏指南中要求必须包含的环节（如：物理必须有误差分析）。\n"
+    "4. 个性化排期：根据用户提供的截止日期（Deadline）和指南中的时间分配比例，为每个子任务推算具体的日期。并在每个子任务后附上指南中的「注意事项/防坑指南」。"
+    "5. 如果之前已经调用过工具获取指南，则**不要**重复调用，直接与用户对话即可"
+)
 
 # Where to find .md knowledge base files (relative to this script)
 KNOWLEDGE_BASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "knowledge_base")
@@ -283,13 +285,6 @@ def make_text_block(text):
 
 
 # ============================================================
-# Helpers
-# ============================================================
-def make_text_block(text):
-    return [{"type": "input_text", "text": text}]
-
-
-# ============================================================
 # Main Chat Loop
 # ============================================================
 def chat_loop():
@@ -299,7 +294,7 @@ def chat_loop():
 
     print("=" * 55)
     print(f"  Model : {MODEL}")
-    print(f"  System: {SYSTEM_PROMPT}")
+    print(f"  System: {SYSTEM_PROMPT.split(chr(10))[0]}")
     print(f"  Tools : {', '.join(t['name'] for t in TOOLS)}")
     print("=" * 55)
     print("Type 'exit' or 'quit' to end. Type 'clear' to reset context.")
@@ -327,10 +322,11 @@ def chat_loop():
             print("[Context cleared]\n")
             continue
 
-        # --- 追加用户消息 ---
+        # --- 追加用户消息（带上当前日期） ---
+        today = datetime.now().strftime("%Y%m%d")
         conversation.append({
             "role": "user",
-            "content": make_text_block(user_input),
+            "content": make_text_block(f"[当前日期: {today}]\n{user_input}"),
         })
 
         # --- Agent 循环：发送 → 检测 function_call → 执行 → 再发送 ---
