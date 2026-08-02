@@ -162,6 +162,7 @@ function priorityLabel(p) {
 async function loadTasks() {
   try {
     const res = await fetch(`${API_BASE}/tasks`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
     tasks.value = await res.json()
   } catch { /* ignore */ }
 }

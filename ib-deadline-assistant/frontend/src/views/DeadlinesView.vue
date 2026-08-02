@@ -191,8 +191,8 @@ function daysLeft(d) {
 async function loadDeadlines() {
   try {
     const [all, up] = await Promise.all([
-      fetch(`${API_BASE}/deadlines`).then(r => r.json()),
-      fetch(`${API_BASE}/deadlines/upcoming?days=7`).then(r => r.json()),
+      fetch(`${API_BASE}/deadlines`).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
+      fetch(`${API_BASE}/deadlines/upcoming?days=7`).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
     ])
     deadlines.value = all
     upcoming.value = up

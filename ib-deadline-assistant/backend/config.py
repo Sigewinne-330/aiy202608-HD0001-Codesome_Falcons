@@ -1,4 +1,9 @@
 import os
+from pathlib import Path
+
+# 自动加载 .env 文件
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).parent / ".env")
 
 
 class Settings:
@@ -13,10 +18,15 @@ class Settings:
     DB_NAME: str = os.getenv("DB_NAME", "ib_assistant")
     DB_SOCKET: str = os.getenv("DB_SOCKET", "/tmp/mysql.sock")
 
-    # DeepSeek
+    # DeepSeek（备选）
     DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
     DEEPSEEK_BASE_URL: str = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+
+    # Ark（豆包 - 主 AI 引擎）
+    ARK_API_KEY: str = os.getenv("ARK_API_KEY", "")
+    ARK_BASE_URL: str = os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
+    ARK_MODEL: str = os.getenv("ARK_MODEL", "doubao-1.5-pro-32k")
 
     # JWT
     SECRET_KEY: str = os.getenv("SECRET_KEY", "ib-assistant-secret-key-change-me")

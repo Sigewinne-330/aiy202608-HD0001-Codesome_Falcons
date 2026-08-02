@@ -1,7 +1,8 @@
 <template>
   <v-app>
-    <!-- 导航抽屉 -->
+    <!-- 导航抽屉（仅登录后显示） -->
     <v-navigation-drawer
+      v-if="isAuthenticated"
       v-model="drawer"
       :rail="rail"
       permanent
@@ -41,24 +42,44 @@
       </v-list>
 
       <template v-slot:append>
-        <div class="pa-3" v-if="!rail">
+        <div class="px-3 pb-3" v-if="!rail">
           <v-divider class="mb-3" />
-          <div class="text-caption text-grey mb-1">
-            Demo 用户
+          <div class="d-flex align-center">
+            <v-avatar size="36" color="primary" class="mr-2">
+              <span class="text-white text-body-2">{{ userInitial }}</span>
+            </v-avatar>
+            <div style="flex:1; min-width:0;">
+              <div class="text-body-2 font-weight-medium text-truncate">
+                {{ user?.username || '用户' }}
+              </div>
+              <v-chip size="x-small" color="success" variant="tonal">
+                <template v-slot:prepend>
+                  <v-icon size="12">mdi-circle-medium</v-icon>
+                </template>
+                在线
+              </v-chip>
+            </div>
+            <v-btn
+              icon="mdi-logout"
+              size="small"
+              variant="text"
+              @click="handleLogout"
+            />
           </div>
-          <v-chip size="small" color="success" variant="tonal">
-            <template v-slot:prepend>
-              <v-icon size="16">mdi-circle-medium</v-icon>
-            </template>
-            在线
-          </v-chip>
         </div>
       </template>
     </v-navigation-drawer>
 
     <!-- 主内容区 -->
     <v-main>
-      <v-container fluid class="pa-6 h-100">
+      <!-- 登录页面全屏无侧栏 -->
+      <router-view v-if="!isAuthenticated" v-slot="{ Component }">
+        <transition name="fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
+      <!-- 已登录内容 -->
+      <v-container v-else fluid class="pa-6 h-100">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -70,7 +91,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuth } from '@/stores/auth'
+
+const router = useRouter()
+const { user, isAuthenticated, logout, restoreSession } = useAuth()
 
 const drawer = ref(true)
 const rail = ref(false)
@@ -83,8 +109,30 @@ const navItems = [
   { path: '/deadlines', title: 'Deadline', icon: 'mdi-calendar-clock-outline' },
   { path: '/dashboard', title: '仪表盘', icon: 'mdi-view-dashboard-outline' },
 ]
+
+const userInitial = computed(() => {
+  const name = user.value?.username || ''
+  return name.charAt(0).toUpperCase()
+})
+
+function handleLogout() {
+  logout()
+  router.push('/login')
+}
+
+// 启动时恢复会话
+onMounted(async () => {
+  await restoreSession()
+})
 </script>
 
 <style>
-/* 无需额外覆盖，让 Vuetify 原生处理布局 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>

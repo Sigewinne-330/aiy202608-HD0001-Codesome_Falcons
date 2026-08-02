@@ -174,12 +174,14 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 
+const route = useRoute()
 const weekDays = ['一', '二', '三', '四', '五', '六', '日']
 
 const today = new Date()
-const currentYear = ref(today.getFullYear())
-const currentMonth = ref(today.getMonth() + 1)
+const currentYear = ref(parseInt(route.query.year) || today.getFullYear())
+const currentMonth = ref(parseInt(route.query.month) || today.getMonth() + 1)
 const selectedDate = ref(null)
 const monthData = ref({})
 const loading = ref(false)

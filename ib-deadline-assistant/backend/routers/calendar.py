@@ -8,6 +8,7 @@ from database import get_db
 from models.user import User
 from models.task import Task as TaskModel, TaskStatus
 from models.deadline import Deadline as DeadlineModel, DeadlineStatus
+from models.sub_task import SubTask as SubTaskModel
 from services.auth import get_current_user
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
@@ -65,9 +66,10 @@ def get_calendar_data(
     start_date = first_day - timedelta(days=first_day.weekday())  # 扩展到周日
     end_date = last_day + timedelta(days=(6 - last_day.weekday()))  # 扩展到周六
 
-    # 查询该时间段内的所有任务（包含子任务，需要 deadline 不为空）
+    # 查询该时间段内的所有任务（仅父任务，子任务从 sub_tasks 表读取避免重复）
     tasks = db.query(TaskModel).filter(
         TaskModel.user_id == current_user.id,
+        TaskModel.parent_id == None,
         TaskModel.deadline >= start_date,
         TaskModel.deadline <= end_date,
     ).order_by(TaskModel.deadline.asc(), TaskModel.priority.desc()).all()
@@ -78,6 +80,15 @@ def get_calendar_data(
         DeadlineModel.due_date >= start_date,
         DeadlineModel.due_date <= end_date,
     ).order_by(DeadlineModel.due_date.asc(), DeadlineModel.priority.desc()).all()
+
+    # 查询该时间段内的所有子任务（关联 task 表获取 user_id）
+    sub_tasks = db.query(SubTaskModel).join(
+        TaskModel, SubTaskModel.task_id == TaskModel.id
+    ).filter(
+        TaskModel.user_id == current_user.id,
+        SubTaskModel.notice_time >= start_date,
+        SubTaskModel.notice_time <= end_date,
+    ).order_by(SubTaskModel.notice_time.asc(), SubTaskModel.level.desc()).all()
 
     # 按日期分组
     from collections import defaultdict
@@ -109,6 +120,20 @@ def get_calendar_data(
         )
         day_map[date_key]["deadlines"].append(item)
         day_map[date_key]["count"] += 1
+
+    for st in sub_tasks:
+        if st.notice_time:
+            date_key = st.notice_time.isoformat()
+            item = CalendarDayItem(
+                id=st.id,
+                title=st.name,
+                type="task",
+                priority=st.level.value if st.level else "medium",
+                status=st.status.value if st.status else "todo",
+                subject=None,
+            )
+            day_map[date_key]["tasks"].append(item)
+            day_map[date_key]["count"] += 1
 
     # 构建响应（按日期排序）
     days = []

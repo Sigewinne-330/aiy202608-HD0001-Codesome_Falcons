@@ -14,7 +14,7 @@
     </div>
 
     <!-- 消息区域 -->
-    <v-sheet class="flex-grow-1 scroll-container pa-4 mb-4" rounded="lg" elevation="0" border>
+    <v-sheet class="flex-grow-1 scroll-container pa-4 mb-4" rounded="lg" elevation="0" border style="min-height: 0; overflow-y: auto;">
       <div v-if="messages.length === 0" class="d-flex flex-column align-center justify-center" style="height: 100%;">
         <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-robot-outline</v-icon>
         <div class="text-h6 text-grey-darken-1 mb-2">你好！有什么可以帮你的？</div>
@@ -62,19 +62,17 @@
     </v-sheet>
 
     <!-- 输入区域 -->
-    <v-card flat rounded="lg" border>
-      <v-card-text class="pa-3">
+    <v-card flat rounded="lg" border style="flex-shrink: 0;">
+      <v-card-text class="pa-4">
         <div class="d-flex align-end gap-3">
           <v-textarea
             v-model="input"
             placeholder="输入你的问题，比如：帮我规划一个三个月的学习计划..."
-            rows="2"
+            rows="3"
             auto-grow
             hide-details
-            variant="plain"
-            density="compact"
+            variant="solo"
             class="flex-grow-1"
-            bg-color="transparent"
             @keydown.enter.exact.prevent="sendMessage"
             :disabled="loading"
           />
@@ -126,26 +124,67 @@ async function sendMessage() {
   input.value = ''
   loading.value = true
 
-  await scrollToBottom()
+  // 插入一个空的 AI 消息占位，标记正在流式
+  messages.value.push({ role: 'assistant', content: '', streaming: true })
+  const aiIndex = messages.value.length - 1
+
+  scrollToBottom()
+
+  // 滚动节流：最多 60fps
+  let scrollPending = false
+  function scheduleScroll() {
+    if (!scrollPending) {
+      scrollPending = true
+      requestAnimationFrame(() => {
+        scrollToBottom()
+        scrollPending = false
+      })
+    }
+  }
 
   try {
     abortController = new AbortController()
-    const res = await fetch(`${API_BASE}/chat`, {
+    const res = await fetch(`${API_BASE}/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content }),
       signal: abortController.signal,
     })
-    const data = await res.json()
-    messages.value.push({ role: 'assistant', content: data.content || '抱歉，出了点问题，请重试。' })
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const data = line.slice(6)
+        if (data === '[DONE]') continue
+        if (data.startsWith('[ERROR]')) {
+          messages.value[aiIndex].content = '出错了：' + data.slice(8)
+          continue
+        }
+        messages.value[aiIndex].content += data
+        scheduleScroll()
+      }
+    }
   } catch (e) {
     if (e.name !== 'AbortError') {
-      messages.value.push({ role: 'assistant', content: '网络请求失败，请检查后端是否启动。' })
+      messages.value[aiIndex].content = '网络请求失败，请检查后端是否启动。'
     }
   } finally {
+    // 流式结束，切换到 markdown 渲染
+    messages.value[aiIndex].streaming = false
     loading.value = false
     abortController = null
-    await scrollToBottom()
+    scrollToBottom()
   }
 }
 
@@ -198,14 +237,14 @@ onMounted(() => {
   background: #1565C0;
   color: white;
   border-radius: 16px 16px 4px 16px;
-  max-width: 70%;
+  max-width: 85%;
   word-break: break-word;
 }
 
 .assistant-message {
   background: #F3F4F6;
   border-radius: 4px 16px 16px 16px;
-  max-width: 75%;
+  max-width: 92%;
   word-break: break-word;
 }
 

@@ -174,18 +174,14 @@
             </v-timeline-item>
           </v-timeline>
 
-          <v-alert
-            v-if="plan"
-            type="success"
-            variant="tonal"
-            density="compact"
-            class="mt-4"
-            icon="mdi-check-circle-outline"
-          >
-            执行计划已生成！各阶段任务已自动添加到
-            <router-link to="/tasks" class="font-weight-medium">任务管理</router-link>
-            页面，方便你追踪进度。
-          </v-alert>
+          <div v-if="plan" class="d-flex gap-2 mt-4">
+            <v-btn color="primary" variant="tonal" prepend-icon="mdi-calendar-month" :to="calendarLink">
+              在日历中查看
+            </v-btn>
+            <v-btn variant="outlined" prepend-icon="mdi-format-list-checks" to="/tasks">
+              任务管理
+            </v-btn>
+          </div>
         </div>
       </v-col>
     </v-row>
@@ -193,7 +189,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 const form = ref({
   title: '',
@@ -206,6 +202,13 @@ const plan = ref(null)
 const loading = ref(false)
 
 const API_BASE = '/api'
+
+// 跳转到日历的链接（带上截止日期的月份）
+const calendarLink = computed(() => {
+  if (!plan.value?.deadline) return '/calendar'
+  const parts = plan.value.deadline.split('-')
+  return `/calendar?year=${parts[0]}&month=${parseInt(parts[1])}`
+})
 
 function phaseColor(priority) {
   return { low: 'grey', medium: 'primary', high: 'warning', urgent: 'error' }[priority] || 'primary'

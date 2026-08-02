@@ -5,6 +5,7 @@ from datetime import date, datetime
 from database import get_db
 from models.user import User
 from models.task import Task as TaskModel, TaskStatus
+from models.sub_task import SubTask as SubTaskModel
 from schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskBreakdownRequest, TaskPlanRequest, TaskPlanResponse, TaskPlanPhase
 from services.auth import get_current_user
 from services.ai_service import ai_service
@@ -35,7 +36,46 @@ def list_tasks(
     if status:
         query = query.filter(TaskModel.status == status)
     tasks = query.order_by(TaskModel.deadline.asc(), TaskModel.priority.desc()).all()
-    return _build_task_tree(tasks)
+
+    # 构建任务树
+    tree = _build_task_tree(tasks)
+
+    # 补充 sub_tasks 表中的数据
+    task_ids = [t.id for t in tasks]
+    if task_ids:
+        db_sub_tasks = db.query(SubTaskModel).filter(
+            SubTaskModel.task_id.in_(task_ids)
+        ).order_by(SubTaskModel.notice_time.asc(), SubTaskModel.level.desc()).all()
+
+        # 建立 task_id → sub_tasks 映射
+        sub_map = {}
+        for st in db_sub_tasks:
+            sub_map.setdefault(st.task_id, []).append({
+                "id": st.id,
+                "title": st.name,
+                "description": st.description,
+                "deadline": st.notice_time,
+                "priority": st.level.value if st.level else "medium",
+                "status": st.status.value if st.status else "todo",
+                "estimated_hours": 0,
+                "progress": 0,
+                "subtasks": [],
+                "subject": None,
+            })
+
+        # 合并到树中
+        def merge_subs(nodes):
+            for n in nodes:
+                if n.id in sub_map:
+                    # 避免重复（tasks 表已有 parent_id 子任务的跳过）
+                    existing_titles = {s.title for s in n.subtasks}
+                    for s in sub_map[n.id]:
+                        if s["title"] not in existing_titles:
+                            n.subtasks.append(TaskResponse(**s))
+                merge_subs(n.subtasks)
+        merge_subs(tree)
+
+    return tree
 
 
 @router.post("", response_model=TaskResponse)
@@ -189,6 +229,7 @@ async def plan_task(
         except ValueError:
             phase_due = None
 
+        # 写入 tasks 表（保留原有逻辑）
         subtask = TaskModel(
             user_id=current_user.id,
             parent_id=parent_task.id,
@@ -199,6 +240,17 @@ async def plan_task(
             estimated_hours=p.estimated_hours,
         )
         db.add(subtask)
+
+        # 同时写入 sub_tasks 表
+        sub = SubTaskModel(
+            task_id=parent_task.id,
+            name=f"{p.phase}：{data.title}",
+            description=f"{p.description}\n交付物：{p.deliverables}",
+            notice_time=phase_due,
+            level=p.priority,
+            status="todo",
+        )
+        db.add(sub)
 
     db.commit()
 
