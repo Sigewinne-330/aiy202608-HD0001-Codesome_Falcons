@@ -8,11 +8,11 @@
           class="text-body-2 text-decoration-none text-grey d-inline-flex align-center mb-3"
         >
           <v-icon size="16" class="mr-1">mdi-arrow-left</v-icon>
-          返回项目介绍
+          {{ $t('auth.backToLanding') }}
         </router-link>
         <v-icon size="48" color="primary" class="mb-2">mdi-account-plus-outline</v-icon>
-        <h2 class="text-h5 font-weight-bold">创建账号</h2>
-        <p class="text-body-2 text-grey mt-1">加入任务规划师，高效管理你的任务</p>
+        <h2 class="text-h5 font-weight-bold">{{ $t('auth.registerTitle') }}</h2>
+        <p class="text-body-2 text-grey mt-1">{{ $t('auth.registerSubtitle') }}</p>
       </div>
 
       <!-- 错误提示 -->
@@ -31,7 +31,7 @@
       <v-form ref="formRef" v-model="formValid" @submit.prevent="handleRegister">
         <v-text-field
           v-model="username"
-          label="用户名"
+          :label="$t('auth.username')"
           prepend-inner-icon="mdi-account-outline"
           :rules="usernameRules"
           variant="outlined"
@@ -43,7 +43,7 @@
 
         <v-text-field
           v-model="email"
-          label="邮箱（选填）"
+          :label="$t('auth.emailOptional')"
           type="email"
           prepend-inner-icon="mdi-email-outline"
           :rules="emailRules"
@@ -56,7 +56,7 @@
 
         <v-text-field
           v-model="password"
-          label="密码"
+          :label="$t('auth.password')"
           :type="showPwd ? 'text' : 'password'"
           prepend-inner-icon="mdi-lock-outline"
           :append-inner-icon="showPwd ? 'mdi-eye-off' : 'mdi-eye'"
@@ -70,7 +70,7 @@
 
         <v-text-field
           v-model="confirmPassword"
-          label="确认密码"
+          :label="$t('auth.confirmPassword')"
           :type="showConfirmPwd ? 'text' : 'password'"
           prepend-inner-icon="mdi-lock-check-outline"
           :append-inner-icon="showConfirmPwd ? 'mdi-eye-off' : 'mdi-eye'"
@@ -91,15 +91,15 @@
           rounded="lg"
           class="mb-4"
         >
-          注 册
+          {{ $t('auth.registerBtn') }}
         </v-btn>
       </v-form>
 
       <!-- 底部链接 -->
       <div class="text-center">
-        <span class="text-body-2 text-grey">已有账号？</span>
+        <span class="text-body-2 text-grey">{{ $t('auth.haveAccount') }}</span>
         <router-link to="/login" class="text-body-2 text-decoration-none font-weight-bold ml-1">
-          立即登录
+          {{ $t('auth.loginNow') }}
         </router-link>
       </div>
     </v-card>
@@ -109,9 +109,11 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
 
 const router = useRouter()
+const { t } = useI18n()
 const { register } = useAuth()
 
 const formValid = ref(false)
@@ -126,23 +128,23 @@ const errorMsg = ref('')
 const loading = ref(false)
 
 const usernameRules = [
-  (v) => !!v || '请输入用户名',
-  (v) => (v && v.length >= 2) || '用户名至少 2 个字符',
-  (v) => (v && v.length <= 50) || '用户名最多 50 个字符',
+  (v) => !!v || t('auth.usernameRequired'),
+  (v) => (v && v.length >= 2) || t('auth.usernameMin'),
+  (v) => (v && v.length <= 50) || t('auth.usernameMax'),
 ]
 
 const emailRules = [
-  (v) => !v || /.+@.+\..+/.test(v) || '请输入有效的邮箱地址',
+  (v) => !v || /.+@.+\..+/.test(v) || t('auth.emailInvalid'),
 ]
 
 const passwordRules = [
-  (v) => !!v || '请输入密码',
-  (v) => (v && v.length >= 6) || '密码至少 6 个字符',
+  (v) => !!v || t('auth.passwordRequired'),
+  (v) => (v && v.length >= 6) || t('auth.passwordMin'),
 ]
 
 const confirmPasswordRules = [
-  (v) => !!v || '请确认密码',
-  (v) => v === password.value || '两次输入的密码不一致',
+  (v) => !!v || t('auth.confirmRequired'),
+  (v) => v === password.value || t('auth.confirmMismatch'),
 ]
 
 async function handleRegister() {

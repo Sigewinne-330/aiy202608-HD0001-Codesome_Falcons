@@ -1,5 +1,6 @@
 import { createVuetify } from 'vuetify'
 import 'vuetify/styles'
+import { zhHans, zhHant, en } from 'vuetify/locale'
 
 const vuetify = createVuetify({
   theme: {
@@ -18,6 +19,11 @@ const vuetify = createVuetify({
         }
       }
     }
+  },
+  locale: {
+    locale: 'zhHans',
+    fallback: 'en',
+    messages: { zhHans, zhHant, en },
   },
   defaults: {
     VCard: {

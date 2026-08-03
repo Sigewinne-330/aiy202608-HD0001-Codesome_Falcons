@@ -3,28 +3,28 @@
     <template v-if="!selectedCategory">
       <header class="page-header">
         <div>
-          <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" class="back-button" @click="router.push('/calendar')">返回日历</v-btn>
-          <div class="eyebrow">PROGRESS & RISK</div>
-          <h1>进度管理</h1>
-          <p>同时观察完成进度和当前风险，及时把精力放在最需要处理的分类。</p>
+          <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" class="back-button" @click="router.push('/calendar')">{{ $t('common.backCalendar') }}</v-btn>
+          <div class="eyebrow">{{ $t('progress.eyebrow') }}</div>
+          <h1>{{ $t('progress.title') }}</h1>
+          <p>{{ $t('progress.subtitle') }}</p>
         </div>
-        <v-chip color="primary" variant="tonal" prepend-icon="mdi-sync" @click="loadTasks">同步任务</v-chip>
+        <v-chip color="primary" variant="tonal" prepend-icon="mdi-sync" @click="loadTasks">{{ $t('progress.sync') }}</v-chip>
       </header>
 
       <v-card class="overall-card" rounded="xl" elevation="0">
         <div class="overall-card__copy">
-          <span class="section-tag">总状态</span>
+          <span class="section-tag">{{ $t('progress.overall') }}</span>
           <h2>{{ overallSummary.title }}</h2>
           <p>{{ overallSummary.description }}</p>
         </div>
         <div class="overall-score">
           <v-progress-circular :model-value="overall.progress" :color="riskColor(overall.risk)" size="104" width="9">
-            <div><strong>{{ overall.progress }}%</strong><span>完成</span></div>
+            <div><strong>{{ overall.progress }}%</strong><span>{{ $t('progress.completed') }}</span></div>
           </v-progress-circular>
         </div>
         <div class="status-bars overall-bars">
-          <StatusBar label="整体进度" :value="overall.progress" color="primary" />
-          <StatusBar label="当前风险" :value="overall.risk" :color="riskColor(overall.risk)" :risk="true" />
+          <StatusBar :label="$t('progress.overallProgress')" :value="overall.progress" color="primary" />
+          <StatusBar :label="$t('progress.currentRisk')" :value="overall.risk" :color="riskColor(overall.risk)" :risk="true" />
         </div>
       </v-card>
 
@@ -38,7 +38,7 @@
         >
           <div class="category-card__header">
             <span class="category-icon" :style="{ background: category.softColor, color: category.color }">{{ category.key }}</span>
-            <span class="category-meta">{{ category.count }} 项任务</span>
+            <span class="category-meta">{{ $t('progress.taskItems', { n: category.count }) }}</span>
             <v-icon icon="mdi-arrow-top-right" size="20" color="grey-lighten-1" />
           </div>
           <div class="category-card__status">
@@ -46,8 +46,8 @@
             <span>{{ categoryStatus(category) }}</span>
           </div>
           <div class="status-bars">
-            <StatusBar label="进度" :value="category.progress" :color="category.vuetifyColor" />
-            <StatusBar label="风险" :value="category.risk" :color="riskColor(category.risk)" :risk="true" />
+            <StatusBar :label="$t('progress.progress')" :value="category.progress" :color="category.vuetifyColor" />
+            <StatusBar :label="$t('progress.risk')" :value="category.risk" :color="riskColor(category.risk)" :risk="true" />
           </div>
         </button>
       </div>
@@ -55,32 +55,32 @@
 
     <template v-else>
       <header class="detail-header">
-        <v-btn icon="mdi-arrow-left" variant="tonal" aria-label="返回进度总览" @click="router.push('/progress')" />
+        <v-btn icon="mdi-arrow-left" variant="tonal" :aria-label="$t('progress.backOverview')" @click="router.push('/progress')" />
         <span class="category-icon large" :style="{ background: selectedCategory.softColor, color: selectedCategory.color }">{{ selectedCategory.key }}</span>
         <div>
-          <div class="eyebrow">CATEGORY MANAGEMENT</div>
-          <h1>{{ selectedCategory.key }} 管理页</h1>
-          <p>集中管理 {{ selectedCategory.key }} 的任务、进度和 Deadline 风险。</p>
+          <div class="eyebrow">{{ $t('progress.eyebrowCategory') }}</div>
+          <h1>{{ $t('progress.managePage', { key: selectedCategory.key }) }}</h1>
+          <p>{{ $t('progress.manageDesc', { key: selectedCategory.key }) }}</p>
         </div>
       </header>
 
       <div class="detail-summary-grid">
         <v-card rounded="xl" elevation="0">
-          <span>分类进度</span><strong>{{ selectedCategory.progress }}%</strong>
+          <span>{{ $t('progress.categoryProgress') }}</span><strong>{{ selectedCategory.progress }}%</strong>
           <v-progress-linear :model-value="selectedCategory.progress" :color="selectedCategory.vuetifyColor" height="8" rounded />
         </v-card>
         <v-card rounded="xl" elevation="0">
-          <span>当前风险</span><strong>{{ selectedCategory.risk }}%</strong>
+          <span>{{ $t('progress.currentRisk') }}</span><strong>{{ selectedCategory.risk }}%</strong>
           <v-progress-linear :model-value="selectedCategory.risk" :color="riskColor(selectedCategory.risk)" height="8" rounded />
         </v-card>
         <v-card rounded="xl" elevation="0">
-          <span>任务数量</span><strong>{{ selectedCategory.count }}</strong>
-          <small>{{ selectedCategory.doneCount }} 项已完成</small>
+          <span>{{ $t('progress.taskCount') }}</span><strong>{{ selectedCategory.count }}</strong>
+          <small>{{ $t('progress.doneCount', { n: selectedCategory.doneCount }) }}</small>
         </v-card>
       </div>
 
       <v-card class="category-task-list" rounded="xl" elevation="0">
-        <div class="task-list-title">{{ selectedCategory.key }} 任务</div>
+        <div class="task-list-title">{{ $t('progress.categoryTasks', { key: selectedCategory.key }) }}</div>
         <button
           v-for="task in selectedCategory.tasks"
           :key="task.id"
@@ -91,7 +91,7 @@
           <v-icon :icon="isDone(task) ? 'mdi-check-circle' : 'mdi-circle-outline'" :color="isDone(task) ? 'success' : 'grey'" />
           <span class="progress-task__copy">
             <strong>{{ task.title }}</strong>
-            <small>{{ task.deadline ? formatDate(task.deadline) : '暂无 Deadline' }}</small>
+            <small>{{ task.deadline ? formatDate(task.deadline) : $t('progress.noDeadline') }}</small>
           </span>
           <span class="task-progress">{{ task.progress || 0 }}%</span>
           <v-progress-linear :model-value="task.progress || 0" :color="selectedCategory.vuetifyColor" height="5" rounded />
@@ -99,8 +99,8 @@
         </button>
         <div v-if="selectedCategory.tasks.length === 0" class="task-list-empty">
           <v-icon icon="mdi-folder-open-outline" size="46" color="grey-lighten-1" />
-          <span>该分类还没有任务</span>
-          <v-btn color="primary" variant="tonal" size="small" @click="router.push('/tasks')">前往添加</v-btn>
+          <span>{{ $t('progress.emptyCategory') }}</span>
+          <v-btn color="primary" variant="tonal" size="small" @click="router.push('/tasks')">{{ $t('progress.goAdd') }}</v-btn>
         </div>
       </v-card>
     </template>
@@ -114,10 +114,12 @@
 <script setup>
 import { computed, defineComponent, h, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const { token } = useAuth()
 const tasks = ref([])
 const loading = ref(true)
@@ -164,10 +166,10 @@ const overall = computed(() => ({
 }))
 
 const overallSummary = computed(() => {
-  if (!tasks.value.length) return { title: '等待建立第一项计划', description: '添加 IA、EE、TOK 或 CAS 任务后，这里会汇总你的整体状态。' }
-  if (overall.value.risk >= 70) return { title: '需要立即关注', description: '多个 Deadline 已接近或逾期，建议先处理高风险项目。' }
-  if (overall.value.risk >= 40) return { title: '进展中，存在风险', description: '整体节奏尚可，但仍有项目需要提前推进。' }
-  return { title: '整体状态良好', description: '当前进度稳定，继续保持现有节奏。' }
+  if (!tasks.value.length) return { title: t('progress.s1Title'), description: t('progress.s1Desc') }
+  if (overall.value.risk >= 70) return { title: t('progress.s2Title'), description: t('progress.s2Desc') }
+  if (overall.value.risk >= 40) return { title: t('progress.s3Title'), description: t('progress.s3Desc') }
+  return { title: t('progress.s4Title'), description: t('progress.s4Desc') }
 })
 
 const selectedCategory = computed(() => {
@@ -218,9 +220,9 @@ function taskRisk(task) {
 }
 
 function riskLabel(value) {
-  if (value >= 70) return '高风险'
-  if (value >= 40) return '需关注'
-  return '低风险'
+  if (value >= 70) return t('progress.highRisk')
+  if (value >= 40) return t('progress.watchRisk')
+  return t('progress.lowRisk')
 }
 
 function riskColor(value) {
@@ -234,15 +236,15 @@ function colorHex(color) {
 }
 
 function categoryStatus(category) {
-  if (!category.count) return '尚未开始'
-  if (category.risk >= 70) return '需要立即处理'
-  if (category.progress >= 80) return '接近完成'
-  return '稳步推进中'
+  if (!category.count) return t('progress.notStarted')
+  if (category.risk >= 70) return t('progress.needAction')
+  if (category.progress >= 80) return t('progress.almostDone')
+  return t('progress.steady')
 }
 
 function formatDate(value) {
   const date = new Date(`${value}T00:00:00`)
-  return `${date.getMonth() + 1}月${date.getDate()}日 Deadline`
+  return `${t('common.monthDay', { month: date.getMonth() + 1, day: date.getDate() })} Deadline`
 }
 
 async function loadTasks() {

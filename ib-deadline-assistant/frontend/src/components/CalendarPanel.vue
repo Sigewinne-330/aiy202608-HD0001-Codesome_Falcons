@@ -10,7 +10,7 @@
         @click="prevMonth"
       />
       <span class="text-subtitle-1 font-weight-medium">
-        {{ currentYear }}年{{ currentMonth }}月
+        {{ $t('common.yearMonth', { year: currentYear, month: currentMonth }) }}
       </span>
       <v-btn
         icon="mdi-chevron-right"
@@ -26,18 +26,18 @@
         class="ml-1"
         @click="goToday"
       >
-        今天
+        {{ $t('calendarPanel.today') }}
       </v-btn>
     </div>
 
     <!-- 星期标题 -->
     <div class="weekday-row">
       <div
-        v-for="day in weekDays"
+        v-for="day in weekDayKeys"
         :key="day"
         class="weekday-cell text-caption text-grey"
       >
-        {{ day }}
+        {{ $t(`calendarPanel.${day}`) }}
       </div>
     </div>
 
@@ -78,12 +78,12 @@
       <div class="day-detail-header text-body-2 font-weight-medium mb-2">
         {{ formatDetailDate(selectedDateStr) }}
         <span class="text-caption text-grey ml-1">
-          （{{ selectedDayItems.length }} 项）
+          {{ $t('calendarPanel.detailCount', { n: selectedDayItems.length }) }}
         </span>
       </div>
 
       <div v-if="selectedDayItems.length === 0" class="text-caption text-grey pa-2">
-        当天暂无任务或截止日期
+        {{ $t('calendarPanel.noItems') }}
       </div>
 
       <div
@@ -113,9 +113,11 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { authFetch } from '@/stores/auth'
 
-const weekDays = ['一', '二', '三', '四', '五', '六', '日']
+const { t } = useI18n()
+const weekDayKeys = ['week1', 'week2', 'week3', 'week4', 'week5', 'week6', 'week7']
 
 const today = new Date()
 const currentYear = ref(today.getFullYear())
@@ -137,7 +139,7 @@ async function loadCalendarData() {
       monthData.value = dateMap
     }
   } catch (err) {
-    console.error('加载日历数据失败:', err)
+    console.error(t('calendarPanel.loadError'), err)
     monthData.value = {}
   }
 }
@@ -310,8 +312,8 @@ function goToday() {
 
 function formatDetailDate(dateStr) {
   const d = new Date(dateStr)
-  const weekDayNames = ['日', '一', '二', '三', '四', '五', '六']
-  return `${d.getMonth() + 1}月${d.getDate()}日 周${weekDayNames[d.getDay()]}`
+  const weekKeyMap = { 0: 'week7', 1: 'week1', 2: 'week2', 3: 'week3', 4: 'week4', 5: 'week5', 6: 'week6' }
+  return `${t('common.monthDay', { month: d.getMonth() + 1, day: d.getDate() })}${t('calendarPanel.weekPrefix')}${t(`calendarPanel.${weekKeyMap[d.getDay()]}`)}`
 }
 
 function priorityColor(p) {
@@ -320,8 +322,8 @@ function priorityColor(p) {
 }
 
 function priorityLabel(p) {
-  const map = { urgent: '紧急', high: '高', medium: '中', low: '低' }
-  return map[p] || p
+  const keyMap = { urgent: 'urgent', high: 'high', medium: 'medium', low: 'low' }
+  return t(`common.${keyMap[p] || ''}`) || p
 }
 
 onMounted(() => {

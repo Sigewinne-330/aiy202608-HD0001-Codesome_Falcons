@@ -3,17 +3,17 @@
     <!-- ================= 顶部导航 ================= -->
     <header class="landing-nav">
       <div class="landing-nav-inner">
-        <router-link to="/" class="brand-button" aria-label="返回首页">
+        <router-link to="/" class="brand-button" aria-label="IBuddy">
           <span class="brand-mark">IB</span>
           <span class="brand-copy">
             <strong>IBuddy</strong>
-            <small>长期任务规划师</small>
+            <small>{{ $t('landing.slogan') }}</small>
           </span>
         </router-link>
 
         <div class="nav-actions">
-          <v-btn variant="text" color="primary" rounded="lg" to="/login">登录</v-btn>
-          <v-btn color="primary" rounded="lg" to="/register" class="nav-register">免费开始</v-btn>
+          <v-btn variant="text" color="primary" rounded="lg" to="/login">{{ $t('landing.login') }}</v-btn>
+          <v-btn color="primary" rounded="lg" to="/register" class="nav-register">{{ $t('landing.startFree') }}</v-btn>
         </div>
       </div>
     </header>
@@ -30,18 +30,15 @@
               size="small"
               prepend-icon="mdi-rocket-launch-outline"
             >
-              专为 IB 学子打造
+              {{ $t('landing.badge') }}
             </v-chip>
 
             <h1 class="hero-title">
-              别再被 DDL 追着跑，<br />
-              <span class="gradient-text">让 AI 帮你提前规划</span>
+              {{ $t('landing.title1') }}<br />
+              <span class="gradient-text">{{ $t('landing.title2') }}</span>
             </h1>
 
-            <p class="hero-sub">
-              全模态录入 · AI 逆向拆解 · 智能排期
-              —— 把每一项 Deadline 变成有条不紊的推进计划。
-            </p>
+            <p class="hero-sub">{{ $t('landing.subtitle') }}</p>
 
             <div class="hero-actions">
               <v-btn
@@ -52,7 +49,7 @@
                 class="hero-cta"
                 elevation="4"
               >
-                立即开始
+                {{ $t('landing.startNow') }}
                 <v-icon end>mdi-arrow-right</v-icon>
               </v-btn>
               <v-btn
@@ -62,22 +59,22 @@
                 rounded="lg"
                 @click="scrollToId('#features')"
               >
-                了解功能
+                {{ $t('landing.learnMore') }}
               </v-btn>
             </div>
 
             <div class="hero-points">
               <div class="hero-point">
                 <v-icon color="success" size="18">mdi-check-circle</v-icon>
-                <span>语音 / 图片 / 文本全模态录入</span>
+                <span>{{ $t('landing.point1') }}</span>
               </div>
               <div class="hero-point">
                 <v-icon color="success" size="18">mdi-check-circle</v-icon>
-                <span>从 DDL 倒推子任务</span>
+                <span>{{ $t('landing.point2') }}</span>
               </div>
               <div class="hero-point">
                 <v-icon color="success" size="18">mdi-check-circle</v-icon>
-                <span>自动避让冲突日期</span>
+                <span>{{ $t('landing.point3') }}</span>
               </div>
             </div>
           </div>
@@ -89,7 +86,7 @@
                 <span class="mock-dot red"></span>
                 <span class="mock-dot yellow"></span>
                 <span class="mock-dot green"></span>
-                <span class="mock-window-title">8 月 · 日历工作台</span>
+                <span class="mock-window-title">{{ $t('landing.windowTitle') }}</span>
               </div>
 
               <div class="mock-week">
@@ -105,33 +102,33 @@
               <div class="mock-task mock-task-blue">
                 <v-icon size="15" color="white">mdi-file-document-edit-outline</v-icon>
                 <div class="mock-task-copy">
-                  <b>EE 论文 · 初稿</b>
-                  <small>8月20日 截止</small>
+                  <b>{{ $t('landing.task1') }}</b>
+                  <small>{{ $t('landing.task1Meta') }}</small>
                 </div>
-                <span class="mock-task-state">拆解中</span>
+                <span class="mock-task-state">{{ $t('landing.task1State') }}</span>
               </div>
 
               <div class="mock-task mock-task-orange">
                 <v-icon size="15" color="white">mdi-book-open-variant</v-icon>
                 <div class="mock-task-copy">
-                  <b>历史 IA 实验</b>
-                  <small>8月12日 截止</small>
+                  <b>{{ $t('landing.task2') }}</b>
+                  <small>{{ $t('landing.task2Meta') }}</small>
                 </div>
-                <span class="mock-task-state">催办中</span>
+                <span class="mock-task-state">{{ $t('landing.task2State') }}</span>
               </div>
 
               <div class="mock-task mock-task-teal">
                 <v-icon size="15" color="white">mdi-flask-outline</v-icon>
                 <div class="mock-task-copy">
-                  <b>化学 Lab Report</b>
-                  <small>8月15日 截止</small>
+                  <b>{{ $t('landing.task3') }}</b>
+                  <small>{{ $t('landing.task3Meta') }}</small>
                 </div>
-                <span class="mock-task-state">已排期</span>
+                <span class="mock-task-state">{{ $t('landing.task3State') }}</span>
               </div>
 
               <div class="mock-bubble">
                 <v-icon size="15" color="#FF7043">mdi-bell-ring-outline</v-icon>
-                <span>3 天后 · 历史 IA 到期，该动工啦～</span>
+                <span>{{ $t('landing.bubble') }}</span>
               </div>
             </div>
 
@@ -145,10 +142,10 @@
         <div class="section-inner">
           <div class="section-head">
             <v-chip color="secondary" variant="tonal" size="small" class="mb-3">
-              核心功能
+              {{ $t('landing.featuresTag') }}
             </v-chip>
-            <h2 class="section-title">四大模块，一站式管住所有 DDL</h2>
-            <p class="section-sub">从录入、拆解到排期与督促，AI 全程陪伴你的长程任务</p>
+            <h2 class="section-title">{{ $t('landing.featuresTitle') }}</h2>
+            <p class="section-sub">{{ $t('landing.featuresSub') }}</p>
           </div>
 
           <v-row class="feature-grid" dense>
@@ -157,8 +154,8 @@
                 <div class="feature-icon icon-blue">
                   <v-icon size="26" color="#3265F5">mdi-creation-outline</v-icon>
                 </div>
-                <h3>全模态 DDL 捕获网</h3>
-                <p>文本、语音、图片三种方式录入任务，Agent 自动识别任务、时间与地点，日历实时生成，再也不翻聊天记录。</p>
+                <h3>{{ $t('landing.f1Title') }}</h3>
+                <p>{{ $t('landing.f1Desc') }}</p>
               </v-card>
             </v-col>
 
@@ -167,8 +164,8 @@
                 <div class="feature-icon icon-purple">
                   <v-icon size="26" color="#7348E8">mdi-sitemap-outline</v-icon>
                 </div>
-                <h3>双核长程拆解引擎</h3>
-                <p>从截止日期倒推生成多节点子任务，内置 IB 学科专家知识库，按官方指南给出专业级周度拆解。</p>
+                <h3>{{ $t('landing.f2Title') }}</h3>
+                <p>{{ $t('landing.f2Desc') }}</p>
               </v-card>
             </v-col>
 
@@ -177,8 +174,8 @@
                 <div class="feature-icon icon-teal">
                   <v-icon size="26" color="#26A69A">mdi-lightning-bolt-outline</v-icon>
                 </div>
-                <h3>动态精力池管理</h3>
-                <p>AI 读取已有日程智能避让冲突，任务见缝插针排进空闲区；遇到「地狱周」一键平滑化，把压力打散前置。</p>
+                <h3>{{ $t('landing.f3Title') }}</h3>
+                <p>{{ $t('landing.f3Desc') }}</p>
               </v-card>
             </v-col>
 
@@ -187,8 +184,8 @@
                 <div class="feature-icon icon-orange">
                   <v-icon size="26" color="#FF7043">mdi-robot-happy-outline</v-icon>
                 </div>
-                <h3>有温度的督导员</h3>
-                <p>戏精幽默的催收文案，在 Deadline 临近时用有趣的方式提醒你——催得动、不焦虑，保持学习动力。</p>
+                <h3>{{ $t('landing.f4Title') }}</h3>
+                <p>{{ $t('landing.f4Desc') }}</p>
               </v-card>
             </v-col>
           </v-row>
@@ -200,10 +197,10 @@
         <div class="section-inner">
           <div class="section-head">
             <v-chip color="accent" variant="tonal" size="small" class="mb-3">
-              三步上手
+              {{ $t('landing.howTag') }}
             </v-chip>
-            <h2 class="section-title">就像发消息一样简单</h2>
-            <p class="section-sub">把大脑里的任务倒给 Agent，剩下的交给它</p>
+            <h2 class="section-title">{{ $t('landing.howTitle') }}</h2>
+            <p class="section-sub">{{ $t('landing.howSub') }}</p>
           </div>
 
           <v-row class="how-grid">
@@ -213,8 +210,8 @@
                 <div class="how-icon">
                   <v-icon size="30" color="white">mdi-message-text-outline</v-icon>
                 </div>
-                <h3>说 / 拍 / 贴</h3>
-                <p>把任务、聊天截图或课件丢给 Agent，一句话、一张图就能完成录入。</p>
+                <h3>{{ $t('landing.h1Title') }}</h3>
+                <p>{{ $t('landing.h1Desc') }}</p>
               </div>
             </v-col>
 
@@ -224,8 +221,8 @@
                 <div class="how-icon">
                   <v-icon size="30" color="white">mdi-calendar-clock-outline</v-icon>
                 </div>
-                <h3>AI 拆解排期</h3>
-                <p>从 DDL 倒推子任务并落到日历，自动避开已经排满的日期。</p>
+                <h3>{{ $t('landing.h2Title') }}</h3>
+                <p>{{ $t('landing.h2Desc') }}</p>
               </div>
             </v-col>
 
@@ -235,8 +232,8 @@
                 <div class="how-icon">
                   <v-icon size="30" color="white">mdi-bell-ring-outline</v-icon>
                 </div>
-                <h3>节奏推进</h3>
-                <p>日历实时同步进度，到期前收到幽默提醒，每一步都心里有数。</p>
+                <h3>{{ $t('landing.h3Title') }}</h3>
+                <p>{{ $t('landing.h3Desc') }}</p>
               </div>
             </v-col>
           </v-row>
@@ -248,8 +245,8 @@
         <div class="section-inner">
           <v-card class="cta-card" rounded="xl" elevation="0">
             <div class="cta-inner">
-              <h2>准备好告别手忙脚乱了吗？</h2>
-              <p>免费开始使用，3 分钟上手，让每一个 Deadline 都从容落地。</p>
+              <h2>{{ $t('landing.ctaTitle') }}</h2>
+              <p>{{ $t('landing.ctaSub') }}</p>
               <v-btn
                 size="x-large"
                 color="white"
@@ -258,7 +255,7 @@
                 to="/register"
               >
                 <v-icon start>mdi-rocket-launch</v-icon>
-                立即注册，免费体验
+                {{ $t('landing.ctaBtn') }}
               </v-btn>
             </div>
           </v-card>
@@ -273,10 +270,10 @@
           <span class="brand-mark">IB</span>
           <span class="brand-copy">
             <strong>IBuddy</strong>
-            <small>长期任务规划师</small>
+            <small>{{ $t('landing.slogan') }}</small>
           </span>
         </div>
-        <p>© 2026 IBuddy · 用 AI 让每一个 DDL 都从容落地</p>
+        <p>{{ $t('landing.footer') }}</p>
       </div>
     </footer>
   </div>

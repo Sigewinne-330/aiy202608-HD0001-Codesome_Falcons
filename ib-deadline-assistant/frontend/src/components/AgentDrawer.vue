@@ -6,8 +6,8 @@
           <v-icon icon="mdi-creation-outline" color="white" />
         </v-avatar>
         <div>
-          <div class="text-subtitle-1 font-weight-bold">IBuddy Agent</div>
-          <div class="agent-status"><span /> 随时协助你的任务规划</div>
+          <div class="text-subtitle-1 font-weight-bold">{{ $t('agent.title') }}</div>
+          <div class="agent-status"><span /> {{ $t('agent.status') }}</div>
         </div>
       </div>
       <div class="d-flex align-center">
@@ -18,13 +18,13 @@
               icon="mdi-message-text-outline"
               variant="text"
               size="small"
-              aria-label="历史对话"
+              :aria-label="$t('agent.history')"
               :disabled="loading"
               v-bind="props"
             />
           </template>
           <v-list dense style="max-height: 320px; overflow-y: auto; min-width: 220px;">
-            <v-list-subheader>历史对话</v-list-subheader>
+            <v-list-subheader>{{ $t('agent.history') }}</v-list-subheader>
             <v-list-item
               v-for="conv in conversations"
               :key="conv.id"
@@ -36,7 +36,7 @@
                 <v-icon size="14" class="mr-2">mdi-message-outline</v-icon>
               </template>
               <v-list-item-title class="text-caption" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                {{ conv.title || '新对话' }}
+                {{ conv.title || $t('agent.newConversation') }}
               </v-list-item-title>
               <template v-slot:append>
                 <v-btn
@@ -48,7 +48,7 @@
               </template>
             </v-list-item>
             <div v-if="conversations.length === 0" class="text-center text-caption text-grey py-3">
-              暂无历史对话
+              {{ $t('agent.noHistory') }}
             </div>
           </v-list>
         </v-menu>
@@ -57,21 +57,21 @@
           icon="mdi-plus"
           variant="text"
           size="small"
-          aria-label="新建对话"
+          :aria-label="$t('agent.newConversation')"
           :disabled="loading"
           @click="newConversation"
         />
-        <v-btn icon="mdi-close" variant="text" size="small" aria-label="关闭 Agent" @click="$emit('close')" />
+        <v-btn icon="mdi-close" variant="text" size="small" :aria-label="$t('agent.close')" @click="$emit('close')" />
       </div>
     </div>
 
     <div ref="messageContainer" class="agent-panel__messages scroll-container">
       <div v-if="messages.length === 0" class="agent-welcome">
         <div class="agent-welcome__icon"><v-icon icon="mdi-message-processing-outline" size="30" /></div>
-        <div class="text-subtitle-1 font-weight-bold mt-4">需要我帮你安排什么？</div>
-        <div class="text-caption text-medium-emphasis text-center mt-1">拆解任务、检查截止日期，或一起规划今天。</div>
+        <div class="text-subtitle-1 font-weight-bold mt-4">{{ $t('agent.welcomeTitle') }}</div>
+        <div class="text-caption text-medium-emphasis text-center mt-1">{{ $t('agent.welcomeSub') }}</div>
         <button v-for="suggestion in suggestions" :key="suggestion" type="button" @click="useSuggestion(suggestion)">
-          {{ suggestion }}
+          {{ $t(suggestion) }}
         </button>
       </div>
 
@@ -95,7 +95,7 @@
     <div class="agent-panel__composer">
       <v-textarea
         v-model="input"
-        placeholder="输入问题或任务…"
+        :placeholder="$t('agent.placeholder')"
         rows="1"
         auto-grow
         max-rows="5"
@@ -113,12 +113,13 @@
         @click="loading ? stopGeneration() : sendMessage()"
       />
     </div>
-    <div class="agent-panel__note">Agent 可能会出错，请核对重要日期与内容。</div>
+    <div class="agent-panel__note">{{ $t('agent.note') }}</div>
   </div>
 </template>
 
 <script setup>
 import { nextTick, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
 import { notifyTasksChanged } from '@/services/taskSync'
 import MarkdownIt from 'markdown-it'
@@ -161,6 +162,7 @@ function renderMarkdown(text) {
 
 defineEmits(['close'])
 
+const { t } = useI18n()
 const { token } = useAuth()
 const messages = ref([])
 const input = ref('')
@@ -171,9 +173,9 @@ const conversations = ref([])
 let controller = null
 
 const suggestions = [
-  '帮我看看本周最紧急的任务',
-  '把我的 IA 拆成今天能做的步骤',
-  '帮我安排一个两小时的专注时段',
+  'agent.suggestion1',
+  'agent.suggestion2',
+  'agent.suggestion3',
 ]
 
 function headers(extra = {}) {
@@ -189,7 +191,7 @@ async function scrollToBottom() {
 }
 
 function useSuggestion(value) {
-  input.value = value
+  input.value = t(value)
   sendMessage()
 }
 
@@ -304,7 +306,7 @@ async function sendMessage() {
       await scrollToBottom()
     }
   } catch (error) {
-    if (error.name !== 'AbortError') messages.value[responseIndex].content = '暂时无法连接 Agent，请稍后再试。'
+    if (error.name !== 'AbortError') messages.value[responseIndex].content = t('agent.connectError')
   } finally {
     // 用新对象替换，强制 Vue 重新渲染 v-html（修复流式结束后 markdown 不重渲染）
     const old = messages.value[responseIndex]

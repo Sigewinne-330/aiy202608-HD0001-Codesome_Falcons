@@ -4,7 +4,7 @@
     <v-navigation-drawer permanent width="260" class="conversation-drawer">
       <div class="pa-3">
         <v-btn color="primary" block prepend-icon="mdi-plus" @click="newConversation" :disabled="loading">
-          新建对话
+          {{ $t('chat.newConversation') }}
         </v-btn>
       </div>
 
@@ -22,7 +22,7 @@
               <v-icon size="16" color="primary" class="mr-2">mdi-message-outline</v-icon>
             </template>
             <v-list-item-title class="text-caption conversation-title">
-              {{ conv.title || '新对话' }}
+              {{ conv.title || $t('chat.newConversationTip') }}
             </v-list-item-title>
             <v-list-item-subtitle class="text-caption text-grey">
               {{ formatConvTime(conv.update_time) }}
@@ -39,7 +39,7 @@
           </v-list-item>
         </v-list>
         <div v-if="conversations.length === 0" class="text-center text-caption text-grey py-6">
-          还没有对话，点击「新建对话」开始
+          {{ $t('chat.noConversation') }}
         </div>
       </div>
     </v-navigation-drawer>
@@ -50,12 +50,12 @@
       <div class="d-flex align-center mb-4">
         <v-icon size="28" color="primary" class="mr-2">mdi-robot-outline</v-icon>
         <div>
-          <div class="text-h6 font-weight-bold">AI 助手</div>
-          <div class="text-caption text-grey">随时帮你规划长期任务、拆解目标、管理进度</div>
+          <div class="text-h6 font-weight-bold">{{ $t('chat.title') }}</div>
+          <div class="text-caption text-grey">{{ $t('chat.subtitle') }}</div>
         </div>
         <v-spacer />
         <v-btn variant="tonal" color="grey" size="small" prepend-icon="mdi-delete-outline" @click="clearHistory" :disabled="!activeConversationId">
-          清空当前对话
+          {{ $t('chat.clear') }}
         </v-btn>
       </div>
 
@@ -63,15 +63,14 @@
       <v-sheet class="flex-grow-1 scroll-container pa-4 mb-4" rounded="lg" elevation="0" border style="min-height: 0; overflow-y: auto;">
         <div v-if="messages.length === 0" class="d-flex flex-column align-center justify-center" style="height: 100%;">
           <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-robot-outline</v-icon>
-          <div class="text-h6 text-grey-darken-1 mb-2">你好！有什么可以帮你的？</div>
+          <div class="text-h6 text-grey-darken-1 mb-2">{{ $t('chat.hello') }}</div>
           <div class="text-body-2 text-grey text-center" style="max-width: 400px;">
-            我是你的长期任务规划助手，可以帮你规划时间线、
-            拆解大型任务、管理截止日期，或者给你执行建议
+            {{ $t('chat.intro') }}
           </div>
           <div class="mt-4 d-flex gap-2 flex-wrap justify-center">
             <v-chip v-for="s in suggestions" :key="s" size="small" color="primary" variant="outlined"
               class="cursor-pointer" @click="sendSuggestion(s)">
-              {{ s }}
+              {{ $t(s) }}
             </v-chip>
           </div>
         </div>
@@ -94,7 +93,7 @@
                   <!-- 流式传输中：空内容 loading -->
                   <div v-if="msg.streaming && !msg.content" class="d-flex align-center">
                     <v-progress-circular indeterminate size="16" width="2" color="primary" />
-                    <span class="text-caption text-grey ml-2">思考中...</span>
+                    <span class="text-caption text-grey ml-2">{{ $t('chat.thinking') }}</span>
                   </div>
                   <!-- 有内容时始终用 Markdown 渲染 -->
                   <div v-else class="text-body-2 message-content"
@@ -105,7 +104,7 @@
                 <div v-if="!msg.streaming && msg.taskData" class="d-flex align-center pa-2" style="border-top: 1px solid #E0E0E0;">
                   <v-icon size="18" color="primary" class="mr-1">mdi-clipboard-list-outline</v-icon>
                   <span class="text-caption mr-2">
-                    检测到 {{ msg.taskData.subtasks?.length || 0 }} 个子任务
+                    {{ $t('chat.subtaskCount', { n: msg.taskData.subtasks?.length || 0 }) }}
                   </span>
                   <v-spacer />
                   <v-btn
@@ -117,10 +116,10 @@
                     :loading="msg.saving"
                     @click="saveTaskFromChat(i)"
                   >
-                    添加到任务列表
+                    {{ $t('chat.addToTasks') }}
                   </v-btn>
                   <v-chip v-else size="x-small" color="success" variant="tonal" prepend-icon="mdi-check">
-                    已添加
+                    {{ $t('chat.added') }}
                   </v-chip>
                 </div>
               </div>
@@ -135,7 +134,7 @@
           <div class="d-flex align-end gap-3">
             <v-textarea
               v-model="input"
-              placeholder="输入你的问题，比如：帮我规划一个三个月的学习计划..."
+              :placeholder="$t('chat.placeholder')"
               rows="3"
               auto-grow
               hide-details
@@ -161,10 +160,13 @@
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import MarkdownIt from 'markdown-it'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { authFetch } from '@/stores/auth'
+
+const { t } = useI18n()
 
 // 开启 html，允许 KaTeX 生成的 HTML 直接嵌入
 const md = new MarkdownIt({ html: true, breaks: true, linkify: true })
@@ -216,10 +218,10 @@ const conversations = ref([])
 const activeConversationId = ref(null)
 
 const suggestions = [
-  '帮我规划一个长期任务的时间线',
-  '我这周有哪些 Deadline？',
-  '如何高效拆解一个大型任务？',
-  '任务执行各阶段应该注意什么？',
+  'chat.suggestion1',
+  'chat.suggestion2',
+  'chat.suggestion3',
+  'chat.suggestion4',
 ]
 
 const API_BASE = '/api'
@@ -229,9 +231,9 @@ function formatConvTime(value) {
   const d = new Date(value)
   const now = new Date()
   if (d.toDateString() === now.toDateString()) {
-    return `今天 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    return `${t('chat.todayPrefix')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   }
-  return `${d.getMonth() + 1}月${d.getDate()}日`
+  return t('common.monthDay', { month: d.getMonth() + 1, day: d.getDate() })
 }
 
 async function loadConversations() {
@@ -338,7 +340,7 @@ async function sendMessage() {
       const errText = await res.text()
       let detail = errText
       try { detail = JSON.parse(errText).detail || errText } catch { /* ignore */ }
-      throw new Error(typeof detail === 'string' ? detail : '请求失败')
+      throw new Error(typeof detail === 'string' ? detail : t('chat.requestFailed'))
     }
 
     const reader = res.body.getReader()
@@ -363,12 +365,12 @@ async function sendMessage() {
           if (typeof parsed === 'string') {
             messages.value[aiIndex].content += parsed
           } else if (parsed && parsed.error) {
-            messages.value[aiIndex].content = '出错了：' + parsed.error
+            messages.value[aiIndex].content = t('chat.errorPrefix') + parsed.error
           }
         } catch {
           // 兼容旧格式：[ERROR] 前缀或裸文本
           if (data.startsWith('[ERROR]')) {
-            messages.value[aiIndex].content = '出错了：' + data.slice(8)
+            messages.value[aiIndex].content = t('chat.errorPrefix') + data.slice(8)
           } else {
             messages.value[aiIndex].content += data
           }
@@ -378,7 +380,7 @@ async function sendMessage() {
     }
   } catch (e) {
     if (e.name !== 'AbortError') {
-      messages.value[aiIndex].content = '网络请求失败：' + (e.message || '请检查后端是否启动')
+      messages.value[aiIndex].content = t('chat.networkError') + (e.message || t('chat.saveFailedBackend'))
     }
   } finally {
     // 用新对象替换，强制 Vue 重新渲染 v-html
@@ -423,10 +425,10 @@ async function saveTaskFromChat(index) {
       msg.taskSaved = true
       msg.savedInfo = result
     } else {
-      alert('保存失败，请重试')
+      alert(t('chat.saveFailed'))
     }
   } catch {
-    alert('保存失败，请检查后端是否启动')
+    alert(t('chat.saveFailedBackend'))
   } finally {
     msg.saving = false
   }
@@ -435,7 +437,7 @@ async function saveTaskFromChat(index) {
 // ---- 其他操作 ----
 
 function sendSuggestion(text) {
-  input.value = text
+  input.value = t(text)
   sendMessage()
 }
 

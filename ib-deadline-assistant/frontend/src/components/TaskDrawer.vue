@@ -2,16 +2,16 @@
   <div class="task-panel">
     <div class="task-panel__header">
       <div>
-        <div class="text-h6 font-weight-bold">任务列表</div>
-        <div class="text-caption text-medium-emphasis">今天要推进的事情</div>
+        <div class="text-h6 font-weight-bold">{{ $t('taskDrawer.title') }}</div>
+        <div class="text-caption text-medium-emphasis">{{ $t('taskDrawer.subtitle') }}</div>
       </div>
-      <v-btn icon="mdi-close" variant="text" size="small" aria-label="关闭任务列表" @click="$emit('close')" />
+      <v-btn icon="mdi-close" variant="text" size="small" :aria-label="$t('taskDrawer.close')" @click="$emit('close')" />
     </div>
 
     <div class="task-panel__summary">
       <div>
         <span class="summary-number">{{ pendingCount }}</span>
-        <span class="summary-label">待处理</span>
+        <span class="summary-label">{{ $t('taskDrawer.pending') }}</span>
       </div>
       <v-progress-circular :model-value="completionRate" color="success" size="52" width="5">
         <span class="text-caption font-weight-bold">{{ completionRate }}%</span>
@@ -22,20 +22,20 @@
       <v-text-field
         v-model="search"
         prepend-inner-icon="mdi-magnify"
-        placeholder="搜索任务"
+        :placeholder="$t('taskDrawer.searchPlaceholder')"
         density="compact"
         variant="solo-filled"
         flat
         hide-details
         clearable
       />
-      <v-btn icon="mdi-plus" color="primary" variant="flat" aria-label="新建任务" @click="openCreateTask" />
+      <v-btn icon="mdi-plus" color="primary" variant="flat" :aria-label="$t('taskDrawer.newTask')" @click="openCreateTask" />
     </div>
 
     <div class="task-panel__list scroll-container">
       <div v-if="loading" class="task-panel__empty">
         <v-progress-circular indeterminate color="primary" size="30" />
-        <span>正在加载任务…</span>
+        <span>{{ $t('taskDrawer.loading') }}</span>
       </div>
 
       <button
@@ -68,7 +68,7 @@
 
       <div v-if="!loading && filteredTasks.length === 0" class="task-panel__empty">
         <v-icon icon="mdi-checkbox-marked-circle-outline" color="success" size="42" />
-        <span>{{ search ? '没有匹配的任务' : '暂时没有待处理任务' }}</span>
+        <span>{{ search ? $t('taskDrawer.noMatch') : $t('taskDrawer.noPending') }}</span>
       </div>
     </div>
 
@@ -80,7 +80,7 @@
         :prepend-icon="isTasksPage ? 'mdi-calendar-arrow-left' : 'mdi-view-list-outline'"
         @click="handleFooterAction"
       >
-        {{ isTasksPage ? '回到日历' : '打开任务管理' }}
+        {{ isTasksPage ? $t('taskDrawer.backCalendar') : $t('taskDrawer.openTasks') }}
       </v-btn>
     </div>
   </div>
@@ -89,6 +89,7 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
 import { onTasksChanged } from '@/services/taskSync'
 
@@ -96,6 +97,7 @@ const emit = defineEmits(['close'])
 
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 const { token } = useAuth()
 const tasks = ref([])
 const loading = ref(true)
@@ -138,7 +140,7 @@ function priorityColor(priority) {
 
 function formatDate(value) {
   const date = new Date(`${value}T00:00:00`)
-  return `${date.getMonth() + 1}月${date.getDate()}日`
+  return t('common.monthDay', { month: date.getMonth() + 1, day: date.getDate() })
 }
 
 function openTask(task) {

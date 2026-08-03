@@ -2,32 +2,32 @@
   <section class="calendar-workspace">
     <header class="calendar-heading">
       <div>
-        <div class="eyebrow">MY SCHEDULE</div>
-        <h1>日历</h1>
-        <p>集中查看任务、Deadline 与计划中的关键节点。</p>
+        <div class="eyebrow">{{ $t('calendar.eyebrow') }}</div>
+        <h1>{{ $t('calendar.title') }}</h1>
+        <p>{{ $t('calendar.subtitle') }}</p>
       </div>
       <div class="calendar-heading__stats">
-        <div><strong>{{ monthItemCount }}</strong><span>本月日程</span></div>
-        <div><strong>{{ urgentCount }}</strong><span>高优先级</span></div>
+        <div><strong>{{ monthItemCount }}</strong><span>{{ $t('calendar.monthItems') }}</span></div>
+        <div><strong>{{ urgentCount }}</strong><span>{{ $t('calendar.highPriority') }}</span></div>
       </div>
     </header>
 
     <v-card class="calendar-card" elevation="0" rounded="xl">
       <div class="calendar-toolbar">
         <div class="month-navigation">
-          <v-btn icon="mdi-chevron-left" variant="text" size="small" aria-label="上个月" @click="changeMonth(-1)" />
-          <div class="month-title">{{ currentYear }} 年 {{ currentMonth }} 月</div>
-          <v-btn icon="mdi-chevron-right" variant="text" size="small" aria-label="下个月" @click="changeMonth(1)" />
+          <v-btn icon="mdi-chevron-left" variant="text" size="small" :aria-label="$t('calendar.prevMonth')" @click="changeMonth(-1)" />
+          <div class="month-title">{{ $t('common.yearMonth', { year: currentYear, month: currentMonth }) }}</div>
+          <v-btn icon="mdi-chevron-right" variant="text" size="small" :aria-label="$t('calendar.nextMonth')" @click="changeMonth(1)" />
         </div>
         <div class="calendar-legend">
-          <span><i class="legend-task" />任务</span>
-          <span><i class="legend-deadline" />Deadline</span>
-          <v-btn variant="outlined" size="small" prepend-icon="mdi-calendar-today-outline" @click="goToday">今天</v-btn>
+          <span><i class="legend-task" />{{ $t('calendar.legendTask') }}</span>
+          <span><i class="legend-deadline" />{{ $t('calendar.legendDeadline') }}</span>
+          <v-btn variant="outlined" size="small" prepend-icon="mdi-calendar-today-outline" @click="goToday">{{ $t('calendar.today') }}</v-btn>
         </div>
       </div>
 
       <div class="weekday-grid">
-        <div v-for="day in weekDays" :key="day">{{ day }}</div>
+        <div v-for="day in weekDayKeys" :key="day">{{ $t(`calendar.${day}`) }}</div>
       </div>
 
       <div class="month-grid" :class="{ 'month-grid--loading': loading }">
@@ -43,7 +43,7 @@
         >
           <div class="calendar-day__top">
             <span class="calendar-day__number">{{ day.number }}</span>
-            <span v-if="day.today" class="today-label">今天</span>
+            <span v-if="day.today" class="today-label">{{ $t('calendar.todayLabel') }}</span>
             <span v-else-if="day.items.length" class="item-count">{{ day.items.length }}</span>
           </div>
 
@@ -66,14 +66,14 @@
               class="more-items"
               @click="openDay(day)"
             >
-              还有 {{ day.items.length - 3 }} 项
+              {{ $t('calendar.moreItems', { n: day.items.length - 3 }) }}
             </button>
           </div>
         </article>
 
         <div v-if="loading" class="calendar-loading">
           <v-progress-circular indeterminate color="primary" size="38" />
-          <span>同步日程中…</span>
+          <span>{{ $t('calendar.syncing') }}</span>
         </div>
       </div>
     </v-card>
@@ -87,11 +87,13 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
 import { onTasksChanged } from '@/services/taskSync'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const { token } = useAuth()
 const now = new Date()
 
@@ -101,7 +103,7 @@ const monthData = ref({})
 const loading = ref(false)
 const dayNotice = ref(false)
 const selectedDayText = ref('')
-const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+const weekDayKeys = ['weekMon', 'weekTue', 'weekWed', 'weekThu', 'weekFri', 'weekSat', 'weekSun']
 
 const monthItemCount = computed(() => Object.entries(monthData.value)
   .filter(([date]) => Number(date.slice(5, 7)) === currentMonth.value)
@@ -189,7 +191,11 @@ function openItem(item) {
 }
 
 function openDay(day) {
-  selectedDayText.value = `${Number(day.date.slice(5, 7))}月${Number(day.date.slice(8, 10))}日共有 ${day.items.length} 项日程，可点击具体项目查看。`
+  selectedDayText.value = t('calendar.dayDetail', {
+    month: Number(day.date.slice(5, 7)),
+    day: Number(day.date.slice(8, 10)),
+    n: day.items.length,
+  })
   dayNotice.value = true
 }
 

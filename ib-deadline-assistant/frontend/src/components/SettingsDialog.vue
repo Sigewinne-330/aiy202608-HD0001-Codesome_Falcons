@@ -4,8 +4,8 @@
       <div class="settings-layout">
         <aside class="settings-nav">
           <div class="settings-nav__top">
-            <v-btn icon="mdi-close" variant="text" size="small" aria-label="关闭设置" @click="dialogOpen = false" />
-            <div class="settings-nav__title">设置</div>
+            <v-btn icon="mdi-close" variant="text" size="small" :aria-label="$t('settings.close')" @click="dialogOpen = false" />
+            <div class="settings-nav__title">{{ $t('settings.title') }}</div>
           </div>
 
           <button
@@ -16,104 +16,112 @@
             @click="activeSection = item.value"
           >
             <v-icon :icon="item.icon" size="20" />
-            <span>{{ item.title }}</span>
+            <span>{{ $t(item.titleKey) }}</span>
           </button>
         </aside>
 
         <main class="settings-content scroll-container">
           <template v-if="activeSection === 'account'">
-            <SettingsHeading title="账号管理" subtitle="管理你的 IBuddy 个人资料与登录状态" />
+            <SettingsHeading :title="$t('settings.account')" :subtitle="$t('settings.accountSub')" />
             <div class="profile-row">
               <v-avatar color="primary" size="62">
                 <span class="text-h6 text-white font-weight-bold">{{ userInitial }}</span>
               </v-avatar>
               <div>
-                <div class="text-subtitle-1 font-weight-bold">{{ user?.username || 'IBuddy 用户' }}</div>
-                <div class="text-body-2 text-medium-emphasis">{{ user?.email || '尚未设置邮箱' }}</div>
+                <div class="text-subtitle-1 font-weight-bold">{{ user?.username || $t('settings.defaultUser') }}</div>
+                <div class="text-body-2 text-medium-emphasis">{{ user?.email || $t('settings.noEmail') }}</div>
               </div>
             </div>
 
             <div class="setting-block">
-              <div class="setting-label">显示名称</div>
+              <div class="setting-label">{{ $t('settings.displayName') }}</div>
               <v-text-field v-model="settings.displayName" variant="outlined" density="comfortable" hide-details />
             </div>
             <div class="setting-block">
-              <div class="setting-label">界面语言</div>
-              <v-select v-model="settings.language" :items="['简体中文', 'English']" variant="outlined" density="comfortable" hide-details />
+              <div class="setting-label">{{ $t('settings.language') }}</div>
+              <v-select
+                v-model="settings.language"
+                :items="languageOptions"
+                item-title="title"
+                item-value="value"
+                variant="outlined"
+                density="comfortable"
+                hide-details
+              />
             </div>
             <v-divider class="my-6" />
             <div class="setting-row">
               <div>
-                <div class="setting-label">退出当前账号</div>
-                <div class="setting-help">退出后需要重新登录才能查看任务。</div>
+                <div class="setting-label">{{ $t('settings.logoutLabel') }}</div>
+                <div class="setting-help">{{ $t('settings.logoutHelp') }}</div>
               </div>
-              <v-btn color="error" variant="tonal" @click="$emit('logout')">退出登录</v-btn>
+              <v-btn color="error" variant="tonal" @click="$emit('logout')">{{ $t('settings.logout') }}</v-btn>
             </div>
           </template>
 
           <template v-else-if="activeSection === 'connections'">
-            <SettingsHeading title="链接" subtitle="连接联系方式，用于接收提醒与账号验证" />
+            <SettingsHeading :title="$t('settings.connections')" :subtitle="$t('settings.connectionsSub')" />
             <div v-for="connection in connections" :key="connection.key" class="connection-card">
               <v-avatar :color="connection.color" variant="tonal" size="42">
                 <v-icon :icon="connection.icon" />
               </v-avatar>
               <div class="connection-copy">
-                <div class="font-weight-bold">{{ connection.title }}</div>
-                <div class="text-caption text-medium-emphasis">{{ connection.description }}</div>
+                <div class="font-weight-bold">{{ $t(connection.titleKey) }}</div>
+                <div class="text-caption text-medium-emphasis">{{ $t(connection.descKey) }}</div>
               </div>
               <v-text-field
                 v-if="connection.key !== 'wechat'"
                 v-model="settings.connections[connection.key]"
-                :placeholder="connection.placeholder"
+                :placeholder="$t(connection.placeholderKey)"
                 variant="outlined"
                 density="compact"
                 hide-details
                 class="connection-field"
               />
-              <v-btn v-else variant="outlined" @click="settings.connections.wechat = settings.connections.wechat ? '' : '已绑定微信'">
-                {{ settings.connections.wechat ? '解除绑定' : '连接微信' }}
+              <v-btn v-else variant="outlined" @click="settings.connections.wechat = settings.connections.wechat ? '' : $t('settings.wechatConnected')">
+                {{ settings.connections.wechat ? $t('settings.unbind') : $t('settings.connectWechat') }}
               </v-btn>
             </div>
             <v-alert type="info" variant="tonal" density="compact" class="mt-5">
-              联系方式会保存在当前设备；正式的验证码与微信授权流程将在服务端接入后启用。
+              {{ $t('settings.connectionsInfo') }}
             </v-alert>
           </template>
 
           <template v-else-if="activeSection === 'time'">
-            <SettingsHeading title="时间偏好" subtitle="让 Agent 在适合你的时段安排任务和提醒" />
+            <SettingsHeading :title="$t('settings.time')" :subtitle="$t('settings.timeSub')" />
             <div class="setting-block">
-              <div class="setting-label">每周工作日</div>
+              <div class="setting-label">{{ $t('settings.workDays') }}</div>
               <v-chip-group v-model="settings.workDays" multiple selected-class="text-primary">
                 <v-chip v-for="day in weekDays" :key="day.value" :value="day.value" filter variant="outlined">{{ day.label }}</v-chip>
               </v-chip-group>
             </div>
             <div class="time-grid">
               <div class="setting-block">
-                <div class="setting-label">偏好专注时段</div>
+                <div class="setting-label">{{ $t('settings.focusPeriod') }}</div>
                 <div class="time-fields">
                   <v-text-field v-model="settings.focusStart" type="time" variant="outlined" density="comfortable" hide-details />
-                  <span>至</span>
+                  <span>{{ $t('settings.to') }}</span>
                   <v-text-field v-model="settings.focusEnd" type="time" variant="outlined" density="comfortable" hide-details />
                 </div>
               </div>
               <div class="setting-block">
-                <div class="setting-label">不工作时段</div>
+                <div class="setting-label">{{ $t('settings.quietPeriod') }}</div>
                 <div class="time-fields">
                   <v-text-field v-model="settings.quietStart" type="time" variant="outlined" density="comfortable" hide-details />
-                  <span>至</span>
+                  <span>{{ $t('settings.to') }}</span>
                   <v-text-field v-model="settings.quietEnd" type="time" variant="outlined" density="comfortable" hide-details />
                 </div>
               </div>
             </div>
             <div class="setting-row mt-2">
               <div>
-                <div class="setting-label">默认提前提醒</div>
-                <div class="setting-help">日程开始前多久发送通知</div>
+                <div class="setting-label">{{ $t('settings.reminderLead') }}</div>
+                <div class="setting-help">{{ $t('settings.reminderLeadHelp') }}</div>
               </div>
               <v-select
                 v-model="settings.reminderLead"
                 :items="reminderOptions"
-                item-title="title"
+                :item-title="reminderTitle"
                 item-value="value"
                 variant="outlined"
                 density="compact"
@@ -123,37 +131,37 @@
             </div>
             <div class="setting-row">
               <div>
-                <div class="setting-label">允许 Agent 自动安排空闲时间</div>
-                <div class="setting-help">Agent 会避开不工作时间，并优先使用偏好时段。</div>
+                <div class="setting-label">{{ $t('settings.autoSchedule') }}</div>
+                <div class="setting-help">{{ $t('settings.autoScheduleHelp') }}</div>
               </div>
               <v-switch v-model="settings.autoSchedule" color="primary" hide-details />
             </div>
           </template>
 
           <template v-else>
-            <SettingsHeading title="订阅" subtitle="查看当前方案与可用能力" />
+            <SettingsHeading :title="$t('settings.subscription')" :subtitle="$t('settings.subscriptionSub')" />
             <div class="subscription-card">
               <div>
-                <div class="subscription-badge">当前方案</div>
-                <div class="text-h5 font-weight-bold mt-3">IBuddy Free</div>
-                <div class="text-body-2 text-medium-emphasis mt-1">基础日历、任务管理与 Agent 对话</div>
+                <div class="subscription-badge">{{ $t('settings.currentPlan') }}</div>
+                <div class="text-h5 font-weight-bold mt-3">{{ $t('settings.planFree') }}</div>
+                <div class="text-body-2 text-medium-emphasis mt-1">{{ $t('settings.planFreeDesc') }}</div>
               </div>
               <v-icon icon="mdi-diamond-stone" size="50" color="primary" />
             </div>
             <div class="feature-list">
               <div v-for="feature in planFeatures" :key="feature">
                 <v-icon icon="mdi-check-circle" color="success" size="20" />
-                <span>{{ feature }}</span>
+                <span>{{ $t(feature) }}</span>
               </div>
             </div>
-            <v-btn color="primary" size="large" block class="mt-6" disabled>升级方案（即将开放）</v-btn>
+            <v-btn color="primary" size="large" block class="mt-6" disabled>{{ $t('settings.upgrade') }}</v-btn>
           </template>
 
           <div class="settings-actions">
-            <span v-if="saved" class="saved-hint"><v-icon icon="mdi-check-circle" size="17" /> 已保存</span>
+            <span v-if="saved" class="saved-hint"><v-icon icon="mdi-check-circle" size="17" /> {{ $t('settings.savedHint') }}</span>
             <v-spacer />
-            <v-btn variant="text" @click="dialogOpen = false">取消</v-btn>
-            <v-btn color="primary" @click="saveSettings">保存设置</v-btn>
+            <v-btn variant="text" @click="dialogOpen = false">{{ $t('common.cancel') }}</v-btn>
+            <v-btn color="primary" @click="saveSettings">{{ $t('common.save') }}</v-btn>
           </div>
         </main>
       </div>
@@ -164,10 +172,13 @@
 <script setup>
 import { computed, defineComponent, h, reactive, ref, watch } from 'vue'
 import { useAuth } from '@/stores/auth'
+import { useI18n } from 'vue-i18n'
+import { setLocale, SUPPORTED_LOCALES, LOCALE_NAMES } from '@/i18n'
 
 const props = defineProps({ modelValue: Boolean })
 const emit = defineEmits(['update:modelValue', 'logout'])
 const { user } = useAuth()
+const { locale, t } = useI18n()
 
 const SettingsHeading = defineComponent({
   props: { title: String, subtitle: String },
@@ -189,7 +200,7 @@ const saved = ref(false)
 const storageKey = 'ibuddy_preferences'
 const defaultSettings = {
   displayName: '',
-  language: '简体中文',
+  language: locale.value,
   connections: { phone: '', email: '', wechat: '' },
   workDays: [1, 2, 3, 4, 5],
   focusStart: '16:00',
@@ -200,12 +211,23 @@ const defaultSettings = {
   autoSchedule: true,
 }
 
+const languageOptions = SUPPORTED_LOCALES.map((code) => ({ title: LOCALE_NAMES[code], value: code }))
+
+// 兼容旧格式：'简体中文' / 'English' → locale code
+const legacyLangMap = { '简体中文': 'zh-CN', 'English': 'en' }
+
+function normalizeLanguage(value) {
+  if (legacyLangMap[value]) return legacyLangMap[value]
+  return SUPPORTED_LOCALES.includes(value) ? value : locale.value
+}
+
 function loadSettings() {
   try {
     const stored = JSON.parse(localStorage.getItem(storageKey) || '{}')
     return {
       ...defaultSettings,
       ...stored,
+      language: normalizeLanguage(stored.language),
       connections: { ...defaultSettings.connections, ...(stored.connections || {}) },
     }
   } catch {
@@ -215,17 +237,22 @@ function loadSettings() {
 
 const settings = reactive(loadSettings())
 
+// 语言切换即时生效并持久化
+watch(() => settings.language, (lang) => {
+  if (lang) setLocale(lang)
+})
+
 const sections = [
-  { value: 'account', title: '账号管理', icon: 'mdi-account-circle-outline' },
-  { value: 'connections', title: '链接', icon: 'mdi-link-variant' },
-  { value: 'time', title: '时间偏好', icon: 'mdi-clock-outline' },
-  { value: 'subscription', title: '订阅', icon: 'mdi-credit-card-outline' },
+  { value: 'account', titleKey: 'settings.account', icon: 'mdi-account-circle-outline' },
+  { value: 'connections', titleKey: 'settings.connections', icon: 'mdi-link-variant' },
+  { value: 'time', titleKey: 'settings.time', icon: 'mdi-clock-outline' },
+  { value: 'subscription', titleKey: 'settings.subscription', icon: 'mdi-credit-card-outline' },
 ]
 
 const connections = [
-  { key: 'phone', title: '手机号', description: '用于安全验证和短信提醒', placeholder: '输入手机号', icon: 'mdi-cellphone', color: 'primary' },
-  { key: 'email', title: '邮箱', description: '用于登录、通知和周报', placeholder: '输入邮箱地址', icon: 'mdi-email-outline', color: 'warning' },
-  { key: 'wechat', title: '微信', description: '接收日程提醒并快速打开任务', icon: 'mdi-wechat', color: 'success' },
+  { key: 'phone', titleKey: 'settings.phone', descKey: 'settings.phoneDesc', placeholderKey: 'settings.phonePlaceholder', icon: 'mdi-cellphone', color: 'primary' },
+  { key: 'email', titleKey: 'settings.email', descKey: 'settings.emailDesc', placeholderKey: 'settings.emailPlaceholder', icon: 'mdi-email-outline', color: 'warning' },
+  { key: 'wechat', titleKey: 'settings.wechat', descKey: 'settings.wechatDesc', icon: 'mdi-wechat', color: 'success' },
 ]
 
 const weekDays = [
@@ -234,13 +261,17 @@ const weekDays = [
 ]
 
 const reminderOptions = [
-  { title: '提前 10 分钟', value: 10 },
-  { title: '提前 30 分钟', value: 30 },
-  { title: '提前 1 小时', value: 60 },
-  { title: '提前 1 天', value: 1440 },
+  { titleKey: 'settings.remind10m', value: 10 },
+  { titleKey: 'settings.remind30m', value: 30 },
+  { titleKey: 'settings.remind1h', value: 60 },
+  { titleKey: 'settings.remind1d', value: 1440 },
 ]
 
-const planFeatures = ['月度日历与任务抽屉', 'Deadline 风险识别', '分类进度管理', '基础 Agent 对话']
+function reminderTitle(item) {
+  return item.titleKey ? t(item.titleKey) : item.title
+}
+
+const planFeatures = ['settings.planFeature1', 'settings.planFeature2', 'settings.planFeature3', 'settings.planFeature4']
 const userInitial = computed(() => (user.value?.username || 'I').charAt(0).toUpperCase())
 
 function saveSettings() {

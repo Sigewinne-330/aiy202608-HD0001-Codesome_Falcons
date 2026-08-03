@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuth } from '@/stores/auth'
+import i18n from '@/i18n'
 
 const routes = [
   // ---- 项目介绍页（不需要登录，展示于注册/登录之前） ----
@@ -7,75 +8,75 @@ const routes = [
     path: '/',
     name: 'Landing',
     component: () => import('../views/LandingView.vue'),
-    meta: { title: 'IBuddy · 长期任务规划师', guest: true },
+    meta: { titleKey: 'nav.landing', guest: true },
   },
   // ---- 认证页面（不需要登录） ----
   {
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue'),
-    meta: { title: '登录', guest: true },
+    meta: { titleKey: 'nav.login', guest: true },
   },
   {
     path: '/register',
     name: 'Register',
     component: () => import('../views/RegisterView.vue'),
-    meta: { title: '注册', guest: true },
+    meta: { titleKey: 'nav.register', guest: true },
   },
   // ---- 需要登录的页面 ----
   {
     path: '/plan',
     name: 'Plan',
     component: () => import('../views/TaskPlanView.vue'),
-    meta: { title: '任务规划', icon: 'mdi-calendar-edit', requiresAuth: true },
+    meta: { titleKey: 'nav.plan', icon: 'mdi-calendar-edit', requiresAuth: true },
   },
   {
     path: '/chat',
     name: 'Chat',
     component: () => import('../views/ChatView.vue'),
-    meta: { title: 'AI 助手', icon: 'mdi-robot', requiresAuth: true },
+    meta: { titleKey: 'nav.chat', icon: 'mdi-robot', requiresAuth: true },
   },
   {
     path: '/tasks',
     name: 'Tasks',
     component: () => import('../views/TasksView.vue'),
-    meta: { title: '任务管理', icon: 'mdi-clipboard-list', requiresAuth: true },
+    meta: { titleKey: 'nav.tasks', icon: 'mdi-clipboard-list', requiresAuth: true },
   },
   {
     path: '/deadlines',
     name: 'Deadlines',
     component: () => import('../views/DeadlinesView.vue'),
-    meta: { title: 'Deadline', icon: 'mdi-calendar-clock', requiresAuth: true },
+    meta: { titleKey: 'nav.deadlines', icon: 'mdi-calendar-clock', requiresAuth: true },
   },
   {
     path: '/calendar',
     name: 'Calendar',
     component: () => import('../views/CalendarView.vue'),
-    meta: { title: '日历工作台', icon: 'mdi-calendar-month', requiresAuth: true },
+    meta: { titleKey: 'nav.calendar', icon: 'mdi-calendar-month', requiresAuth: true },
   },
   {
     path: '/urgent',
     name: 'Urgent',
     component: () => import('../views/UrgentView.vue'),
-    meta: { title: '紧急待处理项', icon: 'mdi-alert-outline', requiresAuth: true },
+    meta: { titleKey: 'nav.urgent', icon: 'mdi-alert-outline', requiresAuth: true },
   },
   {
     path: '/progress',
     name: 'Progress',
     component: () => import('../views/ProgressView.vue'),
-    meta: { title: '进度管理', icon: 'mdi-chart-timeline-variant', requiresAuth: true },
+    meta: { titleKey: 'nav.progress', icon: 'mdi-chart-timeline-variant', requiresAuth: true },
   },
   {
     path: '/progress/:category',
     name: 'ProgressCategory',
     component: () => import('../views/ProgressView.vue'),
-    meta: { title: '分类进度', icon: 'mdi-chart-timeline-variant', requiresAuth: true },
+    meta: { titleKey: 'nav.progressCategory', icon: 'mdi-chart-timeline-variant', requiresAuth: true },
   },
   {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('../views/DashboardView.vue'),
-    meta: { title: '仪表盘', icon: 'mdi-view-dashboard', requiresAuth: true },
+    meta: { titleKey: 'nav.dashboard', icon: 'mdi-view-dashboard', requiresAuth: true },
   },
 ]
 
@@ -99,6 +100,12 @@ router.beforeEach((to, from, next) => {
   }
 
   next()
+})
+
+// 页面标题跟随语言
+router.afterEach((to) => {
+  const t = i18n.global.t
+  document.title = to.meta.titleKey ? t(to.meta.titleKey) : 'IBuddy'
 })
 
 export default router
