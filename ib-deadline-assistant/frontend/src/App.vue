@@ -101,17 +101,17 @@
       <div class="quick-actions" aria-label="快捷入口">
         <v-tooltip text="紧急待处理项" location="left">
           <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-alert-outline" color="error" elevation="8" @click="router.push('/urgent')" />
+            <v-btn v-bind="props" icon="mdi-alert-outline" color="error" elevation="8" aria-label="打开紧急待处理项" @click="router.push('/urgent')" />
           </template>
         </v-tooltip>
         <v-tooltip text="进度管理" location="left">
           <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-chart-timeline-variant" color="primary" elevation="8" @click="router.push('/progress')" />
+            <v-btn v-bind="props" icon="mdi-chart-timeline-variant" color="primary" elevation="8" aria-label="打开进度管理" @click="router.push('/progress')" />
           </template>
         </v-tooltip>
         <v-tooltip text="设置" location="left">
           <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-cog-outline" color="grey-darken-3" elevation="8" @click="settingsOpen = true" />
+            <v-btn v-bind="props" icon="mdi-cog-outline" color="grey-darken-3" elevation="8" aria-label="打开设置" @click="settingsOpen = true" />
           </template>
         </v-tooltip>
       </div>
