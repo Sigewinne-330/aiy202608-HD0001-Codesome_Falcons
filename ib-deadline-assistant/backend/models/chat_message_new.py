@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, TIMESTAMP, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, TIMESTAMP, ForeignKey, Index
 from sqlalchemy.dialects.mysql import JSON
 from sqlalchemy.sql import func
 from database import Base
@@ -23,3 +23,7 @@ class ChatMessage(Base):
         if isinstance(self.extra, dict) and self.extra.get("images"):
             return self.extra["images"]
         return None
+
+    __table_args__ = (
+        Index("idx_conv_updatetime", "conversation_id", "update_time"),
+    )
