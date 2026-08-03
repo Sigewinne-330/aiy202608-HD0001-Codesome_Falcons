@@ -132,6 +132,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useAuth } from '@/stores/auth'
+
+const { token } = useAuth()
 
 const tasks = ref([])
 const filter = ref('all')
@@ -159,9 +162,13 @@ function priorityLabel(p) {
   return { low: '低', medium: '中', high: '高', urgent: '紧急' }[p] || p
 }
 
+function authHeaders() {
+  return token.value ? { Authorization: `Bearer ${token.value}` } : {}
+}
+
 async function loadTasks() {
   try {
-    const res = await fetch(`${API_BASE}/tasks`)
+    const res = await fetch(`${API_BASE}/tasks`, { headers: authHeaders() })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     tasks.value = await res.json()
   } catch { /* ignore */ }
@@ -176,7 +183,7 @@ async function createTask() {
   try {
     const res = await fetch(`${API_BASE}/tasks`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(form.value),
     })
     if (res.ok) {
@@ -191,7 +198,7 @@ async function toggleDone(task) {
   try {
     await fetch(`${API_BASE}/tasks/${task.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ status: newStatus, progress: newStatus === 'done' ? 100 : task.progress }),
     })
     await loadTasks()
