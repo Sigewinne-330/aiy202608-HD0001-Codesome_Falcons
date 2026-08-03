@@ -5,50 +5,50 @@
         <div class="tasks-header__main">
           <div class="title-mark"><v-icon icon="mdi-clipboard-text-clock-outline" size="27" /></div>
           <div>
-            <div class="eyebrow">TASK MANAGEMENT</div>
-            <h1>任务管理</h1>
-            <p>把简单事项放进日历，将复杂目标拆成清晰、可执行的流程节点。</p>
+            <div class="eyebrow">{{ $t('tasks.eyebrow') }}</div>
+            <h1>{{ $t('tasks.title') }}</h1>
+            <p>{{ $t('tasks.subtitle') }}</p>
           </div>
         </div>
 
         <div class="tasks-header__side">
-          <div class="task-overview" aria-label="任务数量概览">
-            <div><strong>{{ tasks.length }}</strong><span>全部</span></div>
+          <div class="task-overview" :aria-label="$t('tasks.title')">
+            <div><strong>{{ tasks.length }}</strong><span>{{ $t('tasks.all') }}</span></div>
             <i></i>
-            <div><strong>{{ todoCount }}</strong><span>待办</span></div>
+            <div><strong>{{ todoCount }}</strong><span>{{ $t('tasks.todo') }}</span></div>
             <i></i>
-            <div><strong>{{ processCount }}</strong><span>流程</span></div>
+            <div><strong>{{ processCount }}</strong><span>{{ $t('tasks.process') }}</span></div>
           </div>
           <div class="header-actions">
-            <v-btn class="back-calendar-btn" prepend-icon="mdi-calendar-arrow-left" size="large" variant="tonal" @click="router.push('/calendar')">返回日历</v-btn>
-            <v-btn class="create-task-btn" color="primary" prepend-icon="mdi-plus" size="large" @click="openCreate">新建任务</v-btn>
+            <v-btn class="back-calendar-btn" prepend-icon="mdi-calendar-arrow-left" size="large" variant="tonal" @click="router.push('/calendar')">{{ $t('tasks.backCalendar') }}</v-btn>
+            <v-btn class="create-task-btn" color="primary" prepend-icon="mdi-plus" size="large" @click="openCreate">{{ $t('tasks.newTask') }}</v-btn>
           </div>
         </div>
       </header>
 
       <div class="task-filters">
         <div class="filter-block">
-          <span class="filter-label">任务类型</span>
+          <span class="filter-label">{{ $t('tasks.typeLabel') }}</span>
           <v-chip-group v-model="typeFilter" mandatory selected-class="filter-chip--selected">
-            <v-chip value="all" variant="text">全部类型</v-chip>
-            <v-chip value="todo" variant="text" prepend-icon="mdi-checkbox-marked-circle-outline">待办事项</v-chip>
-            <v-chip value="process" variant="text" prepend-icon="mdi-timeline-text-outline">流程任务</v-chip>
+            <v-chip value="all" variant="text">{{ $t('tasks.allTypes') }}</v-chip>
+            <v-chip value="todo" variant="text" prepend-icon="mdi-checkbox-marked-circle-outline">{{ $t('tasks.todoType') }}</v-chip>
+            <v-chip value="process" variant="text" prepend-icon="mdi-timeline-text-outline">{{ $t('tasks.processType') }}</v-chip>
           </v-chip-group>
         </div>
         <div class="filter-block filter-block--status">
-          <span class="filter-label">完成状态</span>
+          <span class="filter-label">{{ $t('tasks.statusLabel') }}</span>
           <v-chip-group v-model="statusFilter" mandatory selected-class="filter-chip--selected">
-            <v-chip value="all" size="small" variant="text">全部状态</v-chip>
-            <v-chip value="todo" size="small" variant="text">待办</v-chip>
-            <v-chip value="in_progress" size="small" variant="text">进行中</v-chip>
-            <v-chip value="done" size="small" variant="text">已完成</v-chip>
+            <v-chip value="all" size="small" variant="text">{{ $t('tasks.allStatus') }}</v-chip>
+            <v-chip value="todo" size="small" variant="text">{{ $t('common.pending') }}</v-chip>
+            <v-chip value="in_progress" size="small" variant="text">{{ $t('common.inProgress') }}</v-chip>
+            <v-chip value="done" size="small" variant="text">{{ $t('common.done') }}</v-chip>
           </v-chip-group>
         </div>
       </div>
 
     <div v-if="loading" class="task-empty">
       <v-progress-circular indeterminate color="primary" />
-      <span>正在加载任务…</span>
+      <span>{{ $t('common.loadingTasks') }}</span>
     </div>
 
     <div v-else-if="filteredTasks.length" class="task-grid">
@@ -77,7 +77,7 @@
                 :color="task.task_type === 'process' ? 'deep-purple' : 'primary'"
                 variant="tonal"
               >
-                {{ task.task_type === 'process' ? '流程任务' : '待办事项' }}
+                {{ task.task_type === 'process' ? $t('tasks.processType') : $t('tasks.todoType') }}
               </v-chip>
             </div>
             <p v-if="task.description">{{ task.description }}</p>
@@ -91,7 +91,7 @@
               size="small"
               @click="openSubtask(task)"
             >
-              添加子任务
+              {{ $t('tasks.addSubtask') }}
             </v-btn>
             <v-btn
               class="delete-task-btn"
@@ -99,7 +99,7 @@
               color="error"
               variant="tonal"
               size="small"
-              aria-label="删除任务"
+              :aria-label="$t('tasks.deleteTask')"
               @click="requestDelete(task)"
             />
           </div>
@@ -109,11 +109,11 @@
           <span v-if="task.subject"><v-icon icon="mdi-tag-outline" size="14" />{{ task.subject }}</span>
           <span><v-icon icon="mdi-flag-outline" size="14" />{{ priorityLabel(task.priority) }}</span>
           <span v-if="task.deadline"><v-icon icon="mdi-calendar-outline" size="14" />{{ formatDate(task.deadline) }}</span>
-          <span v-if="task.estimated_hours"><v-icon icon="mdi-clock-outline" size="14" />{{ task.estimated_hours }} 小时</span>
+          <span v-if="task.estimated_hours"><v-icon icon="mdi-clock-outline" size="14" />{{ $t('tasks.hoursUnit', { n: task.estimated_hours }) }}</span>
         </div>
 
         <div class="progress-block">
-          <div><span>{{ task.task_type === 'process' ? '流程进度' : '任务进度' }}</span><strong>{{ displayProgress(task) }}%</strong></div>
+          <div><span>{{ task.task_type === 'process' ? $t('tasks.processProgress') : $t('tasks.taskProgress') }}</span><strong>{{ displayProgress(task) }}%</strong></div>
           <v-progress-linear
             :model-value="displayProgress(task)"
             :color="task.status === 'overdue' ? 'error' : (task.task_type === 'process' ? 'deep-purple' : 'primary')"
@@ -124,8 +124,8 @@
 
         <div v-if="task.task_type === 'process'" class="subtask-section">
           <div class="subtask-heading">
-            <span>流程节点</span>
-            <small>{{ task.subtasks?.length || 0 }} 项</small>
+            <span>{{ $t('tasks.processNode') }}</span>
+            <small>{{ $t('common.items', { n: task.subtasks?.length || 0 }) }}</small>
           </div>
 
           <div v-if="task.subtasks?.length" class="subtask-list">
@@ -140,9 +140,9 @@
               <div class="subtask-copy">
                 <div>
                   <strong>{{ subtask.title }}</strong>
-                  <v-chip v-if="subtask.is_final" size="x-small" color="deep-purple" variant="tonal">最终节点</v-chip>
+                  <v-chip v-if="subtask.is_final" size="x-small" color="deep-purple" variant="tonal">{{ $t('tasks.finalNode') }}</v-chip>
                 </div>
-                <small>{{ subtask.deadline ? formatDate(subtask.deadline) : '未设置日期' }}</small>
+                <small>{{ subtask.deadline ? formatDate(subtask.deadline) : $t('tasks.noDate') }}</small>
               </div>
               <v-chip size="x-small" :color="priorityColor(subtask.priority)" variant="tonal">
                 {{ priorityLabel(subtask.priority) }}
@@ -152,7 +152,7 @@
 
           <button v-else type="button" class="add-first-subtask" @click="openSubtask(task)">
             <v-icon icon="mdi-plus-circle-outline" />
-            添加第一个流程节点
+            {{ $t('tasks.addFirstNode') }}
           </button>
         </div>
 
@@ -161,14 +161,14 @@
 
     <div v-else class="task-empty">
       <v-icon icon="mdi-clipboard-text-outline" size="58" color="grey-lighten-1" />
-      <strong>还没有符合条件的任务</strong>
-      <span>创建待办事项或流程任务，开始安排你的工作。</span>
-      <v-btn color="primary" variant="tonal" @click="openCreate">创建任务</v-btn>
+      <strong>{{ $t('tasks.emptyTitle') }}</strong>
+      <span>{{ $t('tasks.emptyDesc') }}</span>
+      <v-btn color="primary" variant="tonal" @click="openCreate">{{ $t('tasks.createTask') }}</v-btn>
     </div>
     </div>
 
     <v-dialog v-model="createDialog" max-width="580">
-      <v-card rounded="xl" title="新建任务">
+      <v-card rounded="xl" :title="$t('tasks.dialogTitle')">
         <v-card-text>
           <div class="type-selector">
             <button
@@ -177,7 +177,7 @@
               @click="form.task_type = 'todo'"
             >
               <v-icon icon="mdi-checkbox-marked-circle-outline" />
-              <span><strong>待办事项</strong></span>
+              <span><strong>{{ $t('tasks.todoType') }}</strong></span>
             </button>
             <button
               type="button"
@@ -185,84 +185,84 @@
               @click="form.task_type = 'process'"
             >
               <v-icon icon="mdi-timeline-text-outline" />
-              <span><strong>流程任务</strong></span>
+              <span><strong>{{ $t('tasks.processType') }}</strong></span>
             </button>
           </div>
 
-          <v-text-field v-model="form.title" label="任务名称" variant="outlined" density="comfortable" class="mb-2" />
-          <v-textarea v-model="form.description" label="描述（可选）" variant="outlined" density="comfortable" rows="2" class="mb-2" />
-          <v-text-field v-model="form.subject" label="分类/标签（可选）" variant="outlined" density="comfortable" class="mb-2" />
+          <v-text-field v-model="form.title" :label="$t('tasks.taskName')" variant="outlined" density="comfortable" class="mb-2" />
+          <v-textarea v-model="form.description" :label="$t('tasks.description')" variant="outlined" density="comfortable" rows="2" class="mb-2" />
+          <v-text-field v-model="form.subject" :label="$t('tasks.subject')" variant="outlined" density="comfortable" class="mb-2" />
           <v-row dense>
             <v-col cols="12" sm="6">
               <v-select
                 v-model="form.priority"
-                label="优先级"
+                :label="$t('tasks.priority')"
                 :items="priorityOptions"
-                item-title="title"
+                :item-title="priorityTitle"
                 item-value="value"
                 variant="outlined"
                 density="comfortable"
               />
             </v-col>
             <v-col cols="12" sm="6">
-              <v-text-field v-model="form.deadline" label="截止日期" type="date" variant="outlined" density="comfortable" />
+              <v-text-field v-model="form.deadline" :label="$t('tasks.deadline')" type="date" variant="outlined" density="comfortable" />
             </v-col>
           </v-row>
-          <v-text-field v-model="form.estimated_hours" label="预计耗时（小时）" type="number" min="0" variant="outlined" density="comfortable" />
+          <v-text-field v-model="form.estimated_hours" :label="$t('tasks.estimatedHours')" type="number" min="0" variant="outlined" density="comfortable" />
         </v-card-text>
         <v-card-actions class="px-6 pb-5">
           <v-spacer />
-          <v-btn variant="text" @click="createDialog = false">取消</v-btn>
-          <v-btn color="primary" :loading="saving" :disabled="!canCreate" @click="createTask">创建</v-btn>
+          <v-btn variant="text" @click="createDialog = false">{{ $t('common.cancel') }}</v-btn>
+          <v-btn color="primary" :loading="saving" :disabled="!canCreate" @click="createTask">{{ $t('common.create') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <v-dialog v-model="subtaskDialog" max-width="520">
       <v-card rounded="xl">
-        <v-card-title class="pt-5 px-6">添加流程节点</v-card-title>
+        <v-card-title class="pt-5 px-6">{{ $t('tasks.subtaskDialogTitle') }}</v-card-title>
         <v-card-subtitle class="px-6">{{ selectedParent?.title }}</v-card-subtitle>
         <v-card-text class="pt-5">
-          <v-text-field v-model="subtaskForm.title" label="子任务名称" variant="outlined" density="comfortable" class="mb-2" />
-          <v-textarea v-model="subtaskForm.description" label="描述（可选）" rows="2" variant="outlined" density="comfortable" class="mb-2" />
+          <v-text-field v-model="subtaskForm.title" :label="$t('tasks.subtaskName')" variant="outlined" density="comfortable" class="mb-2" />
+          <v-textarea v-model="subtaskForm.description" :label="$t('tasks.description')" rows="2" variant="outlined" density="comfortable" class="mb-2" />
           <v-row dense>
             <v-col cols="12" sm="6">
               <v-select
                 v-model="subtaskForm.priority"
-                label="优先级"
+                :label="$t('tasks.priority')"
                 :items="priorityOptions"
-                item-title="title"
+                :item-title="priorityTitle"
                 item-value="value"
                 variant="outlined"
                 density="comfortable"
               />
             </v-col>
             <v-col cols="12" sm="6">
-              <v-text-field v-model="subtaskForm.deadline" label="节点日期" type="date" variant="outlined" density="comfortable" />
+              <v-text-field v-model="subtaskForm.deadline" :label="$t('tasks.nodeDate')" type="date" variant="outlined" density="comfortable" />
             </v-col>
           </v-row>
         </v-card-text>
         <v-card-actions class="px-6 pb-5">
           <v-spacer />
-          <v-btn variant="text" @click="subtaskDialog = false">取消</v-btn>
-          <v-btn color="deep-purple" :loading="saving" :disabled="!subtaskForm.title" @click="createSubtask">添加节点</v-btn>
+          <v-btn variant="text" @click="subtaskDialog = false">{{ $t('common.cancel') }}</v-btn>
+          <v-btn color="deep-purple" :loading="saving" :disabled="!subtaskForm.title" @click="createSubtask">{{ $t('tasks.addNode') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <v-dialog v-model="deleteDialog" max-width="440">
       <v-card rounded="xl">
-        <v-card-title class="pt-5 px-6">确认删除任务</v-card-title>
+        <v-card-title class="pt-5 px-6">{{ $t('tasks.deleteDialogTitle') }}</v-card-title>
         <v-card-text class="px-6 pt-3">
-          <p>确定要删除“{{ selectedTask?.title }}”吗？此操作无法恢复。</p>
+          <p>{{ $t('tasks.deleteConfirm', { title: selectedTask?.title }) }}</p>
           <v-alert v-if="selectedTask?.task_type === 'process'" type="warning" variant="tonal" density="compact" class="mt-4">
-            删除流程任务会一并删除其全部流程节点。
+            {{ $t('tasks.deleteProcessWarn') }}
           </v-alert>
         </v-card-text>
         <v-card-actions class="px-6 pb-5">
           <v-spacer />
-          <v-btn variant="text" :disabled="deleting" @click="deleteDialog = false">取消</v-btn>
-          <v-btn color="error" variant="flat" :loading="deleting" @click="confirmDelete">确认删除</v-btn>
+          <v-btn variant="text" :disabled="deleting" @click="deleteDialog = false">{{ $t('common.cancel') }}</v-btn>
+          <v-btn color="error" variant="flat" :loading="deleting" @click="confirmDelete">{{ $t('tasks.confirmDelete') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -274,12 +274,14 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { authFetch } from '@/stores/auth'
 import { notifyTasksChanged, onTasksChanged } from '@/services/taskSync'
 
 const API_BASE = '/api'
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 const tasks = ref([])
 const loading = ref(true)
 const saving = ref(false)
@@ -295,10 +297,10 @@ const errorVisible = ref(false)
 const errorMessage = ref('')
 
 const priorityOptions = [
-  { title: '低', value: 'low' },
-  { title: '中', value: 'medium' },
-  { title: '高', value: 'high' },
-  { title: '紧急', value: 'urgent' },
+  { titleKey: 'common.low', value: 'low' },
+  { titleKey: 'common.medium', value: 'medium' },
+  { titleKey: 'common.high', value: 'high' },
+  { titleKey: 'common.urgent', value: 'urgent' },
 ]
 
 const emptyForm = () => ({
@@ -322,13 +324,18 @@ function priorityColor(priority) {
   return { low: 'grey', medium: 'primary', high: 'warning', urgent: 'error' }[priority] || 'grey'
 }
 
+function priorityTitle(item) {
+  return item.titleKey ? t(item.titleKey) : item.title
+}
+
 function priorityLabel(priority) {
-  return { low: '低', medium: '中', high: '高', urgent: '紧急' }[priority] || priority
+  const keyMap = { low: 'low', medium: 'medium', high: 'high', urgent: 'urgent' }
+  return t(`common.${keyMap[priority] || ''}`) || priority
 }
 
 function formatDate(value) {
   const date = new Date(`${value}T00:00:00`)
-  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
+  return t('common.yearMonthDay', { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate() })
 }
 
 function displayProgress(task) {
@@ -349,7 +356,7 @@ async function loadTasks() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     tasks.value = await response.json()
   } catch (error) {
-    showError(`加载任务失败：${error.message}`)
+    showError(t('tasks.loadFail', { msg: error.message }))
   } finally {
     loading.value = false
   }
@@ -384,7 +391,7 @@ async function confirmDelete() {
     selectedTask.value = null
     notifyTasksChanged()
   } catch (error) {
-    showError(`删除任务失败：${error.message}`)
+    showError(t('tasks.deleteFail', { msg: error.message }))
   } finally {
     deleting.value = false
   }
@@ -410,7 +417,7 @@ async function createTask() {
     createDialog.value = false
     notifyTasksChanged()
   } catch (error) {
-    showError(`创建失败：${error.message}`)
+    showError(t('tasks.createFail', { msg: error.message }))
   } finally {
     saving.value = false
   }
@@ -430,7 +437,7 @@ async function createSubtask() {
     subtaskDialog.value = false
     notifyTasksChanged()
   } catch (error) {
-    showError(`添加子任务失败：${error.message}`)
+    showError(t('tasks.addSubtaskFail', { msg: error.message }))
   } finally {
     saving.value = false
   }
@@ -447,7 +454,7 @@ async function toggleDone(task) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     notifyTasksChanged()
   } catch (error) {
-    showError(`更新任务失败：${error.message}`)
+    showError(t('tasks.updateFail', { msg: error.message }))
   }
 }
 

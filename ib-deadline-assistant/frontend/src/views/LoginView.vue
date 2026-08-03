@@ -8,11 +8,11 @@
           class="text-body-2 text-decoration-none text-grey d-inline-flex align-center mb-3"
         >
           <v-icon size="16" class="mr-1">mdi-arrow-left</v-icon>
-          返回项目介绍
+          {{ $t('auth.backToLanding') }}
         </router-link>
         <v-icon size="48" color="primary" class="mb-2">mdi-calendar-edit</v-icon>
-        <h2 class="text-h5 font-weight-bold">IBuddy</h2>
-        <p class="text-body-2 text-grey mt-1">欢迎回来，继续管理你的任务</p>
+        <h2 class="text-h5 font-weight-bold">{{ $t('auth.loginTitle') }}</h2>
+        <p class="text-body-2 text-grey mt-1">{{ $t('auth.loginSubtitle') }}</p>
       </div>
 
       <!-- 错误提示 -->
@@ -31,7 +31,7 @@
       <v-form ref="formRef" v-model="formValid" @submit.prevent="handleLogin">
         <v-text-field
           v-model="email"
-          label="用户名或邮箱"
+          :label="$t('auth.usernameOrEmail')"
           prepend-inner-icon="mdi-account-outline"
           :rules="accountRules"
           variant="outlined"
@@ -43,7 +43,7 @@
 
         <v-text-field
           v-model="password"
-          label="密码"
+          :label="$t('auth.password')"
           :type="showPwd ? 'text' : 'password'"
           prepend-inner-icon="mdi-lock-outline"
           :append-inner-icon="showPwd ? 'mdi-eye-off' : 'mdi-eye'"
@@ -64,15 +64,15 @@
           rounded="lg"
           class="mb-4"
         >
-          登 录
+          {{ $t('auth.loginBtn') }}
         </v-btn>
       </v-form>
 
       <!-- 底部链接 -->
       <div class="text-center">
-        <span class="text-body-2 text-grey">还没有账号？</span>
+        <span class="text-body-2 text-grey">{{ $t('auth.noAccount') }}</span>
         <router-link to="/register" class="text-body-2 text-decoration-none font-weight-bold ml-1">
-          立即注册
+          {{ $t('auth.registerNow') }}
         </router-link>
       </div>
     </v-card>
@@ -82,9 +82,11 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
 
 const router = useRouter()
+const { t } = useI18n()
 const { login } = useAuth()
 
 const formValid = ref(false)
@@ -96,11 +98,11 @@ const errorMsg = ref('')
 const loading = ref(false)
 
 const accountRules = [
-  (v) => !!v || '请输入用户名或邮箱',
+  (v) => !!v || t('auth.accountRequired'),
 ]
 
 const passwordRules = [
-  (v) => !!v || '请输入密码',
+  (v) => !!v || t('auth.passwordRequired'),
 ]
 
 async function handleLogin() {

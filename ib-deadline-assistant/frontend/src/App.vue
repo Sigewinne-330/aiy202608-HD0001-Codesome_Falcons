@@ -5,7 +5,7 @@
         <v-btn
           icon="mdi-format-list-bulleted"
           variant="text"
-          aria-label="打开任务列表"
+          :aria-label="$t('app.openTaskList')"
           @click="taskDrawer = true"
         />
 
@@ -31,8 +31,8 @@
         <button
           class="account-trigger"
           type="button"
-          aria-label="打开账号管理设置"
-          title="账号管理"
+          :aria-label="$t('app.openAccount')"
+          :title="$t('app.account')"
           @click="settingsOpen = true"
         >
           <v-avatar color="primary" size="36">
@@ -66,7 +66,7 @@
         v-if="taskDrawer || agentDrawer"
         class="drawer-backdrop"
         type="button"
-        aria-label="关闭抽屉"
+        :aria-label="$t('common.cancel')"
         @click="closeDrawers"
       />
 
@@ -92,42 +92,42 @@
                 <v-icon icon="mdi-bell-ring-outline" />
               </v-avatar>
               <div class="reminder-copy" @click="openReminder(activeReminder)">
-                <div class="text-overline text-warning font-weight-bold">即将到来</div>
+                <div class="text-overline text-warning font-weight-bold">{{ $t('app.comingSoon') }}</div>
                 <div class="text-body-1 font-weight-bold">{{ activeReminder.title }}</div>
                 <div class="text-caption text-medium-emphasis mt-1">
-                  {{ formatReminderDate(activeReminder.date) }} · {{ activeReminder.subject || '未分类' }}
+                  {{ formatReminderDate(activeReminder.date) }} · {{ activeReminder.subject || $t('common.uncategorized') }}
                 </div>
               </div>
               <v-btn
                 icon="mdi-close"
                 variant="text"
                 size="x-small"
-                aria-label="关闭提醒"
+                :aria-label="$t('app.closeReminder')"
                 @click="reminderVisible = false"
               />
             </div>
             <div class="reminder-action" @click="openReminder(activeReminder)">
-              查看对应任务
+              {{ $t('app.viewTask') }}
               <v-icon icon="mdi-arrow-right" size="17" />
             </div>
           </v-card-text>
         </v-card>
       </v-slide-x-reverse-transition>
 
-      <div class="quick-actions" aria-label="快捷入口">
-        <v-tooltip text="紧急待处理项" location="left">
+      <div class="quick-actions" :aria-label="$t('app.quickActions')">
+        <v-tooltip :text="$t('app.urgent')" location="left">
           <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-alert-outline" color="error" elevation="8" aria-label="打开紧急待处理项" @click="router.push('/urgent')" />
+            <v-btn v-bind="props" icon="mdi-alert-outline" color="error" elevation="8" :aria-label="$t('app.openUrgent')" @click="router.push('/urgent')" />
           </template>
         </v-tooltip>
-        <v-tooltip text="进度管理" location="left">
+        <v-tooltip :text="$t('app.progress')" location="left">
           <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-chart-timeline-variant" color="primary" elevation="8" aria-label="打开进度管理" @click="router.push('/progress')" />
+            <v-btn v-bind="props" icon="mdi-chart-timeline-variant" color="primary" elevation="8" :aria-label="$t('app.openProgress')" @click="router.push('/progress')" />
           </template>
         </v-tooltip>
-        <v-tooltip text="设置" location="left">
+        <v-tooltip :text="$t('app.settings')" location="left">
           <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-cog-outline" color="grey-darken-3" elevation="8" aria-label="打开设置" @click="settingsOpen = true" />
+            <v-btn v-bind="props" icon="mdi-cog-outline" color="grey-darken-3" elevation="8" :aria-label="$t('app.openSettings')" @click="settingsOpen = true" />
           </template>
         </v-tooltip>
       </div>
@@ -148,6 +148,7 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
 import TaskDrawer from '@/components/TaskDrawer.vue'
 import AgentDrawer from '@/components/AgentDrawer.vue'
@@ -156,6 +157,7 @@ import { onTasksChanged } from '@/services/taskSync'
 
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 const { user, token, isAuthenticated, logout, restoreSession } = useAuth()
 
 const taskDrawer = ref(false)
@@ -164,7 +166,7 @@ const settingsOpen = ref(false)
 const reminders = ref([])
 const reminderVisible = ref(true)
 
-const currentPageTitle = computed(() => route.meta.title || '日历工作台')
+const currentPageTitle = computed(() => route.meta.titleKey ? t(`nav.${route.meta.titleKey}`) : t('app.defaultTitle'))
 const userInitial = computed(() => (user.value?.username || 'I').charAt(0).toUpperCase())
 const activeReminder = computed(() => reminders.value[0] || null)
 
@@ -224,9 +226,9 @@ function formatReminderDate(value) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const days = Math.round((date - today) / 86400000)
-  if (days === 0) return '今天'
-  if (days === 1) return '明天'
-  return `${date.getMonth() + 1}月${date.getDate()}日`
+  if (days === 0) return t('common.today')
+  if (days === 1) return t('common.tomorrow')
+  return t('common.monthDay', { month: date.getMonth() + 1, day: date.getDate() })
 }
 
 function handleLogout() {

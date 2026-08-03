@@ -2,14 +2,14 @@
   <section class="urgent-page">
     <header class="page-header">
       <div>
-        <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" class="back-button" @click="router.push('/calendar')">返回日历</v-btn>
-        <div class="eyebrow">PRIORITY QUEUE</div>
-        <h1>紧急待处理项</h1>
-        <p>展示未来 14 天内和已经逾期的项目，并按 Priority 从高到低排列。</p>
+        <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" class="back-button" @click="router.push('/calendar')">{{ $t('common.backCalendar') }}</v-btn>
+        <div class="eyebrow">{{ $t('urgent.eyebrow') }}</div>
+        <h1>{{ $t('urgent.title') }}</h1>
+        <p>{{ $t('urgent.subtitle') }}</p>
       </div>
       <div class="urgent-summary">
-        <div><strong>{{ urgentItems.length }}</strong><span>待处理</span></div>
-        <div class="danger"><strong>{{ overdueCount }}</strong><span>已逾期</span></div>
+        <div><strong>{{ urgentItems.length }}</strong><span>{{ $t('urgent.pending') }}</span></div>
+        <div class="danger"><strong>{{ overdueCount }}</strong><span>{{ $t('urgent.overdue') }}</span></div>
       </div>
     </header>
 
@@ -17,18 +17,18 @@
       <div class="list-toolbar">
         <div class="d-flex align-center ga-2">
           <v-icon icon="mdi-alert-decagram-outline" color="error" />
-          <span class="font-weight-bold">Deadline 队列</span>
+          <span class="font-weight-bold">{{ $t('urgent.queue') }}</span>
         </div>
         <v-chip-group v-model="filter" mandatory selected-class="text-primary">
-          <v-chip value="all" size="small" variant="outlined">全部</v-chip>
-          <v-chip value="urgent" size="small" variant="outlined">紧急</v-chip>
-          <v-chip value="high" size="small" variant="outlined">高优先级</v-chip>
+          <v-chip value="all" size="small" variant="outlined">{{ $t('urgent.all') }}</v-chip>
+          <v-chip value="urgent" size="small" variant="outlined">{{ $t('urgent.urgent') }}</v-chip>
+          <v-chip value="high" size="small" variant="outlined">{{ $t('urgent.highPriority') }}</v-chip>
         </v-chip-group>
       </div>
 
       <div v-if="loading" class="urgent-empty">
         <v-progress-circular indeterminate color="primary" />
-        <span>正在检查 Deadline…</span>
+        <span>{{ $t('urgent.checking') }}</span>
       </div>
 
       <div v-else-if="filteredItems.length" class="urgent-list">
@@ -46,8 +46,8 @@
           <span class="urgent-item__body">
             <span class="urgent-item__title">{{ item.title }}</span>
             <span class="urgent-item__meta">
-              <span>{{ item.subject || '未分类' }}</span>
-              <span>{{ item.type === 'deadline' ? 'Deadline' : '任务' }}</span>
+              <span>{{ item.subject || $t('common.uncategorized') }}</span>
+              <span>{{ item.type === 'deadline' ? $t('urgent.deadline') : $t('urgent.task') }}</span>
             </span>
           </span>
           <v-chip :color="priorityColor(item.priority)" variant="tonal" size="small">{{ priorityLabel(item.priority) }}</v-chip>
@@ -61,8 +61,8 @@
 
       <div v-else class="urgent-empty">
         <v-icon icon="mdi-check-circle-outline" color="success" size="52" />
-        <strong>当前没有符合条件的紧急项</strong>
-        <span>可以回到日历继续安排接下来的工作。</span>
+        <strong>{{ $t('urgent.emptyTitle') }}</strong>
+        <span>{{ $t('urgent.emptyDesc') }}</span>
       </div>
     </v-card>
   </section>
@@ -71,9 +71,11 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
 
 const router = useRouter()
+const { t } = useI18n()
 const { token } = useAuth()
 const items = ref([])
 const loading = ref(true)
@@ -109,7 +111,8 @@ function priorityWeight(priority) {
 }
 
 function priorityLabel(priority) {
-  return { urgent: '紧急', high: '高', medium: '中', low: '低' }[priority] || '普通'
+  const keyMap = { urgent: 'urgent', high: 'high', medium: 'medium', low: 'low' }
+  return t(`common.${keyMap[priority] || ''}`) || t('common.normal')
 }
 
 function priorityColor(priority) {
@@ -117,15 +120,15 @@ function priorityColor(priority) {
 }
 
 function dueLabel(days) {
-  if (days < 0) return `逾期 ${Math.abs(days)} 天`
-  if (days === 0) return '今天到期'
-  if (days === 1) return '明天到期'
-  return `还剩 ${days} 天`
+  if (days < 0) return t('common.overdueDays', { n: Math.abs(days) })
+  if (days === 0) return t('common.dueToday')
+  if (days === 1) return t('common.dueTomorrow')
+  return t('common.daysLeft', { n: days })
 }
 
 function formatDate(value) {
   const date = new Date(`${value}T00:00:00`)
-  return `${date.getMonth() + 1}月${date.getDate()}日`
+  return t('common.monthDay', { month: date.getMonth() + 1, day: date.getDate() })
 }
 
 function openItem(item) {

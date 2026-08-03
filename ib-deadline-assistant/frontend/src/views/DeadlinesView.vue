@@ -3,12 +3,12 @@
     <div class="d-flex align-center mb-4">
       <v-icon size="28" color="primary" class="mr-2">mdi-calendar-clock-outline</v-icon>
       <div>
-        <div class="text-h6 font-weight-bold">Deadline 管理</div>
-        <div class="text-caption text-grey">信息聚合 · 日程规避 · 及时提醒</div>
+        <div class="text-h6 font-weight-bold">{{ $t('deadlines.title') }}</div>
+        <div class="text-caption text-grey">{{ $t('deadlines.subtitle') }}</div>
       </div>
       <v-spacer />
       <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">
-        添加 Deadline
+        {{ $t('deadlines.add') }}
       </v-btn>
     </div>
 
@@ -27,13 +27,13 @@
       <v-col cols="12" md="8">
         <v-card>
           <v-card-title class="d-flex align-center">
-            所有 Deadline
+            {{ $t('deadlines.all') }}
             <v-spacer />
             <v-chip-group v-model="statusFilter" mandatory>
-              <v-chip value="all" size="small" variant="tonal">全部</v-chip>
-              <v-chip value="pending" size="small" variant="tonal" color="warning">待完成</v-chip>
-              <v-chip value="done" size="small" variant="tonal" color="success">已完成</v-chip>
-              <v-chip value="overdue" size="small" variant="tonal" color="error">已逾期</v-chip>
+              <v-chip value="all" size="small" variant="tonal">{{ $t('common.all') }}</v-chip>
+              <v-chip value="pending" size="small" variant="tonal" color="warning">{{ $t('deadlines.pending') }}</v-chip>
+              <v-chip value="done" size="small" variant="tonal" color="success">{{ $t('deadlines.done') }}</v-chip>
+              <v-chip value="overdue" size="small" variant="tonal" color="error">{{ $t('deadlines.overdue') }}</v-chip>
             </v-chip-group>
           </v-card-title>
 
@@ -77,7 +77,7 @@
 
           <v-card-text v-else class="text-center py-8">
             <v-icon size="48" color="grey-lighten-1">mdi-calendar-check-outline</v-icon>
-            <div class="text-h6 text-grey-darken-1 mt-2">暂无 Deadline</div>
+            <div class="text-h6 text-grey-darken-1 mt-2">{{ $t('deadlines.empty') }}</div>
           </v-card-text>
         </v-card>
       </v-col>
@@ -85,27 +85,27 @@
       <!-- 即将到期 -->
       <v-col cols="12" md="4">
         <v-card>
-          <v-card-title>📌 即将到期</v-card-title>
+          <v-card-title>{{ $t('deadlines.upcoming') }}</v-card-title>
           <v-list v-if="upcoming.length > 0" density="compact">
             <v-list-item v-for="d in upcoming" :key="d.id">
               <v-list-item-title class="text-body-2">{{ d.title }}</v-list-item-title>
               <v-list-item-subtitle class="text-caption">
-                {{ daysLeft(d.due_date) }}天后 · {{ d.subject || '无科目' }}
+                {{ $t('common.daysLater', { n: daysLeft(d.due_date) }) }} · {{ d.subject || $t('common.noSubject') }}
               </v-list-item-subtitle>
             </v-list-item>
           </v-list>
           <v-card-text v-else class="text-center text-caption text-grey py-4">
-            近 7 天内无 Deadline
+            {{ $t('deadlines.upcomingEmpty') }}
           </v-card-text>
         </v-card>
 
         <!-- 碰撞检查 -->
         <v-card class="mt-4">
-          <v-card-title>🔍 碰撞检查</v-card-title>
+          <v-card-title>{{ $t('deadlines.collision') }}</v-card-title>
           <v-card-text>
             <v-text-field
               v-model="checkDate"
-              label="输入日期 YYYY-MM-DD"
+              :label="$t('deadlines.checkDateLabel')"
               variant="outlined"
               density="compact"
               hide-details
@@ -113,13 +113,13 @@
               @keydown.enter="checkCollision"
             />
             <v-btn block variant="tonal" color="primary" @click="checkCollision" size="small">
-              检查冲突
+              {{ $t('deadlines.check') }}
             </v-btn>
             <div v-if="collision" class="mt-2">
               <div class="text-caption">
-                {{ collision.date }} 共 <b>{{ collision.count }}</b> 个 Deadline
-                <v-chip v-if="collision.overload" size="x-small" color="warning" class="ml-1">任务过载</v-chip>
-                <v-chip v-else size="x-small" color="success" class="ml-1">安排合理</v-chip>
+                {{ $t('deadlines.collisionResult', { date: collision.date, count: collision.count }) }}
+                <v-chip v-if="collision.overload" size="x-small" color="warning" class="ml-1">{{ $t('deadlines.overload') }}</v-chip>
+                <v-chip v-else size="x-small" color="success" class="ml-1">{{ $t('deadlines.reasonable') }}</v-chip>
               </div>
             </div>
           </v-card-text>
@@ -129,19 +129,19 @@
 
     <!-- 添加对话框 -->
     <v-dialog v-model="dialog" max-width="500">
-      <v-card title="添加 Deadline">
+      <v-card :title="$t('deadlines.dialogTitle')">
         <v-card-text>
-          <v-text-field v-model="form.title" label="标题" variant="outlined" density="comfortable" class="mb-2" />
-          <v-text-field v-model="form.source" label="来源（可选）" variant="outlined" density="comfortable" class="mb-2" />
-          <v-text-field v-model="form.subject" label="学科（可选）" variant="outlined" density="comfortable" class="mb-2" />
-          <v-text-field v-model="form.due_date" label="截止日期 YYYY-MM-DD" variant="outlined" density="comfortable" class="mb-2" />
-          <v-select v-model="form.priority" label="优先级" :items="['low','medium','high','urgent']" variant="outlined" density="comfortable" class="mb-2" />
-          <v-textarea v-model="form.description" label="备注（可选）" variant="outlined" density="comfortable" rows="2" />
+          <v-text-field v-model="form.title" :label="$t('deadlines.titleField')" variant="outlined" density="comfortable" class="mb-2" />
+          <v-text-field v-model="form.source" :label="$t('deadlines.source')" variant="outlined" density="comfortable" class="mb-2" />
+          <v-text-field v-model="form.subject" :label="$t('deadlines.subject')" variant="outlined" density="comfortable" class="mb-2" />
+          <v-text-field v-model="form.due_date" :label="$t('deadlines.dueDate')" variant="outlined" density="comfortable" class="mb-2" />
+          <v-select v-model="form.priority" :label="$t('deadlines.priority')" :items="['low','medium','high','urgent']" variant="outlined" density="comfortable" class="mb-2" />
+          <v-textarea v-model="form.description" :label="$t('deadlines.note')" variant="outlined" density="comfortable" rows="2" />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="dialog = false">取消</v-btn>
-          <v-btn color="primary" @click="createDeadline" :disabled="!form.title || !form.due_date">添加</v-btn>
+          <v-btn variant="text" @click="dialog = false">{{ $t('common.cancel') }}</v-btn>
+          <v-btn color="primary" @click="createDeadline" :disabled="!form.title || !form.due_date">{{ $t('common.add') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -150,8 +150,10 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { authFetch } from '@/stores/auth'
 
+const { t } = useI18n()
 const deadlines = ref([])
 const upcoming = ref([])
 const collision = ref(null)
@@ -176,7 +178,8 @@ function priorityColor(p) {
   return { low: 'grey', medium: 'primary', high: 'warning', urgent: 'error' }[p] || 'grey'
 }
 function priorityLabel(p) {
-  return { low: '低', medium: '中', high: '高', urgent: '紧急' }[p] || p
+  const keyMap = { low: 'low', medium: 'medium', high: 'high', urgent: 'urgent' }
+  return t(`common.${keyMap[p] || ''}`) || p
 }
 function formatDate(d) {
   if (!d) return ''

@@ -1,31 +1,31 @@
 <template>
   <div>
-    <div class="text-h6 font-weight-bold mb-4">📊 仪表盘</div>
+    <div class="text-h6 font-weight-bold mb-4">{{ $t('dashboard.title') }}</div>
 
     <!-- 统计卡片 -->
     <v-row class="mb-4">
       <v-col cols="6" md="3">
         <v-card class="text-center pa-4" color="primary" variant="tonal">
           <div class="text-h4 font-weight-bold">{{ stats.totalTasks }}</div>
-          <div class="text-caption">总任务数</div>
+          <div class="text-caption">{{ $t('dashboard.totalTasks') }}</div>
         </v-card>
       </v-col>
       <v-col cols="6" md="3">
         <v-card class="text-center pa-4" color="warning" variant="tonal">
           <div class="text-h4 font-weight-bold">{{ stats.pendingTasks }}</div>
-          <div class="text-caption">待办任务</div>
+          <div class="text-caption">{{ $t('dashboard.pendingTasks') }}</div>
         </v-card>
       </v-col>
       <v-col cols="6" md="3">
         <v-card class="text-center pa-4" color="error" variant="tonal">
           <div class="text-h4 font-weight-bold">{{ stats.overdueCount }}</div>
-          <div class="text-caption">逾期项</div>
+          <div class="text-caption">{{ $t('dashboard.overdueItems') }}</div>
         </v-card>
       </v-col>
       <v-col cols="6" md="3">
         <v-card class="text-center pa-4" color="success" variant="tonal">
           <div class="text-h4 font-weight-bold">{{ stats.completionRate }}%</div>
-          <div class="text-caption">完成率</div>
+          <div class="text-caption">{{ $t('dashboard.completionRate') }}</div>
         </v-card>
       </v-col>
     </v-row>
@@ -36,7 +36,7 @@
         <v-card>
           <v-card-title>
             <v-icon color="warning" class="mr-2">mdi-alert-circle-outline</v-icon>
-            即将到期
+            {{ $t('dashboard.upcoming') }}
           </v-card-title>
           <v-list v-if="upcomingDeadlines.length > 0" lines="two">
             <v-list-item v-for="d in upcomingDeadlines" :key="d.id">
@@ -47,12 +47,12 @@
               </template>
               <v-list-item-title>{{ d.title }}</v-list-item-title>
               <v-list-item-subtitle>
-                {{ d.due_date }} · {{ d.subject || '无科目' }}
+                {{ d.due_date }} · {{ d.subject || $t('common.noSubject') }}
               </v-list-item-subtitle>
             </v-list-item>
           </v-list>
           <v-card-text v-else class="text-center py-4 text-caption text-grey">
-            暂无即将到期的 Deadline 🎉
+            {{ $t('dashboard.noUpcoming') }}
           </v-card-text>
         </v-card>
       </v-col>
@@ -61,7 +61,7 @@
         <v-card>
           <v-card-title>
             <v-icon color="primary" class="mr-2">mdi-progress-clock</v-icon>
-            进行中的任务
+            {{ $t('dashboard.inProgress') }}
           </v-card-title>
           <v-list v-if="inProgressTasks.length > 0" lines="two">
             <v-list-item v-for="t in inProgressTasks" :key="t.id">
@@ -85,7 +85,7 @@
             </v-list-item>
           </v-list>
           <v-card-text v-else class="text-center py-4 text-caption text-grey">
-            没有进行中的任务
+            {{ $t('dashboard.noInProgress') }}
           </v-card-text>
         </v-card>
       </v-col>

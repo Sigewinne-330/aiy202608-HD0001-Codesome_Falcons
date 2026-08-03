@@ -3,8 +3,8 @@
     <div class="d-flex align-center mb-4">
       <v-icon size="28" color="primary" class="mr-2">mdi-calendar-edit-outline</v-icon>
       <div>
-        <div class="text-h6 font-weight-bold">任务规划</div>
-        <div class="text-caption text-grey">输入任务信息和截止日期，自动生成分阶段执行计划</div>
+        <div class="text-h6 font-weight-bold">{{ $t('plan.title') }}</div>
+        <div class="text-caption text-grey">{{ $t('plan.subtitle') }}</div>
       </div>
     </div>
 
@@ -12,12 +12,12 @@
       <!-- 左侧：输入表单 -->
       <v-col cols="12" md="5">
         <v-card variant="outlined" class="mb-4">
-          <v-card-title class="text-body-1 font-weight-bold">📝 任务信息</v-card-title>
+          <v-card-title class="text-body-1 font-weight-bold">{{ $t('plan.info') }}</v-card-title>
           <v-card-text>
             <v-text-field
               v-model="form.title"
-              label="任务名称"
-              placeholder="例如：学习Python机器学习、准备雅思考试、完成产品设计项目"
+              :label="$t('plan.taskName')"
+              :placeholder="$t('plan.taskNamePlaceholder')"
               variant="outlined"
               density="comfortable"
               class="mb-3"
@@ -27,19 +27,19 @@
               <v-col cols="6">
                 <v-text-field
                   v-model="form.word_count"
-                  label="任务规模"
+                  :label="$t('plan.scale')"
                   placeholder="5000"
                   type="number"
                   variant="outlined"
                   density="comfortable"
                   hide-details
-                  suffix="单位"
+                  :suffix="$t('plan.unit')"
                 />
               </v-col>
               <v-col cols="6">
                 <v-text-field
                   v-model="form.deadline"
-                  label="截止日期"
+                  :label="$t('plan.deadline')"
                   type="date"
                   variant="outlined"
                   density="comfortable"
@@ -49,8 +49,8 @@
             </v-row>
             <v-textarea
               v-model="form.description"
-              label="补充说明（可选）"
-              placeholder="例如：需要包含三个阶段、每周投入约10小时..."
+              :label="$t('plan.extraDesc')"
+              :placeholder="$t('plan.extraDescPlaceholder')"
               variant="outlined"
               density="comfortable"
               rows="2"
@@ -66,7 +66,7 @@
               @click="generatePlan"
             >
               <v-icon left class="mr-1">mdi-magic-staff</v-icon>
-              生成执行计划
+              {{ $t('plan.generate') }}
             </v-btn>
           </v-card-text>
         </v-card>
@@ -74,21 +74,21 @@
         <!-- 概览卡片 -->
         <v-card v-if="plan" variant="outlined" color="primary">
           <v-card-text>
-            <div class="text-caption text-grey mb-1">规划概览</div>
+            <div class="text-caption text-grey mb-1">{{ $t('plan.overview') }}</div>
             <div class="d-flex align-center gap-4 flex-wrap">
               <div class="text-center">
                 <div class="text-h5 font-weight-bold text-primary">{{ plan.phases.length }}</div>
-                <div class="text-caption">执行阶段</div>
+                <div class="text-caption">{{ $t('plan.phases') }}</div>
               </div>
               <v-divider vertical />
               <div class="text-center">
                 <div class="text-h5 font-weight-bold text-primary">{{ plan.total_days }}</div>
-                <div class="text-caption">总天数</div>
+                <div class="text-caption">{{ $t('plan.totalDays') }}</div>
               </div>
               <v-divider vertical />
               <div class="text-center">
                 <div class="text-h5 font-weight-bold text-primary">{{ plan.total_hours }}</div>
-                <div class="text-caption">预估总小时</div>
+                <div class="text-caption">{{ $t('plan.totalHours') }}</div>
               </div>
             </div>
           </v-card-text>
@@ -100,26 +100,25 @@
         <!-- 空状态 -->
         <v-sheet v-if="!plan && !loading" class="d-flex flex-column align-center justify-center pa-12" rounded="lg" border>
           <v-icon size="80" color="grey-lighten-1">mdi-timeline-text-outline</v-icon>
-          <div class="text-h6 text-grey-darken-1 mt-4">还没有执行计划</div>
+          <div class="text-h6 text-grey-darken-1 mt-4">{{ $t('plan.emptyTitle') }}</div>
           <div class="text-body-2 text-grey mt-1 text-center" style="max-width: 360px;">
-            在左侧输入你的任务信息，点击"生成执行计划"，
-            系统会根据截止日期自动规划每个阶段的起止时间
+            {{ $t('plan.emptyDesc') }}
           </div>
         </v-sheet>
 
         <!-- 加载中 -->
         <v-sheet v-if="loading" class="d-flex flex-column align-center justify-center pa-12" rounded="lg" border>
           <v-progress-circular indeterminate size="48" color="primary" class="mb-4" />
-          <div class="text-body-1 text-grey-darken-1">正在规划执行时间线...</div>
-          <div class="text-caption text-grey mt-1">根据截止日期倒推各阶段安排</div>
+          <div class="text-body-1 text-grey-darken-1">{{ $t('plan.planning') }}</div>
+          <div class="text-caption text-grey mt-1">{{ $t('plan.planningDesc') }}</div>
         </v-sheet>
 
         <!-- 时间线 -->
         <div v-if="plan && !loading">
           <div class="text-subtitle-1 font-weight-bold mb-3">
-            📅 执行时间线
+            {{ $t('plan.timeline') }}
             <v-chip size="small" variant="tonal" color="primary" class="ml-2">
-              {{ plan.deadline }} 截止
+              {{ $t('plan.due', { deadline: plan.deadline }) }}
             </v-chip>
           </div>
 
@@ -157,7 +156,7 @@
                       {{ formatDateRange(phase.start_date, phase.end_date) }}
                       <v-divider vertical class="mx-1" />
                       <v-icon size="14">mdi-clock-outline</v-icon>
-                      {{ phase.estimated_hours }} 小时
+                      {{ $t('plan.hours', { n: phase.estimated_hours }) }}
                     </div>
                   </v-card-subtitle>
                 </v-card-item>
@@ -166,7 +165,7 @@
                   <div class="text-body-2">{{ phase.description }}</div>
                   <div class="mt-2 d-flex align-center gap-1">
                     <v-icon size="14" color="primary">mdi-package-variant-closed</v-icon>
-                    <span class="text-caption font-weight-medium">交付物：</span>
+                    <span class="text-caption font-weight-medium">{{ $t('plan.deliverables') }}</span>
                     <span class="text-caption">{{ phase.deliverables }}</span>
                   </div>
                 </v-card-text>
@@ -176,10 +175,10 @@
 
           <div v-if="plan" class="d-flex gap-2 mt-4">
             <v-btn color="primary" variant="tonal" prepend-icon="mdi-calendar-month" :to="calendarLink">
-              在日历中查看
+              {{ $t('plan.viewCalendar') }}
             </v-btn>
             <v-btn variant="outlined" prepend-icon="mdi-format-list-checks" to="/tasks">
-              任务管理
+              {{ $t('plan.viewTasks') }}
             </v-btn>
           </div>
         </div>
@@ -190,8 +189,11 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { authFetch } from '@/stores/auth'
 import { notifyTasksChanged } from '@/services/taskSync'
+
+const { t } = useI18n()
 
 const form = ref({
   title: '',
@@ -217,7 +219,8 @@ function phaseColor(priority) {
 }
 
 function priorityLabel(priority) {
-  return { low: '低', medium: '中', high: '高', urgent: '紧急' }[priority] || priority
+  const keyMap = { low: 'low', medium: 'medium', high: 'high', urgent: 'urgent' }
+  return t(`common.${keyMap[priority] || ''}`) || priority
 }
 
 function formatDateRange(start, end) {
