@@ -29,6 +29,10 @@ def _column_type_sql(col):
     """将 SQLAlchemy Column 类型转为 SQL DDL 片段"""
     t = col.type
     type_name = type(t).__name__
+    if type_name == "Enum":
+        # ENUM 类型：提取枚举值，生成 ENUM('val1','val2',...)
+        enum_values = [f"'{e.value}'" if hasattr(e, 'value') else f"'{e}'" for e in t.enums]
+        return f"ENUM({','.join(enum_values)})"
     if type_name == "VARCHAR" or type_name == "String":
         return f"VARCHAR({t.length or 255})"
     if type_name in ("INTEGER", "Integer"):
@@ -69,7 +73,14 @@ def auto_sync_tables(engine_obj, base):
                 nullable = "" if col.nullable else "NOT NULL"
                 default_val = ""
                 if col.default and col.default.arg is not None:
-                    default_val = f" DEFAULT {col.default.arg}"
+                    arg = col.default.arg
+                    # ENUM 默认值是 Python enum 对象，取其 .value 并加引号
+                    if hasattr(arg, 'value'):
+                        default_val = f" DEFAULT '{arg.value}'"
+                    elif isinstance(arg, str):
+                        default_val = f" DEFAULT '{arg}'"
+                    else:
+                        default_val = f" DEFAULT {arg}"
                 if col.server_default and hasattr(col.server_default, "arg"):
                     default_val = f" DEFAULT {col.server_default.arg}"
 
