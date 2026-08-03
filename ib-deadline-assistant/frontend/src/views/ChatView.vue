@@ -146,7 +146,38 @@
       <!-- 输入区域 -->
       <v-card flat rounded="lg" border style="flex-shrink: 0;">
         <v-card-text class="pa-4">
-          <div class="d-flex align-end gap-3">
+          <!-- 已选图片预览 -->
+          <div v-if="selectedImages.length" class="d-flex flex-wrap gap-2 mb-2">
+            <div v-for="(img, idx) in selectedImages" :key="idx" class="chat-img-thumb">
+              <img :src="img.dataUrl" alt="preview" />
+              <button type="button" class="chat-img-remove" @click="removeImage(idx)" aria-label="移除图片">
+                <v-icon icon="mdi-close" size="12" />
+              </button>
+            </div>
+          </div>
+          <div
+            class="d-flex align-end gap-3 chat-composer"
+            :class="{ 'chat-composer--drag': dragActive }"
+            @dragover.prevent="onDragOver"
+            @dragenter.prevent="dragActive = true"
+            @dragleave="onDragLeave"
+            @drop.prevent="onDrop"
+          >
+            <input
+              ref="imageInput"
+              type="file"
+              accept="image/*"
+              multiple
+              style="display:none"
+              @change="onImagesSelected"
+            />
+            <v-btn
+              icon="mdi-image-outline"
+              variant="text"
+              :disabled="loading || selectedImages.length >= 5"
+              :color="selectedImages.length ? 'deep-purple' : undefined"
+              @click="$refs.imageInput.click()"
+            />
             <v-textarea
               v-model="input"
               :placeholder="$t('chat.placeholder')"
@@ -156,6 +187,7 @@
               variant="solo"
               class="flex-grow-1"
               @keydown.enter.exact.prevent="sendMessage"
+              @paste="onPaste"
               :disabled="loading"
             />
             <v-btn
@@ -164,7 +196,7 @@
               size="40"
               variant="flat"
               @click="loading ? stopGeneration() : sendMessage()"
-              :disabled="!input.trim() && !loading"
+              :disabled="!input.trim() && !selectedImages.length && !loading"
             />
           </div>
         </v-card-text>
@@ -233,12 +265,73 @@ const input = ref('')
 const loading = ref(false)
 const previewUrl = ref('')   // 图片大图预览
 const previewOpen = ref(false)
+const selectedImages = ref([])  // [{ dataUrl, file }]
+const imageInput = ref(null)
+const dragActive = ref(false)   // 拖拽高亮状态
 let abortController = null
 
 /** 点击历史消息里的图片 → 大图预览 */
 function previewImage(url) {
   previewUrl.value = url
   previewOpen.value = true
+}
+
+// ---- 图片上传（选图 / 拖拽 / 粘贴统一入口） ----
+
+/** 只接受图片文件 */
+function isImageFile(file) {
+  return file && file.type && file.type.startsWith('image/')
+}
+
+/** 将文件转 base64 加入待发送列表（最多 5 张） */
+function addFiles(files) {
+  const imgFiles = Array.from(files || []).filter(isImageFile)
+  const remaining = 5 - selectedImages.value.length
+  if (remaining <= 0) return
+  imgFiles.slice(0, remaining).forEach(file => {
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      selectedImages.value.push({ dataUrl: ev.target.result, file })
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+function onImagesSelected(e) {
+  addFiles(e.target.files || [])
+  // 重置 input 以便重复选择同一文件
+  if (imageInput.value) imageInput.value.value = ''
+}
+
+function removeImage(idx) {
+  selectedImages.value.splice(idx, 1)
+}
+
+/** 拖拽悬停：保持高亮 */
+function onDragOver() {
+  dragActive.value = true
+}
+
+/** 拖拽离开：真正离开整个输入区才取消高亮（避免子元素间闪烁） */
+function onDragLeave(e) {
+  if (!e.currentTarget.contains(e.relatedTarget)) dragActive.value = false
+}
+
+/** 松开拖拽：将图片加入待发送列表 */
+function onDrop(e) {
+  dragActive.value = false
+  if (loading.value) return
+  if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files)
+}
+
+/** 粘贴图片（如截图）：仅在有图片时拦截，纯文本粘贴不受影响 */
+function onPaste(e) {
+  const files = e.clipboardData?.files
+  if (!files || !files.length) return
+  if (Array.from(files).some(isImageFile)) {
+    e.preventDefault()
+    addFiles(files)
+  }
 }
 
 // ---- 对话窗口管理 ----
@@ -278,6 +371,7 @@ function newConversation() {
   if (loading.value) return
   activeConversationId.value = null
   messages.value = []
+  selectedImages.value = []
 }
 
 /** 切换对话：加载该对话的历史消息 */
@@ -349,10 +443,12 @@ function tokenLabel(message) {
 
 async function sendMessage() {
   const content = input.value.trim()
-  if (!content || loading.value) return
+  const images = selectedImages.value.map(img => img.dataUrl)
+  if ((!content && !images.length) || loading.value) return
 
-  messages.value.push({ role: 'user', content })
+  messages.value.push({ role: 'user', content, images: images.length ? [...images] : null })
   input.value = ''
+  selectedImages.value = []
   loading.value = true
 
   // 插入一个空的 AI 消息占位，标记正在流式
@@ -378,7 +474,7 @@ async function sendMessage() {
     const res = await authFetch(`${API_BASE}/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, conversation_id: activeConversationId.value }),
+      body: JSON.stringify({ content, conversation_id: activeConversationId.value, ...(images.length ? { images } : {}) }),
       signal: abortController.signal,
     })
 
@@ -597,6 +693,15 @@ onMounted(async () => {
   border: 1px solid rgba(255, 255, 255, .25);
 }
 .chat-user-img:hover { opacity: .92; }
+
+/* 输入区图片预览缩略图 */
+.chat-img-thumb { position: relative; width: 56px; height: 56px; flex: 0 0 auto; border-radius: 10px; overflow: hidden; border: 1px solid #dfe4ee; }
+.chat-img-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.chat-img-remove { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(0,0,0,.45); color: #fff; cursor: pointer; padding: 0; }
+
+/* 拖拽高亮 */
+.chat-composer { border: 1px solid transparent; border-radius: 12px; padding: 4px; transition: border-color .15s, background .15s, box-shadow .15s; }
+.chat-composer--drag { border-color: #1565C0; background: #F0F6FF; box-shadow: 0 0 0 3px rgba(21,101,192,.14); }
 
 .assistant-message {
   background: #F3F4F6;

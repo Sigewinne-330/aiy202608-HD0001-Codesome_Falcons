@@ -120,7 +120,14 @@
       </div>
     </div>
 
-    <div class="agent-panel__composer">
+    <div
+      class="agent-panel__composer"
+      :class="{ 'agent-panel__composer--drag': dragActive }"
+      @dragover.prevent="onDragOver"
+      @dragenter.prevent="dragActive = true"
+      @dragleave="onDragLeave"
+      @drop.prevent="onDrop"
+    >
       <!-- 已选图片预览 -->
       <div v-if="selectedImages.length" class="image-preview-row">
         <div v-for="(img, idx) in selectedImages" :key="idx" class="image-preview-thumb">
@@ -158,12 +165,13 @@
           hide-details
           :disabled="loading"
           @keydown.enter.exact.prevent="sendMessage"
+          @paste="onPaste"
         />
         <v-btn
           :icon="loading ? 'mdi-stop' : 'mdi-arrow-up'"
           :color="loading ? 'grey' : 'primary'"
           variant="flat"
-          :disabled="!loading && !input.trim()"
+          :disabled="!loading && !input.trim() && !selectedImages.length"
           @click="loading ? stopGeneration() : sendMessage()"
         />
       </div>
@@ -252,6 +260,7 @@ const activeConversationId = ref(null)
 const conversations = ref([])
 const selectedImages = ref([])  // [{ dataUrl, file }]
 const imageInput = ref(null)
+const dragActive = ref(false)   // 拖拽高亮状态
 const balance = ref(0)
 const previewUrl = ref('')   // 图片大图预览
 const previewOpen = ref(false)
@@ -320,22 +329,58 @@ function newConversation() {
   selectedImages.value = []
 }
 
-// ---- 图片上传 ----
+// ---- 图片上传（选图 / 拖拽 / 粘贴统一入口） ----
 
-function onImagesSelected(e) {
-  const files = Array.from(e.target.files || [])
+/** 只接受图片文件 */
+function isImageFile(file) {
+  return file && file.type && file.type.startsWith('image/')
+}
+
+/** 将文件转 base64 加入待发送列表（最多 5 张） */
+function addFiles(files) {
+  const imgFiles = Array.from(files || []).filter(isImageFile)
   const remaining = 5 - selectedImages.value.length
   if (remaining <= 0) return
-  const toAdd = files.slice(0, remaining)
-  toAdd.forEach(file => {
+  imgFiles.slice(0, remaining).forEach(file => {
     const reader = new FileReader()
     reader.onload = (ev) => {
       selectedImages.value.push({ dataUrl: ev.target.result, file })
     }
     reader.readAsDataURL(file)
   })
+}
+
+function onImagesSelected(e) {
+  addFiles(e.target.files || [])
   // 重置 input 以便重复选择同一文件
   if (imageInput.value) imageInput.value.value = ''
+}
+
+/** 拖拽悬停：保持高亮 */
+function onDragOver() {
+  dragActive.value = true
+}
+
+/** 拖拽离开：真正离开整个输入区才取消高亮（避免子元素间闪烁） */
+function onDragLeave(e) {
+  if (!e.currentTarget.contains(e.relatedTarget)) dragActive.value = false
+}
+
+/** 松开拖拽：将图片加入待发送列表 */
+function onDrop(e) {
+  dragActive.value = false
+  if (loading.value) return
+  if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files)
+}
+
+/** 粘贴图片（如截图）：仅在有图片时拦截，纯文本粘贴不受影响 */
+function onPaste(e) {
+  const files = e.clipboardData?.files
+  if (!files || !files.length) return
+  if (Array.from(files).some(isImageFile)) {
+    e.preventDefault()
+    addFiles(files)
+  }
 }
 
 function removeImage(idx) {
@@ -379,7 +424,8 @@ async function deleteConversation(convId) {
 
 async function sendMessage() {
   const content = input.value.trim()
-  if (!content || loading.value) return
+  const hasImages = selectedImages.value.length > 0
+  if ((!content && !hasImages) || loading.value) return
 
   // 先取出待发送图片（挂到用户消息上，气泡里永久显示）
   const images = selectedImages.value.map(img => img.dataUrl)
@@ -565,7 +611,8 @@ onMounted(() => {
 .agent-md :deep(tr:nth-child(even) td) { background: #f8f9fc; }
 .agent-md :deep(a) { color: #315fdf; }
 .agent-md :deep(.katex) { font-size: 1.05em; }
-.agent-panel__composer { display: flex; flex-direction: column; gap: 0; margin: 12px 14px 6px; padding: 8px; border: 1px solid #dfe4ee; border-radius: 18px; background: #f8f9fc; }
+.agent-panel__composer { display: flex; flex-direction: column; gap: 0; margin: 12px 14px 6px; padding: 8px; border: 1px solid #dfe4ee; border-radius: 18px; background: #f8f9fc; transition: border-color .15s, background .15s, box-shadow .15s; }
+.agent-panel__composer--drag { border-color: #315fdf; background: #f2f6ff; box-shadow: 0 0 0 3px rgba(49,95,223,.14); }
 .image-preview-row { display: flex; gap: 8px; padding: 0 4px 8px 4px; overflow-x: auto; }
 .image-preview-thumb { position: relative; width: 56px; height: 56px; flex: 0 0 auto; border-radius: 10px; overflow: hidden; border: 1px solid #dfe4ee; }
 .image-preview-thumb img { width: 100%; height: 100%; object-fit: cover; }
