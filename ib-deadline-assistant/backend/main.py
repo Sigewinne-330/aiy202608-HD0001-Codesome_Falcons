@@ -1,4 +1,5 @@
 import logging
+import fcntl
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
@@ -29,9 +30,16 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup():
-    """每次启动自动建表 + 同步列（只增不改不删）"""
-    Base.metadata.create_all(bind=engine)
-    auto_sync_tables(engine, Base)
+    """每次启动自动建表 + 同步列（文件锁保证单 worker 执行）"""
+    lock_file = "/tmp/auto_sync.lock"
+    with open(lock_file, "w") as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            logging.getLogger(__name__).info("[startup] 已被其他 worker 执行，跳过")
+            return
+        Base.metadata.create_all(bind=engine)
+        auto_sync_tables(engine, Base)
 
 # 注册路由
 app.include_router(auth.router)

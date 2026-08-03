@@ -34,6 +34,9 @@ if $REBUILD_BACKEND; then
 fi
 ssh "$SERVER" "cd $PROJECT_DIR && docker compose up -d"
 
+echo "=== 重启后端（加载新代码）==="
+ssh "$SERVER" "cd $PROJECT_DIR && docker compose restart backend"
+
 echo "=== 清理旧镜像 ==="
 ssh "$SERVER" "docker image prune -f"
 
