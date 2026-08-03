@@ -40,7 +40,7 @@ class TaskResponse(BaseModel):
     estimated_hours: float
     progress: int
     created_at: datetime
-    updated_at: datetime
+    update_time: Optional[datetime] = None
     subtasks: List["TaskResponse"] = Field(default_factory=list)
 
     class Config:

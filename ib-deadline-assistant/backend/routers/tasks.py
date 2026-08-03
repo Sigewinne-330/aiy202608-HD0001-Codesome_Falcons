@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 from typing import List
 from datetime import date, datetime
 from database import get_db
-from models.user import User
-from models.task import Task as TaskModel, TaskStatus, TaskType
+from models.app_user import AppUser as User
+from models.task_new import Task as TaskModel, TaskStatus, TaskType
 from schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskBreakdownRequest, TaskPlanRequest, TaskPlanResponse, TaskPlanPhase
 from services.auth import get_current_user
 from services.ai_service import ai_service

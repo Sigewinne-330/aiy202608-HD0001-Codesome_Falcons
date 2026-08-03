@@ -55,11 +55,11 @@ export function useAuth() {
     return data
   }
 
-  /** 登录 */
-  async function login(email, password) {
+  /** 登录：支持用户名或邮箱 */
+  async function login(username, password) {
     const data = await api('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ username, password }),
     })
     saveSession(data)
     return data

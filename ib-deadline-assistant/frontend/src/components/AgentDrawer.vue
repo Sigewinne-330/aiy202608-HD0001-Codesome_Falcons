@@ -10,7 +10,59 @@
           <div class="agent-status"><span /> 随时协助你的任务规划</div>
         </div>
       </div>
-      <v-btn icon="mdi-close" variant="text" size="small" aria-label="关闭 Agent" @click="$emit('close')" />
+      <div class="d-flex align-center">
+        <!-- 对话列表菜单 -->
+        <v-menu location="bottom end">
+          <template v-slot:activator="{ props }">
+            <v-btn
+              icon="mdi-message-text-outline"
+              variant="text"
+              size="small"
+              aria-label="历史对话"
+              :disabled="loading"
+              v-bind="props"
+            />
+          </template>
+          <v-list dense style="max-height: 320px; overflow-y: auto; min-width: 220px;">
+            <v-list-subheader>历史对话</v-list-subheader>
+            <v-list-item
+              v-for="conv in conversations"
+              :key="conv.id"
+              :active="conv.id === activeConversationId"
+              density="compact"
+              @click="switchConversation(conv.id)"
+            >
+              <template v-slot:prepend>
+                <v-icon size="14" class="mr-2">mdi-message-outline</v-icon>
+              </template>
+              <v-list-item-title class="text-caption" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                {{ conv.title || '新对话' }}
+              </v-list-item-title>
+              <template v-slot:append>
+                <v-btn
+                  icon="mdi-close"
+                  size="x-small"
+                  variant="text"
+                  @click.stop="deleteConversation(conv.id)"
+                />
+              </template>
+            </v-list-item>
+            <div v-if="conversations.length === 0" class="text-center text-caption text-grey py-3">
+              暂无历史对话
+            </div>
+          </v-list>
+        </v-menu>
+        <!-- 新建对话 -->
+        <v-btn
+          icon="mdi-plus"
+          variant="text"
+          size="small"
+          aria-label="新建对话"
+          :disabled="loading"
+          @click="newConversation"
+        />
+        <v-btn icon="mdi-close" variant="text" size="small" aria-label="关闭 Agent" @click="$emit('close')" />
+      </div>
     </div>
 
     <div ref="messageContainer" class="agent-panel__messages scroll-container">
@@ -114,6 +166,8 @@ const messages = ref([])
 const input = ref('')
 const loading = ref(false)
 const messageContainer = ref(null)
+const activeConversationId = ref(null)
+const conversations = ref([])
 let controller = null
 
 const suggestions = [
@@ -139,6 +193,56 @@ function useSuggestion(value) {
   sendMessage()
 }
 
+// ---- 对话窗口管理 ----
+
+async function loadConversations() {
+  try {
+    const convRes = await fetch('/api/chat/conversations', { headers: headers() })
+    if (convRes.ok) {
+      const convData = await convRes.json()
+      conversations.value = convData.conversations || []
+    }
+  } catch {
+    conversations.value = []
+  }
+}
+
+/** 新建对话：清空消息区，下次发送时自动创建 conversation */
+function newConversation() {
+  if (loading.value) return
+  activeConversationId.value = null
+  messages.value = []
+}
+
+/** 切换对话：加载该对话的历史消息 */
+async function switchConversation(convId) {
+  if (loading.value) return
+  activeConversationId.value = convId
+  messages.value = []
+  try {
+    const response = await fetch(`/api/chat/history?conversation_id=${convId}`, { headers: headers() })
+    if (response.ok) {
+      const data = await response.json()
+      messages.value = (data.messages || []).map((item) => ({ role: item.role, content: item.content }))
+      await scrollToBottom()
+    }
+  } catch {
+    messages.value = []
+  }
+}
+
+/** 删除对话 */
+async function deleteConversation(convId) {
+  try {
+    await fetch(`/api/chat/conversations/${convId}`, { method: 'DELETE', headers: headers() })
+    conversations.value = conversations.value.filter(c => c.id !== convId)
+    if (activeConversationId.value === convId) {
+      activeConversationId.value = null
+      messages.value = []
+    }
+  } catch { /* ignore */ }
+}
+
 async function sendMessage() {
   const content = input.value.trim()
   if (!content || loading.value) return
@@ -152,11 +256,22 @@ async function sendMessage() {
   await scrollToBottom()
 
   try {
+    // 没有对话时先创建一个（避免每次发送都新建窗口）
+    if (!activeConversationId.value) {
+      const convRes = await fetch('/api/chat/conversations', {
+        method: 'POST',
+        headers: headers({ 'Content-Type': 'application/json' }),
+      })
+      if (convRes.ok) {
+        const convData = await convRes.json()
+        activeConversationId.value = convData.id
+      }
+    }
     controller = new AbortController()
     const response = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: headers({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, conversation_id: activeConversationId.value }),
       signal: controller.signal,
     })
     if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
@@ -197,6 +312,8 @@ async function sendMessage() {
     loading.value = false
     controller = null
     if (taskMutationSucceeded) notifyTasksChanged()
+    // 刷新对话列表，让新对话出现在历史里
+    await loadConversations()
     await scrollToBottom()
   }
 }
@@ -207,13 +324,11 @@ function stopGeneration() {
 }
 
 async function loadHistory() {
-  try {
-    const response = await fetch('/api/chat/history', { headers: headers() })
-    if (!response.ok) return
-    const data = await response.json()
-    messages.value = (data.messages || []).map((item) => ({ role: item.role, content: item.content }))
-    await scrollToBottom()
-  } catch {
+  await loadConversations()
+  // 自动选中最近一个对话；没有对话则保持空（发消息时自动新建）
+  if (conversations.value.length > 0) {
+    await switchConversation(conversations.value[0].id)
+  } else {
     messages.value = []
   }
 }

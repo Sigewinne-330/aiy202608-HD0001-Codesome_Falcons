@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from datetime import date, timedelta
 from database import get_db
-from models.user import User
+from models.app_user import AppUser as User
 from models.deadline import Deadline as DeadlineModel, DeadlineStatus
 from schemas.deadline import DeadlineCreate, DeadlineUpdate, DeadlineResponse, CollisionCheckRequest
 from services.auth import get_current_user

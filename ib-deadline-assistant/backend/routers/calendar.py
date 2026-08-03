@@ -5,8 +5,8 @@ from datetime import date, timedelta
 from calendar import monthrange
 from pydantic import BaseModel
 from database import get_db
-from models.user import User
-from models.task import Task as TaskModel, TaskStatus, TaskType
+from models.app_user import AppUser as User
+from models.task_new import Task as TaskModel, TaskStatus, TaskType
 from models.deadline import Deadline as DeadlineModel, DeadlineStatus
 from services.auth import get_current_user
 
@@ -95,13 +95,13 @@ def get_calendar_data(
 
     for t in tasks:
         if t.deadline:
-            date_key = t.deadline.isoformat()
+            date_key = t.deadline.date().isoformat()
             item = CalendarDayItem(
                 id=t.id,
                 title=t.title,
                 type="task",
-                priority=t.priority.value if t.priority else "medium",
-                status=t.status.value if t.status else "todo",
+                priority=t.priority or "medium",
+                status=t.status or "todo",
                 subject=t.subject,
             )
             day_map[date_key]["tasks"].append(item)
@@ -122,13 +122,13 @@ def get_calendar_data(
 
     for st in sub_tasks:
         if st.deadline:
-            date_key = st.deadline.isoformat()
+            date_key = st.deadline.date().isoformat()
             item = CalendarDayItem(
                 id=st.id,
                 title=st.title,
                 type="task",
-                priority=st.priority.value if st.priority else "medium",
-                status=st.status.value if st.status else "todo",
+                priority=st.priority or "medium",
+                status=st.status or "todo",
                 subject=st.subject,
             )
             day_map[date_key]["tasks"].append(item)

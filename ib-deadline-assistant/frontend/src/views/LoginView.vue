@@ -24,14 +24,13 @@
       <v-form ref="formRef" v-model="formValid" @submit.prevent="handleLogin">
         <v-text-field
           v-model="email"
-          label="邮箱"
-          type="email"
-          prepend-inner-icon="mdi-email-outline"
-          :rules="emailRules"
+          label="用户名或邮箱"
+          prepend-inner-icon="mdi-account-outline"
+          :rules="accountRules"
           variant="outlined"
           density="comfortable"
           class="mb-3"
-          autocomplete="email"
+          autocomplete="username"
           clearable
         />
 
@@ -89,9 +88,8 @@ const showPwd = ref(false)
 const errorMsg = ref('')
 const loading = ref(false)
 
-const emailRules = [
-  (v) => !!v || '请输入邮箱',
-  (v) => /.+@.+\..+/.test(v) || '请输入有效的邮箱地址',
+const accountRules = [
+  (v) => !!v || '请输入用户名或邮箱',
 ]
 
 const passwordRules = [

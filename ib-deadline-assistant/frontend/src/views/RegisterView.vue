@@ -36,7 +36,7 @@
 
         <v-text-field
           v-model="email"
-          label="邮箱"
+          label="邮箱（选填）"
           type="email"
           prepend-inner-icon="mdi-email-outline"
           :rules="emailRules"
@@ -125,8 +125,7 @@ const usernameRules = [
 ]
 
 const emailRules = [
-  (v) => !!v || '请输入邮箱',
-  (v) => /.+@.+\..+/.test(v) || '请输入有效的邮箱地址',
+  (v) => !v || /.+@.+\..+/.test(v) || '请输入有效的邮箱地址',
 ]
 
 const passwordRules = [

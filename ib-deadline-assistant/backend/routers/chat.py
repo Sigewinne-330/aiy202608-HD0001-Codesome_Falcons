@@ -1,24 +1,32 @@
-"""Chat router — 支持 OpenAI function calling 的 AI 对话端点
+"""Chat router — 支持 OpenAI function calling 的 AI 对话端点（conversation + chat_message 新表体系）
+
+表结构：
+  conversation   = 对话窗口（一条对话记录）
+  chat_message   = 对话窗口里的一条条消息（role: user / assistant）
 
 核心流程：
-  用户消息 → 构建 messages（system + history + user）
+  用户消息 → 获取/新建对话(conversation) → 构建 messages（system + history + user）
     → 调 AI（带 tools）
     → 如果 AI 返回 tool_calls → 执行工具 → 结果喂回 AI → 循环
-    → AI 返回最终文本 → 保存到聊天历史 → 返回
+    → AI 返回最终文本 → 保存到 chat_message → 返回
 """
 import json
 import logging
 from datetime import date
-from typing import List, Dict, Any, AsyncGenerator
+from typing import List, Dict, Any, AsyncGenerator, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models.user import User
-from models.chat import ChatHistory as ChatHistoryModel, MessageRole
-from schemas.chat import ChatMessage, ChatResponse, ChatHistoryResponse
+from models.app_user import AppUser as User
+from models.conversation import Conversation
+from models.chat_message_new import ChatMessage as ChatMessageModel
+from schemas.chat import (
+    ChatMessage, ChatResponse, ChatHistoryResponse,
+    ConversationResponse, ConversationListResponse,
+)
 from services.auth import get_current_user
 from services.ai_service import ai_service, SYSTEM_PROMPT
 from services.task_tools_schema import TASK_TOOLS
@@ -42,6 +50,32 @@ TOOL_DISPATCH: Dict[str, Any] = {
 }
 
 
+def _get_or_create_conversation(
+    db: Session,
+    user_id: int,
+    conversation_id: Optional[int] = None,
+    first_message: str = "",
+) -> Conversation:
+    """获取指定对话；未指定时自动新建一个对话窗口。"""
+    if conversation_id:
+        conv = (
+            db.query(Conversation)
+            .filter(Conversation.id == conversation_id, Conversation.user_id == user_id)
+            .first()
+        )
+        if conv:
+            return conv
+        raise HTTPException(status_code=404, detail="对话不存在或无权访问")
+
+    # 新建对话：标题取第一条消息的前 30 字
+    title = first_message[:30] if first_message else "新对话"
+    conv = Conversation(user_id=user_id, title=title)
+    db.add(conv)
+    db.commit()
+    db.refresh(conv)
+    return conv
+
+
 def _with_date_prefix(user_message: str) -> str:
     """在用户消息前添加当前日期，帮助 AI 理解相对时间（如"今天"、"下周"）"""
     today = date.today().isoformat()  # YYYY-MM-DD
@@ -58,6 +92,19 @@ def _build_messages(
         *history,
         {"role": "user", "content": _with_date_prefix(user_message)},
     ]
+
+
+def _load_history(db: Session, conversation_id: int, limit: int = 20) -> List[Dict[str, str]]:
+    """加载某个对话窗口最近的消息（按时间升序返回，供 AI 上下文使用）"""
+    recent = (
+        db.query(ChatMessageModel)
+        .filter(ChatMessageModel.conversation_id == conversation_id)
+        .order_by(ChatMessageModel.update_time.desc())
+        .limit(limit)
+        .all()
+    )
+    recent.reverse()
+    return [{"role": m.role, "content": m.content} for m in recent]
 
 
 async def _run_tool_loop(
@@ -130,11 +177,6 @@ async def _run_tool_loop_stream(
       {"type": "text", "content": "..."}   — 普通文本，可直接推前端
       {"type": "status", "content": "..."} — 状态提示（如"正在创建任务..."）
       {"type": "done", "content": "..."}   — 完整回复文本（用于保存）
-
-    Args:
-        messages: 初始消息列表
-        db: 数据库会话
-        user_id: 当前用户 ID
     """
     full_reply: List[str] = []  # 跨轮累积完整回复
 
@@ -209,8 +251,6 @@ async def _run_tool_loop_stream(
                     yield {"type": "status", "content": "✓ 操作成功"}
                 elif result.get("error"):
                     yield {"type": "status", "content": f"✗ {result['error']}"}
-                elif result.get("id"):
-                    yield {"type": "status", "content": "✓ 操作成功"}
 
         # 工具执行完，继续下一轮（AI 基于结果生成后续回复）
         full_reply = []  # 重置，因为后续回复是新一轮
@@ -220,7 +260,58 @@ async def _run_tool_loop_stream(
 
 
 # ═══════════════════════════════════════════════════════════════
-# 端点
+# 对话窗口（conversation）管理
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/conversations", response_model=ConversationListResponse)
+def list_conversations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """列出当前用户的全部对话窗口（按更新时间倒序）"""
+    conversations = (
+        db.query(Conversation)
+        .filter(Conversation.user_id == current_user.id)
+        .order_by(Conversation.update_time.desc())
+        .all()
+    )
+    return ConversationListResponse(conversations=conversations)
+
+
+@router.post("/conversations", response_model=ConversationResponse)
+def create_conversation(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """新建一个空的对话窗口"""
+    conv = Conversation(user_id=current_user.id, title="新对话")
+    db.add(conv)
+    db.commit()
+    db.refresh(conv)
+    return conv
+
+
+@router.delete("/conversations/{conversation_id}")
+def delete_conversation(
+    conversation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """删除对话窗口及其全部消息（chat_message 外键级联删除）"""
+    conv = (
+        db.query(Conversation)
+        .filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id)
+        .first()
+    )
+    if not conv:
+        raise HTTPException(status_code=404, detail="对话不存在或无权访问")
+    db.delete(conv)
+    db.commit()
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════
+# 对话消息（chat_message）
 # ═══════════════════════════════════════════════════════════════
 
 @router.post("", response_model=ChatResponse)
@@ -231,43 +322,44 @@ async def chat(
 ):
     """主对话端点 — 支持 Function Calling。
 
-    当用户消息涉及任务管理（创建、查询、删除任务/子任务）时，
-    AI 会自动调用对应工具操作数据库，然后基于结果生成自然语言回复。
+    conversation_id 不传时自动新建对话窗口。
+    用户消息与 AI 回复均作为 chat_message 保存。
     """
-    # 获取最近 20 条历史记录
-    recent_history = (
-        db.query(ChatHistoryModel)
-        .filter(ChatHistoryModel.user_id == current_user.id)
-        .order_by(ChatHistoryModel.created_at.desc())
-        .limit(20)
-        .all()
+    # 获取或新建对话窗口
+    conv = _get_or_create_conversation(
+        db, current_user.id, data.conversation_id, first_message=data.content
     )
-    recent_history.reverse()
 
-    history = [
-        {"role": h.role.value, "content": h.content}
-        for h in recent_history
-    ]
+    # 加载该对话窗口最近的历史（作为 AI 上下文）
+    history = _load_history(db, conv.id, limit=20)
 
     # 构建消息并执行工具调用循环
     messages = _build_messages(data.content, history)
     reply = await _run_tool_loop(messages, db, current_user.id)
 
     # 保存用户消息
-    user_msg = ChatHistoryModel(
+    user_msg = ChatMessageModel(
         user_id=current_user.id,
-        role=MessageRole.user,
+        conversation_id=conv.id,
+        role="user",
         content=data.content,
+        token=0,
     )
     db.add(user_msg)
 
     # 保存 AI 回复
-    assistant_msg = ChatHistoryModel(
+    assistant_msg = ChatMessageModel(
         user_id=current_user.id,
-        role=MessageRole.assistant,
+        conversation_id=conv.id,
+        role="assistant",
         content=reply,
+        token=0,
     )
     db.add(assistant_msg)
+
+    # 更新对话标题（未设置时用第一条用户消息）
+    if not conv.title or conv.title == "新对话":
+        conv.title = data.content[:30]
     db.commit()
     db.refresh(assistant_msg)
 
@@ -282,33 +374,27 @@ async def chat_stream(
 ):
     """流式对话 — 实时推送 AI 文本 + 工具调用状态反馈"""
     uid = current_user.id
+    conv = _get_or_create_conversation(
+        db, uid, data.conversation_id, first_message=data.content
+    )
 
     # 先保存用户消息
-    user_msg = ChatHistoryModel(
+    user_msg = ChatMessageModel(
         user_id=uid,
-        role=MessageRole.user,
+        conversation_id=conv.id,
+        role="user",
         content=data.content,
+        token=0,
     )
     db.add(user_msg)
     db.commit()
 
-    # 获取历史
-    recent_history = (
-        db.query(ChatHistoryModel)
-        .filter(ChatHistoryModel.user_id == uid)
-        .order_by(ChatHistoryModel.created_at.desc())
-        .limit(20)
-        .all()
-    )
-    recent_history.reverse()
-    history = [
-        {"role": h.role.value, "content": h.content}
-        for h in recent_history
-    ]
+    # 加载该对话窗口历史
+    history = _load_history(db, conv.id, limit=20)
 
     # 构建消息
     messages = _build_messages(data.content, history)
-    final_reply = ""  # 最终完整回复（用于保存到 chat_history）
+    final_reply = ""  # 最终完整回复（用于保存到 chat_message）
 
     async def generate():
         nonlocal final_reply
@@ -333,10 +419,17 @@ async def chat_stream(
                 from database import SessionLocal
                 save_db = SessionLocal()
                 try:
-                    assistant_msg = ChatHistoryModel(
+                    # 更新对话标题（未设置时用第一条用户消息）
+                    conv2 = save_db.query(Conversation).filter(Conversation.id == conv.id).first()
+                    if conv2 and (not conv2.title or conv2.title == "新对话"):
+                        conv2.title = data.content[:30]
+
+                    assistant_msg = ChatMessageModel(
                         user_id=uid,
-                        role=MessageRole.assistant,
+                        conversation_id=conv.id,
+                        role="assistant",
                         content=final_reply,
+                        token=0,
                     )
                     save_db.add(assistant_msg)
                     save_db.commit()
@@ -365,32 +458,45 @@ def list_tools(current_user: User = Depends(get_current_user)):
 
 @router.get("/history", response_model=ChatHistoryResponse)
 def get_history(
-    limit: int = 50,
+    conversation_id: int,
+    limit: int = 100,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取聊天历史"""
+    """获取某个对话窗口的消息列表（按时间升序）"""
+    conv = (
+        db.query(Conversation)
+        .filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id)
+        .first()
+    )
+    if not conv:
+        raise HTTPException(status_code=404, detail="对话不存在或无权访问")
+
     messages = (
-        db.query(ChatHistoryModel)
-        .filter(ChatHistoryModel.user_id == current_user.id)
-        .order_by(ChatHistoryModel.created_at.desc())
+        db.query(ChatMessageModel)
+        .filter(ChatMessageModel.conversation_id == conv.id)
+        .order_by(ChatMessageModel.update_time.asc())
         .limit(limit)
         .all()
     )
-    messages.reverse()
     return ChatHistoryResponse(
-        messages=[ChatResponse.model_validate(m) for m in messages]
+        conversation_id=conv.id,
+        messages=[ChatResponse.model_validate(m) for m in messages],
     )
 
 
 @router.delete("/history")
 def clear_history(
+    conversation_id: Optional[int] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """清空聊天历史"""
-    db.query(ChatHistoryModel).filter(
-        ChatHistoryModel.user_id == current_user.id
-    ).delete()
+    """清空对话消息（conversation_id 不传时清空该用户全部对话消息）"""
+    query = db.query(ChatMessageModel).filter(
+        ChatMessageModel.user_id == current_user.id
+    )
+    if conversation_id:
+        query = query.filter(ChatMessageModel.conversation_id == conversation_id)
+    query.delete()
     db.commit()
     return {"ok": True}

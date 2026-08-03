@@ -1,114 +1,161 @@
 <template>
-  <div class="d-flex flex-column" style="height: calc(100vh - 48px);">
-    <!-- 顶部 -->
-    <div class="d-flex align-center mb-4">
-      <v-icon size="28" color="primary" class="mr-2">mdi-robot-outline</v-icon>
-      <div>
-        <div class="text-h6 font-weight-bold">AI 助手</div>
-        <div class="text-caption text-grey">随时帮你规划长期任务、拆解目标、管理进度</div>
-      </div>
-      <v-spacer />
-      <v-btn variant="tonal" color="grey" size="small" prepend-icon="mdi-delete-outline" @click="clearHistory">
-        清空对话
-      </v-btn>
-    </div>
-
-    <!-- 消息区域 -->
-    <v-sheet class="flex-grow-1 scroll-container pa-4 mb-4" rounded="lg" elevation="0" border style="min-height: 0; overflow-y: auto;">
-      <div v-if="messages.length === 0" class="d-flex flex-column align-center justify-center" style="height: 100%;">
-        <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-robot-outline</v-icon>
-        <div class="text-h6 text-grey-darken-1 mb-2">你好！有什么可以帮你的？</div>
-        <div class="text-body-2 text-grey text-center" style="max-width: 400px;">
-          我是你的长期任务规划助手，可以帮你规划时间线、
-          拆解大型任务、管理截止日期，或者给你执行建议
-        </div>
-        <div class="mt-4 d-flex gap-2 flex-wrap justify-center">
-          <v-chip v-for="s in suggestions" :key="s" size="small" color="primary" variant="outlined"
-            class="cursor-pointer" @click="sendSuggestion(s)">
-            {{ s }}
-          </v-chip>
-        </div>
+  <div class="d-flex" style="height: calc(100vh - 48px);">
+    <!-- 对话列表侧栏 -->
+    <v-navigation-drawer permanent width="260" class="conversation-drawer">
+      <div class="pa-3">
+        <v-btn color="primary" block prepend-icon="mdi-plus" @click="newConversation" :disabled="loading">
+          新建对话
+        </v-btn>
       </div>
 
-      <div v-else>
-        <div v-for="(msg, i) in messages" :key="i" class="mb-3">
-          <!-- 用户消息 -->
-          <div v-if="msg.role === 'user'" class="d-flex justify-end mb-2">
-            <div class="user-message pa-3">
-              <div class="text-body-2" v-text="msg.content" />
-            </div>
+      <div class="px-2 pb-2 conversation-list">
+        <v-list nav density="comfortable">
+          <v-list-item
+            v-for="conv in conversations"
+            :key="conv.id"
+            :active="conv.id === activeConversationId"
+            class="conversation-item"
+            rounded="lg"
+            @click="switchConversation(conv.id)"
+          >
+            <template v-slot:prepend>
+              <v-icon size="16" color="primary" class="mr-2">mdi-message-outline</v-icon>
+            </template>
+            <v-list-item-title class="text-caption conversation-title">
+              {{ conv.title || '新对话' }}
+            </v-list-item-title>
+            <v-list-item-subtitle class="text-caption text-grey">
+              {{ formatConvTime(conv.update_time) }}
+            </v-list-item-subtitle>
+            <template v-slot:append>
+              <v-btn
+                icon="mdi-close"
+                size="x-small"
+                variant="text"
+                class="conversation-delete"
+                @click.stop="deleteConversation(conv.id)"
+              />
+            </template>
+          </v-list-item>
+        </v-list>
+        <div v-if="conversations.length === 0" class="text-center text-caption text-grey py-6">
+          还没有对话，点击「新建对话」开始
+        </div>
+      </div>
+    </v-navigation-drawer>
+
+    <!-- 聊天主区域 -->
+    <div class="d-flex flex-column flex-grow-1" style="min-width: 0;">
+      <!-- 顶部 -->
+      <div class="d-flex align-center mb-4">
+        <v-icon size="28" color="primary" class="mr-2">mdi-robot-outline</v-icon>
+        <div>
+          <div class="text-h6 font-weight-bold">AI 助手</div>
+          <div class="text-caption text-grey">随时帮你规划长期任务、拆解目标、管理进度</div>
+        </div>
+        <v-spacer />
+        <v-btn variant="tonal" color="grey" size="small" prepend-icon="mdi-delete-outline" @click="clearHistory" :disabled="!activeConversationId">
+          清空当前对话
+        </v-btn>
+      </div>
+
+      <!-- 消息区域 -->
+      <v-sheet class="flex-grow-1 scroll-container pa-4 mb-4" rounded="lg" elevation="0" border style="min-height: 0; overflow-y: auto;">
+        <div v-if="messages.length === 0" class="d-flex flex-column align-center justify-center" style="height: 100%;">
+          <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-robot-outline</v-icon>
+          <div class="text-h6 text-grey-darken-1 mb-2">你好！有什么可以帮你的？</div>
+          <div class="text-body-2 text-grey text-center" style="max-width: 400px;">
+            我是你的长期任务规划助手，可以帮你规划时间线、
+            拆解大型任务、管理截止日期，或者给你执行建议
           </div>
-          <!-- AI 消息 -->
-          <div v-else class="d-flex align-start gap-2">
-            <v-avatar size="32" color="primary" class="mt-1">
-              <v-icon size="18" color="white">mdi-robot</v-icon>
-            </v-avatar>
-            <div class="assistant-message-wrapper" style="max-width: 92%;">
-              <div class="assistant-message pa-3">
-                <!-- 流式传输中：空内容 loading -->
-                <div v-if="msg.streaming && !msg.content" class="d-flex align-center">
-                  <v-progress-circular indeterminate size="16" width="2" color="primary" />
-                  <span class="text-caption text-grey ml-2">思考中...</span>
+          <div class="mt-4 d-flex gap-2 flex-wrap justify-center">
+            <v-chip v-for="s in suggestions" :key="s" size="small" color="primary" variant="outlined"
+              class="cursor-pointer" @click="sendSuggestion(s)">
+              {{ s }}
+            </v-chip>
+          </div>
+        </div>
+
+        <div v-else>
+          <div v-for="(msg, i) in messages" :key="i" class="mb-3">
+            <!-- 用户消息 -->
+            <div v-if="msg.role === 'user'" class="d-flex justify-end mb-2">
+              <div class="user-message pa-3">
+                <div class="text-body-2" v-text="msg.content" />
+              </div>
+            </div>
+            <!-- AI 消息 -->
+            <div v-else class="d-flex align-start gap-2">
+              <v-avatar size="32" color="primary" class="mt-1">
+                <v-icon size="18" color="white">mdi-robot</v-icon>
+              </v-avatar>
+              <div class="assistant-message-wrapper" style="max-width: 92%;">
+                <div class="assistant-message pa-3">
+                  <!-- 流式传输中：空内容 loading -->
+                  <div v-if="msg.streaming && !msg.content" class="d-flex align-center">
+                    <v-progress-circular indeterminate size="16" width="2" color="primary" />
+                    <span class="text-caption text-grey ml-2">思考中...</span>
+                  </div>
+                  <!-- 有内容时始终用 Markdown 渲染 -->
+                  <div v-else class="text-body-2 message-content"
+                    :key="'md-' + i + '-' + (msg.streaming ? 1 : 0)"
+                    v-html="renderMarkdown(msg.content)" />
                 </div>
-                <!-- 有内容时始终用 Markdown 渲染 -->
-                <div v-else class="text-body-2 message-content"
-                  :key="'md-' + i + '-' + (msg.streaming ? 1 : 0)"
-                  v-html="renderMarkdown(msg.content)" />
-              </div>
-              <!-- 提取到任务 JSON 时显示操作按钮 -->
-              <div v-if="!msg.streaming && msg.taskData" class="d-flex align-center pa-2" style="border-top: 1px solid #E0E0E0;">
-                <v-icon size="18" color="primary" class="mr-1">mdi-clipboard-list-outline</v-icon>
-                <span class="text-caption mr-2">
-                  检测到 {{ msg.taskData.subtasks?.length || 0 }} 个子任务
-                </span>
-                <v-spacer />
-                <v-btn
-                  v-if="!msg.taskSaved"
-                  size="x-small"
-                  color="primary"
-                  variant="tonal"
-                  prepend-icon="mdi-plus"
-                  :loading="msg.saving"
-                  @click="saveTaskFromChat(i)"
-                >
-                  添加到任务列表
-                </v-btn>
-                <v-chip v-else size="x-small" color="success" variant="tonal" prepend-icon="mdi-check">
-                  已添加
-                </v-chip>
+                <!-- 提取到任务 JSON 时显示操作按钮 -->
+                <div v-if="!msg.streaming && msg.taskData" class="d-flex align-center pa-2" style="border-top: 1px solid #E0E0E0;">
+                  <v-icon size="18" color="primary" class="mr-1">mdi-clipboard-list-outline</v-icon>
+                  <span class="text-caption mr-2">
+                    检测到 {{ msg.taskData.subtasks?.length || 0 }} 个子任务
+                  </span>
+                  <v-spacer />
+                  <v-btn
+                    v-if="!msg.taskSaved"
+                    size="x-small"
+                    color="primary"
+                    variant="tonal"
+                    prepend-icon="mdi-plus"
+                    :loading="msg.saving"
+                    @click="saveTaskFromChat(i)"
+                  >
+                    添加到任务列表
+                  </v-btn>
+                  <v-chip v-else size="x-small" color="success" variant="tonal" prepend-icon="mdi-check">
+                    已添加
+                  </v-chip>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </v-sheet>
+      </v-sheet>
 
-    <!-- 输入区域 -->
-    <v-card flat rounded="lg" border style="flex-shrink: 0;">
-      <v-card-text class="pa-4">
-        <div class="d-flex align-end gap-3">
-          <v-textarea
-            v-model="input"
-            placeholder="输入你的问题，比如：帮我规划一个三个月的学习计划..."
-            rows="3"
-            auto-grow
-            hide-details
-            variant="solo"
-            class="flex-grow-1"
-            @keydown.enter.exact.prevent="sendMessage"
-            :disabled="loading"
-          />
-          <v-btn
-            :icon="loading ? 'mdi-stop' : 'mdi-send'"
-            :color="loading ? 'grey' : 'primary'"
-            size="40"
-            variant="flat"
-            @click="loading ? stopGeneration() : sendMessage()"
-            :disabled="!input.trim() && !loading"
-          />
-        </div>
-      </v-card-text>
-    </v-card>
+      <!-- 输入区域 -->
+      <v-card flat rounded="lg" border style="flex-shrink: 0;">
+        <v-card-text class="pa-4">
+          <div class="d-flex align-end gap-3">
+            <v-textarea
+              v-model="input"
+              placeholder="输入你的问题，比如：帮我规划一个三个月的学习计划..."
+              rows="3"
+              auto-grow
+              hide-details
+              variant="solo"
+              class="flex-grow-1"
+              @keydown.enter.exact.prevent="sendMessage"
+              :disabled="loading"
+            />
+            <v-btn
+              :icon="loading ? 'mdi-stop' : 'mdi-send'"
+              :color="loading ? 'grey' : 'primary'"
+              size="40"
+              variant="flat"
+              @click="loading ? stopGeneration() : sendMessage()"
+              :disabled="!input.trim() && !loading"
+            />
+          </div>
+        </v-card-text>
+      </v-card>
+    </div>
   </div>
 </template>
 
@@ -164,6 +211,10 @@ const input = ref('')
 const loading = ref(false)
 let abortController = null
 
+// ---- 对话窗口管理 ----
+const conversations = ref([])
+const activeConversationId = ref(null)
+
 const suggestions = [
   '帮我规划一个长期任务的时间线',
   '我这周有哪些 Deadline？',
@@ -172,6 +223,52 @@ const suggestions = [
 ]
 
 const API_BASE = '/api'
+
+function formatConvTime(value) {
+  if (!value) return ''
+  const d = new Date(value)
+  const now = new Date()
+  if (d.toDateString() === now.toDateString()) {
+    return `今天 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+async function loadConversations() {
+  try {
+    const res = await authFetch(`${API_BASE}/chat/conversations`)
+    if (!res.ok) return
+    const data = await res.json()
+    conversations.value = data.conversations || []
+  } catch { /* ignore */ }
+}
+
+/** 新建对话：清空消息区，下次发送时后端自动创建 conversation */
+function newConversation() {
+  if (loading.value) return
+  activeConversationId.value = null
+  messages.value = []
+}
+
+/** 切换对话：加载该对话的历史消息 */
+async function switchConversation(convId) {
+  if (loading.value) return
+  activeConversationId.value = convId
+  messages.value = []
+  await loadHistory(convId)
+}
+
+/** 删除对话 */
+async function deleteConversation(convId) {
+  try {
+    await authFetch(`${API_BASE}/chat/conversations/${convId}`, { method: 'DELETE' })
+    conversations.value = conversations.value.filter(c => c.id !== convId)
+    if (activeConversationId.value === convId) {
+      activeConversationId.value = null
+      messages.value = []
+    }
+  } catch { /* ignore */ }
+}
 
 // ---- Markdown / JSON 处理 ----
 
@@ -233,9 +330,16 @@ async function sendMessage() {
     const res = await authFetch(`${API_BASE}/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, conversation_id: activeConversationId.value }),
       signal: abortController.signal,
     })
+
+    if (!res.ok || !res.body) {
+      const errText = await res.text()
+      let detail = errText
+      try { detail = JSON.parse(errText).detail || errText } catch { /* ignore */ }
+      throw new Error(typeof detail === 'string' ? detail : '请求失败')
+    }
 
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
@@ -274,7 +378,7 @@ async function sendMessage() {
     }
   } catch (e) {
     if (e.name !== 'AbortError') {
-      messages.value[aiIndex].content = '网络请求失败，请检查后端是否启动。'
+      messages.value[aiIndex].content = '网络请求失败：' + (e.message || '请检查后端是否启动')
     }
   } finally {
     // 用新对象替换，强制 Vue 重新渲染 v-html
@@ -288,6 +392,13 @@ async function sendMessage() {
     if (taskData) {
       messages.value[aiIndex].taskData = taskData
       messages.value[aiIndex].taskSaved = false
+    }
+
+    // 刷新对话列表（新对话会出现在列表里，并自动选中它）
+    const wasNew = !activeConversationId.value
+    await loadConversations()
+    if (wasNew && conversations.value.length > 0) {
+      activeConversationId.value = conversations.value[0].id
     }
 
     scrollToBottom()
@@ -340,21 +451,23 @@ function stopGeneration() {
   }
 }
 
-async function loadHistory() {
+async function loadHistory(convId) {
+  if (!convId) return
   try {
-    const res = await authFetch(`${API_BASE}/chat/history`)
+    const res = await authFetch(`${API_BASE}/chat/history?conversation_id=${convId}`)
+    if (!res.ok) return
     const data = await res.json()
-    if (data.messages) {
-      messages.value = data.messages.map(m => ({ role: m.role, content: m.content }))
-    }
+    messages.value = (data.messages || []).map(m => ({ role: m.role, content: m.content }))
+    scrollToBottom()
   } catch {
     // 忽略加载失败
   }
 }
 
 async function clearHistory() {
+  if (!activeConversationId.value) return
   try {
-    await authFetch(`${API_BASE}/chat/history`, { method: 'DELETE' })
+    await authFetch(`${API_BASE}/chat/history?conversation_id=${activeConversationId.value}`, { method: 'DELETE' })
   } catch { /* ignore */ }
   messages.value = []
 }
@@ -367,12 +480,40 @@ async function scrollToBottom() {
   }
 }
 
-onMounted(() => {
-  loadHistory()
+onMounted(async () => {
+  await loadConversations()
+  // 默认选中最近一个对话；没有对话则保持空（发消息时自动新建）
+  if (conversations.value.length > 0) {
+    activeConversationId.value = conversations.value[0].id
+    await loadHistory(activeConversationId.value)
+  }
 })
 </script>
 
 <style scoped>
+.conversation-drawer {
+  background: #FAFBFF;
+  border-right: 1px solid #EDF0F6;
+}
+.conversation-list {
+  overflow-y: auto;
+  height: calc(100% - 76px);
+}
+.conversation-item {
+  margin-bottom: 2px;
+}
+.conversation-item:hover .conversation-delete {
+  opacity: 1;
+}
+.conversation-delete {
+  opacity: 0;
+  transition: opacity .15s;
+}
+.conversation-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .user-message {
   background: #1565C0;
   color: white;
