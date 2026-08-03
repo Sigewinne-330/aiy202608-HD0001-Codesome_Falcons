@@ -35,8 +35,14 @@
               </v-list-item>
             </v-list>
           </v-menu>
-          <v-btn variant="text" color="primary" rounded="lg" to="/login">{{ $t('landing.login') }}</v-btn>
-          <v-btn color="primary" rounded="lg" to="/register" class="nav-register">{{ $t('landing.startFree') }}</v-btn>
+          <v-btn v-if="isAuthenticated" color="primary" rounded="lg" to="/calendar" class="nav-register">
+            <v-icon start>mdi-view-dashboard</v-icon>
+            {{ $t('landing.enterApp') }}
+          </v-btn>
+          <template v-else>
+            <v-btn variant="text" color="primary" rounded="lg" to="/login">{{ $t('landing.login') }}</v-btn>
+            <v-btn color="primary" rounded="lg" to="/register" class="nav-register">{{ $t('landing.startFree') }}</v-btn>
+          </template>
         </div>
       </div>
     </header>
@@ -65,6 +71,19 @@
 
             <div class="hero-actions">
               <v-btn
+                v-if="isAuthenticated"
+                size="x-large"
+                color="primary"
+                rounded="lg"
+                to="/calendar"
+                class="hero-cta"
+                elevation="4"
+              >
+                {{ $t('landing.enterApp') }}
+                <v-icon end>mdi-arrow-right</v-icon>
+              </v-btn>
+              <v-btn
+                v-else
                 size="x-large"
                 color="primary"
                 rounded="lg"
@@ -275,10 +294,10 @@
                 color="white"
                 rounded="lg"
                 class="cta-btn"
-                to="/register"
+                :to="isAuthenticated ? '/calendar' : '/register'"
               >
                 <v-icon start>mdi-rocket-launch</v-icon>
-                {{ $t('landing.ctaBtn') }}
+                {{ isAuthenticated ? $t('landing.enterApp') : $t('landing.ctaBtn') }}
               </v-btn>
             </div>
           </v-card>
@@ -306,8 +325,10 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { setLocale, LOCALE_NAMES, SUPPORTED_LOCALES } from '@/i18n'
+import { useAuth } from '@/stores/auth'
 
 const { locale } = useI18n()
+const { isAuthenticated } = useAuth()
 
 const currentLocale = computed(() => locale.value)
 const currentLanguageLabel = computed(() => LOCALE_NAMES[locale.value] || '简体中文')

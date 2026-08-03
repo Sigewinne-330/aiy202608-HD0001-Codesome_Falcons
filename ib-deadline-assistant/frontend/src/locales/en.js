@@ -101,6 +101,7 @@ export default {
     title2: 'Let AI plan ahead for you.',
     subtitle: 'Multimodal capture · AI reverse planning · Smart scheduling — turn every deadline into a steady plan.',
     startNow: 'Get Started',
+    enterApp: 'Open Workspace',
     learnMore: 'Learn more',
     point1: 'Voice / image / text capture',
     point2: 'Break down from the deadline',

@@ -1,6 +1,6 @@
 <template>
   <v-app>
-    <template v-if="isAuthenticated">
+    <template v-if="isAuthenticated && !isLanding">
       <v-app-bar class="workspace-bar" height="64" flat>
         <v-btn
           icon="mdi-format-list-bulleted"
@@ -169,6 +169,9 @@ const route = useRoute()
 const { t } = useI18n()
 const { user, token, isAuthenticated, logout, restoreSession } = useAuth()
 
+// Landing 介绍页是所有人的第一界面：即使已登录也走干净布局（无顶栏/侧栏）
+const isLanding = computed(() => route.name === 'Landing')
+
 const taskDrawer = ref(false)
 const agentDrawer = ref(false)
 const settingsOpen = ref(false)
@@ -285,7 +288,7 @@ function formatReminderDate(value) {
 function handleLogout() {
   settingsOpen.value = false
   logout()
-  router.push('/login')
+  router.push('/')  // 退出后回到介绍页（所有人的第一界面）
 }
 
 function closeDrawers() {
