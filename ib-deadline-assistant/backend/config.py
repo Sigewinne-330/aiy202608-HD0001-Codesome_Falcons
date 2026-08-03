@@ -28,6 +28,9 @@ class Settings:
     ARK_BASE_URL: str = os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
     ARK_MODEL: str = os.getenv("ARK_MODEL", "doubao-seed-2-1-pro-260628")
 
+    # Ark 多模态模型（图片输入 + function calling）
+    ARK_VISION_MODEL: str = os.getenv("ARK_VISION_MODEL", "doubao-seed-2-1-pro-260628")
+
     # JWT
     SECRET_KEY: str = os.getenv("SECRET_KEY", "ib-assistant-secret-key-change-me")
     ALGORITHM: str = "HS256"

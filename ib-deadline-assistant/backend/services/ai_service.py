@@ -97,11 +97,17 @@ class AIService:
         self.ark_async = _make_async_client(settings.ARK_API_KEY, settings.ARK_BASE_URL)
         self.ds_async = _make_async_client(settings.DEEPSEEK_API_KEY, settings.DEEPSEEK_BASE_URL)
 
+        # 多模态客户端（与 Ark 共用 key/base_url，使用独立 model 名）
+        self.vision_sync = _make_client(settings.ARK_API_KEY, settings.ARK_BASE_URL)
+        self.vision_async = _make_async_client(settings.ARK_API_KEY, settings.ARK_BASE_URL)
+
         # 日志：告知运维当前哪些引擎可用
         if self.ark_client:
             logger.info(f"Ark client ready, model={settings.ARK_MODEL}")
         if self.ds_client:
             logger.info(f"DeepSeek client ready, model={settings.DEEPSEEK_MODEL}")
+        if self.vision_sync:
+            logger.info(f"Vision client ready, model={settings.ARK_VISION_MODEL}")
         if not self.ark_client and not self.ds_client:
             logger.error("No AI API key configured, all AI calls will fail")
 
@@ -323,6 +329,82 @@ class AIService:
                     continue
 
         raise RuntimeError(f"所有 AI 引擎流式工具调用均失败。最后错误：{last_error}")
+
+    async def chat_stream_with_tools_vision(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """多模态流式对话 + 工具调用（仅用 Ark 多模态模型）。
+
+        与 chat_stream_with_tools 的区别：
+        - 使用 ARK_VISION_MODEL 模型，支持图片输入
+        - 仅尝试 Ark（不降级 DeepSeek，因 DeepSeek 不支持多模态）
+        - 消息中可包含 image_url content 类型
+        """
+        if not self.vision_async:
+            raise RuntimeError("多模态模型未配置 API Key，请在 .env 中设置 ARK_API_KEY。")
+
+        engine = "Ark-Vision"
+        try:
+            kwargs = {
+                "model": settings.ARK_VISION_MODEL,
+                "messages": messages,
+                "tools": tools,
+                "tool_choice": "auto",
+                "temperature": 0.7,
+                "max_tokens": 2048,
+                "stream": True,
+                "extra_body": {"thinking": {"type": "disabled"}},
+            }
+
+            logger.info(f"[LLM-STREAM-VISION] engine={engine}, model={settings.ARK_VISION_MODEL}")
+
+            stream = await self.vision_async.chat.completions.create(**kwargs)
+
+            tool_calls_acc: List[Dict[str, Any]] = []
+            full_text: List[str] = []
+
+            async for chunk in stream:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if not delta:
+                    continue
+
+                if delta.content:
+                    full_text.append(delta.content)
+                    logger.info(f"[LLM-CHUNK] {delta.content!r}")
+                    yield {"type": "text", "content": delta.content}
+
+                if delta.tool_calls:
+                    for tc in delta.tool_calls:
+                        while len(tool_calls_acc) <= tc.index:
+                            tool_calls_acc.append({
+                                "id": "",
+                                "type": "function",
+                                "function": {"name": "", "arguments": ""},
+                            })
+                        acc = tool_calls_acc[tc.index]
+                        if tc.id:
+                            acc["id"] = tc.id
+                        if tc.function and tc.function.name:
+                            logger.info(f"[LLM-TOOL] name={tc.function.name!r}")
+                            acc["function"]["name"] = tc.function.name
+                        if tc.function and tc.function.arguments:
+                            logger.info(f"[LLM-TOOL-ARG] {tc.function.arguments!r}")
+                            acc["function"]["arguments"] += tc.function.arguments
+
+            final_text = "".join(full_text)
+            if tool_calls_acc:
+                logger.info(f"[LLM-TOOLS-VISION] tool_calls={[t['function']['name'] for t in tool_calls_acc]} text={final_text[:80]!r}")
+                yield {"type": "tool_calls", "tool_calls": tool_calls_acc}
+            else:
+                logger.info(f"[LLM-DONE-VISION] 完整返回（{len(final_text)} 字符）:\n{final_text}")
+
+            return
+
+        except Exception as e:
+            logger.error(f"{engine} chat_stream_with_tools_vision failed: {e}")
+            raise RuntimeError(f"多模态模型调用失败：{e}")
 
     async def chat_with_tools(
         self,

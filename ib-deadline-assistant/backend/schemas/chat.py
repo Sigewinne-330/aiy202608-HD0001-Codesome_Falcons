@@ -4,9 +4,10 @@ from typing import List, Optional
 
 
 class ChatMessage(BaseModel):
-    """单条消息请求。conversation_id 不传时自动新建对话。"""
+    """单条消息请求。conversation_id 不传时自动新建对话。images 为 base64 data URL 列表（最多 5 张）。"""
     content: str
     conversation_id: Optional[int] = None
+    images: Optional[List[str]] = None  # data:image/...;base64,...
 
 
 class ChatResponse(BaseModel):

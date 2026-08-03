@@ -90,12 +90,30 @@ def _with_date_prefix(user_message: str) -> str:
 def _build_messages(
     user_message: str,
     history: List[Dict[str, str]],
+    images: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
-    """构建带 system prompt 的完整消息列表，用户消息自动附加当前日期"""
+    """构建带 system prompt 的完整消息列表。
+
+    当 images 非空时，用户消息使用多模态格式（text + image_url），
+    否则使用纯文本格式。
+    """
+    if images:
+        content_parts: List[Dict[str, Any]] = [
+            {"type": "text", "text": _with_date_prefix(user_message)},
+        ]
+        for img in images[:5]:  # 最多 5 张
+            content_parts.append({
+                "type": "image_url",
+                "image_url": {"url": img},
+            })
+        user_content: Any = content_parts
+    else:
+        user_content = _with_date_prefix(user_message)
+
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
         *history,
-        {"role": "user", "content": _with_date_prefix(user_message)},
+        {"role": "user", "content": user_content},
     ]
 
 
@@ -175,8 +193,12 @@ async def _run_tool_loop_stream(
     messages: List[Dict[str, Any]],
     db: Session,
     user_id: int,
+    has_images: bool = False,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """流式工具调用循环：边推文本边处理工具调用，工具执行时推送状态反馈。
+
+    当 has_images=True 时，首轮使用多模态模型（支持图片输入），
+    工具执行完毕后自动将图片从用户消息中剥离，后续轮次切回常规模型。
 
     产出事件格式：
       {"type": "text", "content": "..."}   — 普通文本，可直接推前端
@@ -184,14 +206,21 @@ async def _run_tool_loop_stream(
       {"type": "done", "content": "..."}   — 完整回复文本（用于保存）
     """
     full_reply: List[str] = []  # 跨轮累积完整回复
+    use_vision = has_images
 
     for _round in range(MAX_TOOL_ROUNDS):
         tool_calls = None
 
-        async for event in ai_service.chat_stream_with_tools(messages, ALL_TOOLS):
+        # 选择模型：首轮有图片 → 多模态模型；后续 → 常规模型
+        if use_vision:
+            stream_gen = ai_service.chat_stream_with_tools_vision(messages, ALL_TOOLS)
+        else:
+            stream_gen = ai_service.chat_stream_with_tools(messages, ALL_TOOLS)
+
+        async for event in stream_gen:
             if event["type"] == "text":
                 full_reply.append(event["content"])
-                yield event  # 直接透传文本
+                yield event
 
             elif event["type"] == "tool_calls":
                 tool_calls = event["tool_calls"]
@@ -254,7 +283,6 @@ async def _run_tool_loop_stream(
                 yield {"type": "status", "content": f"✓ 找到 {count} 条记录"}
             elif isinstance(result, dict):
                 if result.get("ok") and result.get("subject"):
-                    # 知识库工具：显示加载了哪个学科
                     content_len = len(result.get("content", ""))
                     yield {"type": "status", "content": f"✓ 已加载 {result['subject']} 指南 ({content_len:,} 字符)"}
                 elif result.get("ok"):
@@ -262,7 +290,19 @@ async def _run_tool_loop_stream(
                 elif result.get("error"):
                     yield {"type": "status", "content": f"✗ {result['error']}"}
 
-        # 工具执行完，继续下一轮（AI 基于结果生成后续回复）
+        # 首轮（多模态）结束后：将图片从用户消息中剥离，后续切回常规模型
+        if use_vision:
+            use_vision = False
+            for msg in messages:
+                if msg["role"] == "user" and isinstance(msg.get("content"), list):
+                    # 只保留文本部分
+                    text_parts = [
+                        part["text"] for part in msg["content"]
+                        if part.get("type") == "text"
+                    ]
+                    msg["content"] = "".join(text_parts) if text_parts else msg["content"]
+
+        # 工具执行完，继续下一轮
         full_reply = []  # 重置，因为后续回复是新一轮
 
     # 超过最大轮次
@@ -344,7 +384,7 @@ async def chat(
     history = _load_history(db, conv.id, limit=20)
 
     # 构建消息并执行工具调用循环
-    messages = _build_messages(data.content, history)
+    messages = _build_messages(data.content, history, images=data.images)
     reply = await _run_tool_loop(messages, db, current_user.id)
 
     # 保存用户消息
@@ -403,13 +443,14 @@ async def chat_stream(
     history = _load_history(db, conv.id, limit=20)
 
     # 构建消息
-    messages = _build_messages(data.content, history)
+    has_images = bool(data.images)
+    messages = _build_messages(data.content, history, images=data.images)
     final_reply = ""  # 最终完整回复（用于保存到 chat_message）
 
     async def generate():
         nonlocal final_reply
         try:
-            async for event in _run_tool_loop_stream(messages, db, uid):
+            async for event in _run_tool_loop_stream(messages, db, uid, has_images=has_images):
                 if event["type"] == "text":
                     yield f"data: {json.dumps(event['content'], ensure_ascii=False)}\n\n"
 

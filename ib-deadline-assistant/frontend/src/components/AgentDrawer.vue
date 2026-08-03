@@ -93,25 +93,52 @@
     </div>
 
     <div class="agent-panel__composer">
-      <v-textarea
-        v-model="input"
-        :placeholder="$t('agent.placeholder')"
-        rows="1"
-        auto-grow
-        max-rows="5"
-        variant="solo-filled"
-        flat
-        hide-details
-        :disabled="loading"
-        @keydown.enter.exact.prevent="sendMessage"
-      />
-      <v-btn
-        :icon="loading ? 'mdi-stop' : 'mdi-arrow-up'"
-        :color="loading ? 'grey' : 'primary'"
-        variant="flat"
-        :disabled="!loading && !input.trim()"
-        @click="loading ? stopGeneration() : sendMessage()"
-      />
+      <!-- 已选图片预览 -->
+      <div v-if="selectedImages.length" class="image-preview-row">
+        <div v-for="(img, idx) in selectedImages" :key="idx" class="image-preview-thumb">
+          <img :src="img.dataUrl" alt="preview" />
+          <button type="button" class="image-remove-btn" @click="removeImage(idx)" aria-label="移除图片">
+            <v-icon icon="mdi-close" size="12" />
+          </button>
+        </div>
+      </div>
+      <div class="composer-row">
+        <input
+          ref="imageInput"
+          type="file"
+          accept="image/*"
+          multiple
+          style="display:none"
+          @change="onImagesSelected"
+        />
+        <v-btn
+          icon="mdi-image-outline"
+          variant="text"
+          size="small"
+          :disabled="loading || selectedImages.length >= 5"
+          :color="selectedImages.length ? 'deep-purple' : undefined"
+          @click="$refs.imageInput.click()"
+        />
+        <v-textarea
+          v-model="input"
+          :placeholder="$t('agent.placeholder')"
+          rows="1"
+          auto-grow
+          max-rows="5"
+          variant="solo-filled"
+          flat
+          hide-details
+          :disabled="loading"
+          @keydown.enter.exact.prevent="sendMessage"
+        />
+        <v-btn
+          :icon="loading ? 'mdi-stop' : 'mdi-arrow-up'"
+          :color="loading ? 'grey' : 'primary'"
+          variant="flat"
+          :disabled="!loading && !input.trim()"
+          @click="loading ? stopGeneration() : sendMessage()"
+        />
+      </div>
     </div>
     <div class="agent-panel__note">{{ $t('agent.note') }}</div>
   </div>
@@ -170,6 +197,8 @@ const loading = ref(false)
 const messageContainer = ref(null)
 const activeConversationId = ref(null)
 const conversations = ref([])
+const selectedImages = ref([])  // [{ dataUrl, file }]
+const imageInput = ref(null)
 let controller = null
 
 const suggestions = [
@@ -214,6 +243,29 @@ function newConversation() {
   if (loading.value) return
   activeConversationId.value = null
   messages.value = []
+  selectedImages.value = []
+}
+
+// ---- 图片上传 ----
+
+function onImagesSelected(e) {
+  const files = Array.from(e.target.files || [])
+  const remaining = 5 - selectedImages.value.length
+  if (remaining <= 0) return
+  const toAdd = files.slice(0, remaining)
+  toAdd.forEach(file => {
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      selectedImages.value.push({ dataUrl: ev.target.result, file })
+    }
+    reader.readAsDataURL(file)
+  })
+  // 重置 input 以便重复选择同一文件
+  if (imageInput.value) imageInput.value.value = ''
+}
+
+function removeImage(idx) {
+  selectedImages.value.splice(idx, 1)
 }
 
 /** 切换对话：加载该对话的历史消息 */
@@ -252,7 +304,9 @@ async function sendMessage() {
   messages.value.push({ role: 'user', content })
   messages.value.push({ role: 'assistant', content: '', streaming: true })
   const responseIndex = messages.value.length - 1
+  const images = selectedImages.value.map(img => img.dataUrl)
   input.value = ''
+  selectedImages.value = []
   loading.value = true
   let taskMutationSucceeded = false
   await scrollToBottom()
@@ -270,10 +324,12 @@ async function sendMessage() {
       }
     }
     controller = new AbortController()
+    const body = { content, conversation_id: activeConversationId.value }
+    if (images.length) body.images = images
     const response = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: headers({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ content, conversation_id: activeConversationId.value }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     })
     if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
@@ -373,7 +429,12 @@ onMounted(loadHistory)
 .agent-md :deep(tr:nth-child(even) td) { background: #f8f9fc; }
 .agent-md :deep(a) { color: #315fdf; }
 .agent-md :deep(.katex) { font-size: 1.05em; }
-.agent-panel__composer { display: flex; align-items: flex-end; gap: 10px; margin: 12px 14px 6px; padding: 8px; border: 1px solid #dfe4ee; border-radius: 18px; background: #f8f9fc; }
+.agent-panel__composer { display: flex; flex-direction: column; gap: 0; margin: 12px 14px 6px; padding: 8px; border: 1px solid #dfe4ee; border-radius: 18px; background: #f8f9fc; }
+.image-preview-row { display: flex; gap: 8px; padding: 0 4px 8px 4px; overflow-x: auto; }
+.image-preview-thumb { position: relative; width: 56px; height: 56px; flex: 0 0 auto; border-radius: 10px; overflow: hidden; border: 1px solid #dfe4ee; }
+.image-preview-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.image-remove-btn { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(0,0,0,.45); color: #fff; cursor: pointer; padding: 0; }
+.composer-row { display: flex; align-items: flex-end; gap: 10px; }
 .agent-panel__note { padding: 0 20px 12px; color: #a0a7b5; text-align: center; font-size: 10px; }
 .typing-dots { display: flex; gap: 4px; padding: 4px 2px; }
 .typing-dots i { width: 6px; height: 6px; border-radius: 50%; background: #8590a6; animation: dotPulse 1s infinite alternate; }
