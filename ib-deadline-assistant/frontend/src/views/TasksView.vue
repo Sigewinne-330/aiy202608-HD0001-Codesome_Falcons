@@ -149,7 +149,6 @@
               <div class="subtask-copy">
                 <div>
                   <strong>{{ subtask.title }}</strong>
-                  <v-chip v-if="subtask.is_final" size="x-small" color="deep-purple" variant="tonal">{{ $t('tasks.finalNode') }}</v-chip>
                 </div>
                 <small>{{ subtask.deadline ? formatDate(subtask.deadline) : $t('tasks.noDate') }}</small>
               </div>

@@ -28,12 +28,11 @@ def create_task(
     deadline: Optional[str] = None,
     priority: str = "medium",
     estimated_hours: float = 0,
-    parent_id: Optional[int] = None,
     task_type: str = "todo",
     status: str = "todo",
     personal_deadline: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """创建任务。可以是独立任务，也可以指定 parent_id 作为某个任务的子任务。
+    """创建任务。子任务应通过 create_subtask 写入 sub_task 表。
 
     Args:
         db: 数据库会话
@@ -44,7 +43,9 @@ def create_task(
         deadline: 截止日期，格式 YYYY-MM-DD
         priority: low | medium | high | urgent
         estimated_hours: 预估工时（小时）
-        parent_id: 父任务 ID，创建子任务时传入
+        task_type: todo | process
+        status: 任务状态
+        personal_deadline: 个人截止时间
 
     Returns:
         包含新任务完整信息的 dict
@@ -67,7 +68,7 @@ def create_task(
     except ValueError:
         kind = TaskType.todo
 
-    # 映射 LLM 传入的 status（schema 接受 pending/in_progress/done 等）
+    # 映射 LLM 传入的 status
     status_map = {"pending": TaskStatus.todo, "todo": TaskStatus.todo,
                   "in_progress": TaskStatus.in_progress, "done": TaskStatus.done,
                   "overdue": TaskStatus.overdue}
@@ -76,25 +77,10 @@ def create_task(
     except ValueError:
         task_status = TaskStatus.todo
 
-    # personal_deadline
-
-    if parent_id is not None:
-        parent = db.query(Task).filter(
-            Task.id == parent_id,
-            Task.user_id == actual_uid,
-        ).first()
-        if not parent:
-            return {"error": f"父任务 {parent_id} 不存在或无权操作"}
-        if parent.task_type != TaskType.process:
-            return {"error": "待办事项不能添加子任务"}
-        kind = TaskType.todo
-
     task = Task(
         user_id=actual_uid,
-        parent_id=parent_id,
         id_name=title,
         task_type=kind,
-        is_final=False,
         title=title,
         description=description,
         subject=subject,
@@ -105,28 +91,10 @@ def create_task(
     )
     db.add(task)
 
-    if parent_id is None and kind == TaskType.process:
-        db.flush()
-        db.add(Task(
-            user_id=actual_uid,
-            parent_id=task.id,
-            id_name=task.title,
-            task_type=TaskType.todo,
-            is_final=True,
-            title=task.title,
-            description="流程任务最终节点",
-            subject=task.subject,
-            priority=task.priority,
-            deadline=task.deadline,
-            status=TaskStatus.todo,
-            estimated_hours=0,
-            progress=0,
-        ))
-
     db.commit()
     db.refresh(task)
 
-    logger.info(f"Task created: id={task.id}, title={task.title}, parent_id={task.parent_id}")
+    logger.info(f"Task created: id={task.id}, title={task.title}")
     return _task_to_dict(task)
 
 
@@ -134,7 +102,6 @@ def list_tasks(
     db: Session,
     user_id: int,
     status: Optional[str] = None,
-    parent_id: Optional[int] = None,
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
     """查询用户的所有任务，包含全部字段信息。
@@ -143,7 +110,6 @@ def list_tasks(
         db: 数据库会话
         user_id: 用户 ID
         status: 按状态过滤（todo | in_progress | done | overdue），不传返回全部
-        parent_id: 按父任务过滤，传 None 只返回顶层任务（parent_id IS NULL），不传返回全部
         limit: 最大返回条数，默认 50
 
     Returns:
@@ -156,9 +122,6 @@ def list_tasks(
             q = q.filter(Task.status == TaskStatus(status))
         except ValueError:
             pass  # 非法 status 值则忽略过滤
-
-    if parent_id is not None:
-        q = q.filter(Task.parent_id == parent_id)
 
     tasks = (
         q.order_by(Task.deadline.asc(), Task.priority.desc())
@@ -190,22 +153,10 @@ def delete_task(
     ).first()
     if not task:
         return {"error": f"任务 {task_id} 不存在或无权操作"}
-    if task.is_final:
-        return {"error": "最终节点由流程任务自动维护，不能单独删除"}
 
     deleted_title = task.title
-    if task.parent_id is None and task.task_type == TaskType.process:
-        # 清理 task 表中的子任务（parent_id 自引用）
-        db.query(Task).filter(
-            Task.parent_id == task.id,
-            Task.user_id == user_id,
-        ).delete(synchronize_session=False)
-        # 清理 sub_task 表中的子任务
-        db.query(SubTask).filter(
-            SubTask.task_id == task.id,
-        ).delete(synchronize_session=False)
 
-    # 非流程任务也可能有 sub_task 关联，一并清理
+    # 清理 sub_task 表中的关联子任务（FK ON DELETE CASCADE 会自动处理，显式操作做双重保证）
     db.query(SubTask).filter(
         SubTask.task_id == task.id,
     ).delete(synchronize_session=False)
@@ -414,9 +365,7 @@ def _task_to_dict(t: Task) -> Dict[str, Any]:
     return {
         "id": t.id,
         "user_id": t.user_id,
-        "parent_id": t.parent_id,
         "task_type": t.task_type.value if t.task_type else "todo",
-        "is_final": bool(t.is_final),
         "title": t.title,
         "description": t.description,
         "subject": t.subject,

@@ -75,7 +75,6 @@ def get_calendar_data(
     )
     tasks = db.query(TaskModel).filter(
         TaskModel.user_id == current_user.id,
-        TaskModel.parent_id == None,
         ~has_sub_task,
         TaskModel.deadline >= start_date,
         TaskModel.deadline <= end_date,
@@ -87,14 +86,6 @@ def get_calendar_data(
         DeadlineModel.due_date >= start_date,
         DeadlineModel.due_date <= end_date,
     ).order_by(DeadlineModel.due_date.asc(), DeadlineModel.priority.desc()).all()
-
-    # 查询该时间段内的所有子任务（tasks 表中 parent_id IS NOT NULL 的记录）
-    sub_tasks = db.query(TaskModel).filter(
-        TaskModel.user_id == current_user.id,
-        TaskModel.parent_id.isnot(None),
-        TaskModel.deadline >= start_date,
-        TaskModel.deadline <= end_date,
-    ).order_by(TaskModel.deadline.asc(), TaskModel.priority.desc()).all()
 
     # 按日期分组
     from collections import defaultdict
@@ -126,20 +117,6 @@ def get_calendar_data(
         )
         day_map[date_key]["deadlines"].append(item)
         day_map[date_key]["count"] += 1
-
-    for st in sub_tasks:
-        if st.deadline:
-            date_key = st.deadline.date().isoformat()
-            item = CalendarDayItem(
-                id=st.id,
-                title=st.title,
-                type="task",
-                priority=st.priority or "medium",
-                status=st.status or "todo",
-                subject=st.subject,
-            )
-            day_map[date_key]["tasks"].append(item)
-            day_map[date_key]["count"] += 1
 
     # 查询 sub_task 表中的子任务（加入 task 表做用户过滤）
     sub_task_records = db.query(SubTaskModel).join(

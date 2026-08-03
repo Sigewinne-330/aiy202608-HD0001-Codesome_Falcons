@@ -4,7 +4,6 @@ from typing import Optional, List
 
 
 class TaskCreate(BaseModel):
-    parent_id: Optional[int] = None
     task_type: str = "todo"
     title: str
     description: Optional[str] = None
@@ -28,9 +27,7 @@ class TaskUpdate(BaseModel):
 class TaskResponse(BaseModel):
     id: int
     user_id: int
-    parent_id: Optional[int] = None
     task_type: str = "todo"
-    is_final: bool = False
     title: str
     description: Optional[str] = None
     subject: Optional[str] = None

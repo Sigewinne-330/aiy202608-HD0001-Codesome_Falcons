@@ -265,7 +265,6 @@ export default {
     processProgress: '流程进度',
     taskProgress: '任务进度',
     processNode: '流程节点',
-    finalNode: '最终节点',
     noDate: '未设置日期',
     addSubtask: '添加子任务',
     deleteTask: '删除任务',

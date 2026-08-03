@@ -265,7 +265,6 @@ export default {
     processProgress: 'Process progress',
     taskProgress: 'Task progress',
     processNode: 'Process nodes',
-    finalNode: 'Final node',
     noDate: 'No date set',
     addSubtask: 'Add subtask',
     deleteTask: 'Delete task',

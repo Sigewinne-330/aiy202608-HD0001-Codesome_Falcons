@@ -14,18 +14,8 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 
 def _build_task_tree(tasks: List[TaskModel]) -> List[TaskResponse]:
-    """构建任务树结构"""
-    task_map = {t.id: TaskResponse.model_validate(t) for t in tasks}
-    roots = []
-    for t in tasks:
-        resp = task_map[t.id]
-        if t.parent_id and t.parent_id in task_map:
-            task_map[t.parent_id].subtasks.append(resp)
-        else:
-            roots.append(resp)
-    for task in task_map.values():
-        task.subtasks.sort(key=lambda item: (item.is_final, item.deadline or date.max))
-    return roots
+    """构建任务树 —— 纯平铺，子任务由 sub_task 表单独合并"""
+    return [TaskResponse.model_validate(t) for t in tasks]
 
 
 @router.get("", response_model=List[TaskResponse])
@@ -39,35 +29,28 @@ def list_tasks(
         query = query.filter(TaskModel.status == status)
     tasks = query.order_by(TaskModel.deadline.asc(), TaskModel.priority.desc()).all()
 
-    # 构建任务树（基于 tasks 表的 parent_id 自引用）
+    # 构建任务树（平铺的顶层任务）
     tree = _build_task_tree(tasks)
 
-    # 同时从 sub_task 表查询子任务，合并到对应的流程任务中
+    # 从 sub_task 表查询子任务，合并到对应的流程任务中
     sub_tasks = db.query(SubTaskModel).join(
         TaskModel, SubTaskModel.task_id == TaskModel.id
     ).filter(
         TaskModel.user_id == current_user.id
     ).order_by(SubTaskModel.notice_time.asc()).all()
 
-    # 建立 task_id → TaskResponse 的索引，用于快速定位父任务
+    # 建立 task_id → TaskResponse 的索引
     if sub_tasks:
-        id_to_response = {}
-        for root in tree:
-            id_to_response[root.id] = root
-            for child in root.subtasks:
-                id_to_response[child.id] = child
+        id_to_response = {t.id: t for t in tree}
 
     for st in sub_tasks:
         parent = id_to_response.get(st.task_id)
         if parent is None:
             continue
-        # 将 sub_task 记录映射为 TaskResponse
         mapped = TaskResponse(
             id=st.id,
             user_id=current_user.id,
-            parent_id=st.task_id,
             task_type="todo",
-            is_final=False,
             title=st.name,
             description=st.description or "",
             subject=parent.subject,
@@ -79,11 +62,10 @@ def list_tasks(
             created_at=st.created_at or datetime.now(),
             update_time=st.updated_at,
         )
-        # 标记来源，前端用于区分 toggle/update API
         mapped.sub_task_source = True  # type: ignore[attr-defined]
         parent.subtasks.append(mapped)
 
-    # 动态判断 task_type：任何有 sub_task 子任务的顶层任务自动变为 process
+    # 动态判断 task_type：任何有 sub_task 子任务的任务自动变为 process
     _process_ids = {st.task_id for st in sub_tasks}
     for root in tree:
         if root.id in _process_ids:
@@ -101,54 +83,16 @@ def create_task(
     if data.task_type not in {TaskType.todo.value, TaskType.process.value}:
         raise HTTPException(status_code=400, detail="任务类型必须是 todo 或 process")
 
-    parent = None
-    if data.parent_id is not None:
-        parent = db.query(TaskModel).filter(
-            TaskModel.id == data.parent_id,
-            TaskModel.user_id == current_user.id,
-        ).first()
-        if not parent:
-            raise HTTPException(status_code=404, detail="父任务不存在")
-        if parent.task_type != TaskType.process:
-            raise HTTPException(status_code=400, detail="待办事项不能添加子任务")
-        if data.task_type == TaskType.process.value:
-            raise HTTPException(status_code=400, detail="流程任务不能嵌套流程任务")
-
     payload = data.model_dump(exclude={"task_type"})
     task = TaskModel(
         user_id=current_user.id,
-        task_type=TaskType.todo if parent else TaskType(data.task_type),
-        is_final=False,
+        task_type=TaskType(data.task_type),
         **payload,
     )
     db.add(task)
-
-    final_task = None
-    if not parent and task.task_type == TaskType.process:
-        db.flush()
-        final_task = TaskModel(
-            user_id=current_user.id,
-            parent_id=task.id,
-            task_type=TaskType.todo,
-            is_final=True,
-            title=task.title,
-            description="流程任务最终节点",
-            subject=task.subject,
-            priority=task.priority,
-            status=TaskStatus.todo,
-            deadline=task.deadline,
-            estimated_hours=0,
-            progress=0,
-        )
-        db.add(final_task)
-
     db.commit()
     db.refresh(task)
-    response = TaskResponse.model_validate(task)
-    if final_task:
-        db.refresh(final_task)
-        response.subtasks.append(TaskResponse.model_validate(final_task))
-    return response
+    return TaskResponse.model_validate(task)
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
@@ -163,15 +107,32 @@ def get_task(
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
 
-    # 同时获取子任务
-    all_tasks = db.query(TaskModel).filter(TaskModel.user_id == current_user.id).all()
-    task_map = {t.id: t for t in all_tasks}
-
     resp = TaskResponse.model_validate(task)
-    for t in all_tasks:
-        if t.parent_id == task.id:
-            resp.subtasks.append(TaskResponse.model_validate(t))
-    resp.subtasks.sort(key=lambda item: (item.is_final, item.deadline or date.max))
+
+    # 从 sub_task 表获取子任务
+    sub_tasks = db.query(SubTaskModel).filter(
+        SubTaskModel.task_id == task.id
+    ).order_by(SubTaskModel.notice_time.asc()).all()
+
+    for st in sub_tasks:
+        mapped = TaskResponse(
+            id=st.id,
+            user_id=current_user.id,
+            task_type="todo",
+            title=st.name,
+            description=st.description or "",
+            subject=task.subject,
+            priority=st.level or "medium",
+            status=st.status or "pending",
+            deadline=st.notice_time,
+            estimated_hours=0,
+            progress=0,
+            created_at=st.created_at or datetime.now(),
+            update_time=st.updated_at,
+        )
+        mapped.sub_task_source = True  # type: ignore[attr-defined]
+        resp.subtasks.append(mapped)
+
     return resp
 
 
@@ -189,25 +150,9 @@ def update_task(
         raise HTTPException(status_code=404, detail="任务不存在")
 
     update_data = data.model_dump(exclude_unset=True)
-    if task.is_final:
-        protected_fields = {"title", "deadline", "subject", "priority"}
-        if protected_fields.intersection(update_data):
-            raise HTTPException(status_code=400, detail="最终节点的标题和时间由流程主任务统一管理")
     for key, value in update_data.items():
         setattr(task, key, value)
 
-    # 流程主任务的最终节点始终与主任务同标题、同截止时间。
-    if task.parent_id is None and task.task_type == TaskType.process:
-        final_task = db.query(TaskModel).filter(
-            TaskModel.parent_id == task.id,
-            TaskModel.user_id == current_user.id,
-            TaskModel.is_final.is_(True),
-        ).first()
-        if final_task:
-            final_task.title = task.title
-            final_task.deadline = task.deadline
-            final_task.subject = task.subject
-            final_task.priority = task.priority
     db.commit()
     db.refresh(task)
     return TaskResponse.model_validate(task)
@@ -224,18 +169,11 @@ def delete_task(
     ).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    if task.is_final:
-        raise HTTPException(status_code=400, detail="最终节点由流程任务自动维护，不能单独删除")
-    # 级联删除流程主任务的全部子节点
-    child_count = 0
-    if task.parent_id is None and task.task_type == TaskType.process:
-        child_count = db.query(TaskModel).filter(
-            TaskModel.parent_id == task.id,
-            TaskModel.user_id == current_user.id,
-        ).delete(synchronize_session=False)
+
+    # sub_task 表 FK 设置了 ON DELETE CASCADE，数据库自动级联删除
     db.delete(task)
     db.commit()
-    return {"ok": True, "cascaded_children": child_count}
+    return {"ok": True}
 
 
 @router.post("/breakdown", response_model=List[TaskResponse])
@@ -244,14 +182,12 @@ async def breakdown_task(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """AI 拆解大型任务"""
+    """AI 拆解大型任务 —— 子任务写入 sub_task 表"""
     task = db.query(TaskModel).filter(
         TaskModel.id == data.task_id, TaskModel.user_id == current_user.id
     ).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    if task.task_type != TaskType.process or task.parent_id is not None:
-        raise HTTPException(status_code=400, detail="只有流程主任务可以拆解为子任务")
 
     subtasks_data = await ai_service.breakdown_task(
         title=task.title,
@@ -261,20 +197,30 @@ async def breakdown_task(
 
     created = []
     for st in subtasks_data:
-        subtask = TaskModel(
-            user_id=current_user.id,
-            parent_id=task.id,
-            task_type=TaskType.todo,
-            is_final=False,
-            title=st["title"],
+        sub = SubTaskModel(
+            task_id=task.id,
+            name=st["title"],
             description=st.get("description", ""),
-            subject=task.subject,
-            priority=st.get("priority", "medium"),
-            estimated_hours=st.get("estimated_hours", 1),
+            level=st.get("priority", "medium"),
+            status="pending",
         )
-        db.add(subtask)
+        db.add(sub)
         db.flush()
-        created.append(TaskResponse.model_validate(subtask))
+        created.append(TaskResponse(
+            id=sub.id,
+            user_id=current_user.id,
+            task_type="todo",
+            title=sub.name,
+            description=sub.description or "",
+            subject=task.subject,
+            priority=sub.level or "medium",
+            status=sub.status,
+            deadline=None,
+            estimated_hours=0,
+            progress=0,
+            created_at=sub.created_at or datetime.now(),
+            update_time=sub.updated_at,
+        ))
 
     db.commit()
     return created
@@ -286,7 +232,7 @@ async def plan_task(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """任务时间线规划 - 输入目标和截止日期，生成分阶段执行计划"""
+    """任务时间线规划 —— 子任务写入 sub_task 表"""
     phases_data = await ai_service.plan_task_timeline(
         title=data.title,
         word_count=data.word_count,
@@ -296,7 +242,6 @@ async def plan_task(
 
     phases = [TaskPlanPhase(**p) for p in phases_data]
 
-    # 自动创建对应的任务
     try:
         due_date = date.fromisoformat(data.deadline) if data.deadline else None
     except ValueError:
@@ -320,17 +265,15 @@ async def plan_task(
         except ValueError:
             phase_due = None
 
-        # 写入 tasks 表（保留原有逻辑）
-        subtask = TaskModel(
-            user_id=current_user.id,
-            parent_id=parent_task.id,
-            title=f"{p.phase}：{data.title}",
+        sub = SubTaskModel(
+            task_id=parent_task.id,
+            name=f"{p.phase}：{data.title}",
             description=f"{p.description}\n交付物：{p.deliverables}",
-            priority=p.priority,
-            deadline=phase_due,
-            estimated_hours=p.estimated_hours,
+            notice_time=phase_due,
+            level=p.priority,
+            status="pending",
         )
-        db.add(subtask)
+        db.add(sub)
 
     db.commit()
 
@@ -369,8 +312,7 @@ def create_sub_task(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """在 sub_task 表中创建子任务（供前端"添加子任务"调用）"""
-    # 校验父任务存在且属于当前用户
+    """在 sub_task 表中创建子任务（供前端调用）"""
     parent = db.query(TaskModel).filter(
         TaskModel.id == data.task_id,
         TaskModel.user_id == current_user.id,
@@ -395,7 +337,6 @@ def create_sub_task(
     db.commit()
     db.refresh(sub)
 
-    # 返回前端兼容格式
     return {
         "ok": True,
         "id": sub.id,
@@ -425,7 +366,6 @@ def update_sub_task(
         raise HTTPException(status_code=404, detail="子任务不存在")
 
     update_data = data.model_dump(exclude_unset=True)
-    # 映射 TaskUpdate 字段到 SubTask 字段
     if "status" in update_data:
         sub.status = update_data["status"]
     if "progress" in update_data and hasattr(sub, "progress"):
