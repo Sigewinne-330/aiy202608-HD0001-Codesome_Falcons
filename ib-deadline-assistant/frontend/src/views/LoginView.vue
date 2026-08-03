@@ -3,6 +3,13 @@
     <v-card class="pa-6" max-width="420" width="100%" elevation="4" rounded="xl">
       <!-- 标题 -->
       <div class="text-center mb-6">
+        <router-link
+          to="/"
+          class="text-body-2 text-decoration-none text-grey d-inline-flex align-center mb-3"
+        >
+          <v-icon size="16" class="mr-1">mdi-arrow-left</v-icon>
+          返回项目介绍
+        </router-link>
         <v-icon size="48" color="primary" class="mb-2">mdi-calendar-edit</v-icon>
         <h2 class="text-h5 font-weight-bold">IBuddy</h2>
         <p class="text-body-2 text-grey mt-1">欢迎回来，继续管理你的任务</p>

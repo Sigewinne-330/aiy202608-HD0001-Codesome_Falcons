@@ -2,9 +2,12 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuth } from '@/stores/auth'
 
 const routes = [
+  // ---- 项目介绍页（不需要登录，展示于注册/登录之前） ----
   {
     path: '/',
-    redirect: '/calendar',
+    name: 'Landing',
+    component: () => import('../views/LandingView.vue'),
+    meta: { title: 'IBuddy · 长期任务规划师', guest: true },
   },
   // ---- 认证页面（不需要登录） ----
   {

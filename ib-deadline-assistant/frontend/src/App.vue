@@ -31,6 +31,21 @@
         <v-avatar class="ml-3" color="primary" size="36">
           <span class="text-white text-body-2 font-weight-bold">{{ userInitial }}</span>
         </v-avatar>
+        <v-tooltip text="退出登录" location="bottom">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              class="logout-btn ml-2"
+              prepend-icon="mdi-logout"
+              variant="tonal"
+              color="error"
+              aria-label="退出登录"
+              @click="handleLogout"
+            >
+              退出登录
+            </v-btn>
+          </template>
+        </v-tooltip>
       </v-app-bar>
 
       <v-navigation-drawer
@@ -399,6 +414,7 @@ onBeforeUnmount(() => {
   .brand-copy small { display: none; }
   .workspace-bar { padding: 0 8px; }
   .agent-trigger .v-btn__content { font-size: 0; }
+  .logout-btn .v-btn__content { font-size: 0; }
   .quick-actions { right: 14px; bottom: 16px; }
   .reminder-popover { right: 14px; top: 74px; width: calc(100vw - 28px); }
 }
