@@ -1,6 +1,15 @@
 from .task import Task
 from .deadline import Deadline
 from .chat import ChatHistory
+from .email_verification import EmailVerification
+from .reminder import (
+    LLMUsageRecord,
+    ReminderDelivery,
+    ReminderDigest,
+    ReminderOccurrence,
+    ReminderPreference,
+    ReminderRoleCard,
+)
 
 # 新模型
 from .app_user import AppUser
@@ -12,7 +21,9 @@ from .token_ledger import TokenLedger
 from .billing_order import BillingOrder
 
 __all__ = [
-    "Task", "Deadline", "ChatHistory",
+    "Task", "Deadline", "ChatHistory", "EmailVerification",
+    "ReminderRoleCard", "ReminderPreference", "ReminderOccurrence",
+    "ReminderDigest", "ReminderDelivery", "LLMUsageRecord",
     "AppUser", "AppTask", "SubTask", "Conversation", "ChatMessage",
     "TokenLedger", "BillingOrder",
 ]

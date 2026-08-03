@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime, date
 from typing import List, Optional
 
@@ -18,6 +18,7 @@ class ChatResponse(BaseModel):
     content: str
     token: Optional[int] = 0
     images: Optional[List[str]] = None  # 用户消息附带的图片（base64 data URL）
+    metadata: Optional[dict] = Field(default=None, validation_alias="extra")
     update_time: datetime
 
     class Config:

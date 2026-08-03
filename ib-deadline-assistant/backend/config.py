@@ -36,6 +36,13 @@ class Settings:
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
+    # Reminder worker / delivery
+    APP_BASE_URL: str = os.getenv("APP_BASE_URL", "http://localhost:5173")
+    REMINDER_WORKER_INTERVAL_SECONDS: int = int(
+        os.getenv("REMINDER_WORKER_INTERVAL_SECONDS", "60")
+    )
+    LLM_MONTHLY_TOKEN_QUOTA: int = int(os.getenv("LLM_MONTHLY_TOKEN_QUOTA", "0"))
+
     @property
     def database_url(self) -> str:
         base = (

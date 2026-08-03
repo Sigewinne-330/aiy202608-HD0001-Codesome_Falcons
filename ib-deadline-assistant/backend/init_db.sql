@@ -13,7 +13,27 @@ CREATE TABLE IF NOT EXISTS `user` (
     email VARCHAR(100) DEFAULT NULL,
     phone_number VARCHAR(20) DEFAULT NULL,
     wechat_id VARCHAR(50) DEFAULT NULL
+    ,is_admin BOOLEAN NOT NULL DEFAULT FALSE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS email_verifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(100) NOT NULL,
+    code_salt VARCHAR(64) NOT NULL,
+    code_digest VARCHAR(64) NOT NULL,
+    registration_token_digest VARCHAR(64) UNIQUE DEFAULT NULL,
+    request_ip VARCHAR(45) NOT NULL DEFAULT 'unknown',
+    delivery_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    failed_attempts INT NOT NULL DEFAULT 0,
+    expires_at DATETIME NOT NULL,
+    proof_expires_at DATETIME DEFAULT NULL,
+    verified_at DATETIME DEFAULT NULL,
+    consumed_at DATETIME DEFAULT NULL,
+    invalidated_at DATETIME DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX ix_email_verifications_email_created (email, created_at),
+    INDEX ix_email_verifications_ip_created (request_ip, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS tasks (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -52,6 +72,7 @@ CREATE TABLE IF NOT EXISTS chat_history (
     user_id INT NOT NULL,
     role ENUM('user','assistant','system') NOT NULL,
     content TEXT NOT NULL,
+    metadata JSON DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

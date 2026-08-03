@@ -12,6 +12,7 @@
 """
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, List, Dict, Any, AsyncGenerator
 from openai import OpenAI, AsyncOpenAI
@@ -25,6 +26,29 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 _PROMPT_FILE = Path(__file__).parent / "system_prompt.md"
 SYSTEM_PROMPT = _PROMPT_FILE.read_text(encoding="utf-8")
+
+
+@dataclass(frozen=True)
+class LLMCompletionResult:
+    content: str
+    provider: str
+    model: str
+    finish_reason: str
+    tool_calls: list[dict]
+    prompt_tokens: Optional[int]
+    completion_tokens: Optional[int]
+    total_tokens: Optional[int]
+
+
+def _usage_values(response) -> tuple[Optional[int], Optional[int], Optional[int]]:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None, None, None
+    return (
+        getattr(usage, "prompt_tokens", None),
+        getattr(usage, "completion_tokens", None),
+        getattr(usage, "total_tokens", None),
+    )
 
 
 # =============================================================================
@@ -128,6 +152,61 @@ class AIService:
         if self.ds_client:
             return self.ds_client, settings.DEEPSEEK_MODEL
         return None, ""
+
+    def configured_completion_providers(self) -> list[tuple[OpenAI, str, str]]:
+        providers = []
+        if self.ark_client:
+            providers.append((self.ark_client, settings.ARK_MODEL, "ark"))
+        if self.ds_client:
+            providers.append((self.ds_client, settings.DEEPSEEK_MODEL, "deepseek"))
+        return providers
+
+    async def complete_once(
+        self,
+        messages: List[Dict[str, Any]],
+        *,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        provider_index: int = 0,
+        temperature: float = 0.4,
+        max_tokens: int = 256,
+    ) -> LLMCompletionResult:
+        providers = self.configured_completion_providers()
+        if not providers:
+            raise RuntimeError("未配置可用的 AI 引擎")
+        client, model, provider = providers[provider_index % len(providers)]
+        kwargs: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = "auto"
+        response = client.chat.completions.create(**kwargs)
+        choice = response.choices[0]
+        tool_calls = [
+            {
+                "id": call.id,
+                "type": "function",
+                "function": {
+                    "name": call.function.name,
+                    "arguments": call.function.arguments,
+                },
+            }
+            for call in (getattr(choice.message, "tool_calls", None) or [])
+        ]
+        prompt_tokens, completion_tokens, total_tokens = _usage_values(response)
+        return LLMCompletionResult(
+            content=choice.message.content or "",
+            provider=provider,
+            model=model,
+            finish_reason=choice.finish_reason or "",
+            tool_calls=tool_calls,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+        )
 
     # =========================================================================
     # 对话层：提供同步和流式两种自然语言对话能力

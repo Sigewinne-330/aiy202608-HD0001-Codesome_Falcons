@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 import bcrypt
 from fastapi import Depends, HTTPException, status
@@ -20,7 +20,9 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(user_id: int) -> str:
-    expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    )
     payload = {"sub": str(user_id), "exp": expire}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
@@ -40,3 +42,10 @@ def get_current_user(
     if not user:
         raise HTTPException(status_code=401, detail="用户不存在")
     return user
+
+
+def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Require server-controlled administrator status."""
+    if not bool(current_user.is_admin):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要管理员权限")
+    return current_user

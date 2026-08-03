@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Enum, TIMESTAMP
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Enum, TIMESTAMP, JSON
 from sqlalchemy.sql import func
 from database import Base
 import enum
@@ -17,4 +17,5 @@ class ChatHistory(Base):
     user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
     role = Column(Enum(MessageRole), nullable=False)
     content = Column(Text, nullable=False)
+    metadata_json = Column("metadata", JSON, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())

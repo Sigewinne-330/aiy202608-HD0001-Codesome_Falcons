@@ -3,9 +3,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from config import settings
-from routers import auth, tasks, deadlines, chat, calendar, billing
+from routers import auth, tasks, deadlines, chat, calendar, billing, reminders
 from database import engine, Base, auto_sync_tables
+from database import SessionLocal
 from services.image_storage import UPLOAD_DIR
+from services.reminder_seeds import seed_builtin_role_cards
 
 # 配置日志输出到控制台（INFO 级别，用于调试 LLM 返回）
 logging.basicConfig(
@@ -34,6 +36,8 @@ def on_startup():
     """每次启动自动建表 + 同步列（只增不改不删）"""
     Base.metadata.create_all(bind=engine)
     auto_sync_tables(engine, Base)
+    with SessionLocal() as db:
+        seed_builtin_role_cards(db)
 
 # 注册路由
 app.include_router(auth.router)
@@ -42,6 +46,7 @@ app.include_router(deadlines.router)
 app.include_router(chat.router)
 app.include_router(calendar.router)
 app.include_router(billing.router)
+app.include_router(reminders.router)
 
 # 静态资源：上传的图片（chat_message.extra 只存 /uploads/... URL，图片文件落盘于此）
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

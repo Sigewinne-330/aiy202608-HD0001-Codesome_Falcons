@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-08-03
+goal: Reliably remind users about unfinished calendar items before, on, and
+  after their due dates with localized role-card styling and auditable delivery.
