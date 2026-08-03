@@ -72,10 +72,6 @@ TASK_TOOLS: List[Dict[str, Any]] = [
                         "type": "integer",
                         "description": "按父任务 ID 过滤。传 null 只返回顶层任务（没有父任务的）。不传返回全部。",
                     },
-                    "limit": {
-                        "type": "integer",
-                        "description": "最多返回多少条，默认 50",
-                    },
                 },
                 "required": [],
             },
@@ -164,10 +160,6 @@ TASK_TOOLS: List[Dict[str, Any]] = [
                         "type": "string",
                         "enum": ["todo", "in_progress", "done", "overdue"],
                         "description": "按状态过滤",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "最多返回多少条，默认 50",
                     },
                 },
                 "required": [],

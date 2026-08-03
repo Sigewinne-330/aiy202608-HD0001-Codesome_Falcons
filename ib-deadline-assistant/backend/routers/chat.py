@@ -201,10 +201,14 @@ async def _run_tool_loop_stream(
             })
 
             # 工具执行完毕后推送结果状态
-            if result.get("ok"):
-                yield {"type": "status", "content": "✓ 操作成功"}
-            elif result.get("error"):
-                yield {"type": "status", "content": f"✗ {result['error']}"}
+            if isinstance(result, list):
+                count = len(result)
+                yield {"type": "status", "content": f"✓ 找到 {count} 条记录"}
+            elif isinstance(result, dict):
+                if result.get("ok"):
+                    yield {"type": "status", "content": "✓ 操作成功"}
+                elif result.get("error"):
+                    yield {"type": "status", "content": f"✗ {result['error']}"}
 
         # 工具执行完，继续下一轮（AI 基于结果生成后续回复）
         full_reply = []  # 重置，因为后续回复是新一轮
