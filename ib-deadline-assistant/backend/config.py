@@ -24,7 +24,7 @@ class Settings:
     DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
     # Ark（豆包 - 主 AI 引擎）
-    ARK_API_KEY: str = os.getenv("ARK_API_KEY", "9b6f70ec-40a3-4bfb-abd7-9da6178867a0")
+    ARK_API_KEY: str = os.getenv("ARK_API_KEY", "")
     ARK_BASE_URL: str = os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
     ARK_MODEL: str = os.getenv("ARK_MODEL", "deepseek-v4-pro-260425")
 
@@ -35,11 +35,14 @@ class Settings:
 
     @property
     def database_url(self) -> str:
-        return (
+        base = (
             f"mysql+pymysql://{self.DB_USER}:{self.DB_PASSWORD}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-            f"?charset=utf8mb4&unix_socket={self.DB_SOCKET}"
+            f"?charset=utf8mb4"
         )
+        if self.DB_SOCKET:
+            base += f"&unix_socket={self.DB_SOCKET}"
+        return base
 
 
 settings = Settings()
