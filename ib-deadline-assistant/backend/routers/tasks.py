@@ -4,7 +4,7 @@ from typing import List
 from datetime import date, datetime
 from database import get_db
 from models.user import User
-from models.task import Task as TaskModel, TaskStatus
+from models.task import Task as TaskModel, TaskStatus, TaskType
 from schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskBreakdownRequest, TaskPlanRequest, TaskPlanResponse, TaskPlanPhase
 from services.auth import get_current_user
 from services.ai_service import ai_service
@@ -22,6 +22,8 @@ def _build_task_tree(tasks: List[TaskModel]) -> List[TaskResponse]:
             task_map[t.parent_id].subtasks.append(resp)
         else:
             roots.append(resp)
+    for task in task_map.values():
+        task.subtasks.sort(key=lambda item: (item.is_final, item.deadline or date.max))
     return roots
 
 
@@ -48,11 +50,57 @@ def create_task(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    task = TaskModel(user_id=current_user.id, **data.model_dump())
+    if data.task_type not in {TaskType.todo.value, TaskType.process.value}:
+        raise HTTPException(status_code=400, detail="任务类型必须是 todo 或 process")
+
+    parent = None
+    if data.parent_id is not None:
+        parent = db.query(TaskModel).filter(
+            TaskModel.id == data.parent_id,
+            TaskModel.user_id == current_user.id,
+        ).first()
+        if not parent:
+            raise HTTPException(status_code=404, detail="父任务不存在")
+        if parent.task_type != TaskType.process:
+            raise HTTPException(status_code=400, detail="待办事项不能添加子任务")
+        if data.task_type == TaskType.process.value:
+            raise HTTPException(status_code=400, detail="流程任务不能嵌套流程任务")
+
+    payload = data.model_dump(exclude={"task_type"})
+    task = TaskModel(
+        user_id=current_user.id,
+        task_type=TaskType.todo if parent else TaskType(data.task_type),
+        is_final=False,
+        **payload,
+    )
     db.add(task)
+
+    final_task = None
+    if not parent and task.task_type == TaskType.process:
+        db.flush()
+        final_task = TaskModel(
+            user_id=current_user.id,
+            parent_id=task.id,
+            task_type=TaskType.todo,
+            is_final=True,
+            title=task.title,
+            description="流程任务最终节点",
+            subject=task.subject,
+            priority=task.priority,
+            status=TaskStatus.todo,
+            deadline=task.deadline,
+            estimated_hours=0,
+            progress=0,
+        )
+        db.add(final_task)
+
     db.commit()
     db.refresh(task)
-    return TaskResponse.model_validate(task)
+    response = TaskResponse.model_validate(task)
+    if final_task:
+        db.refresh(final_task)
+        response.subtasks.append(TaskResponse.model_validate(final_task))
+    return response
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
@@ -75,7 +123,7 @@ def get_task(
     for t in all_tasks:
         if t.parent_id == task.id:
             resp.subtasks.append(TaskResponse.model_validate(t))
-    resp.subtasks.sort(key=lambda x: (x.priority, x.deadline or ""))
+    resp.subtasks.sort(key=lambda item: (item.is_final, item.deadline or date.max))
     return resp
 
 
@@ -93,8 +141,25 @@ def update_task(
         raise HTTPException(status_code=404, detail="任务不存在")
 
     update_data = data.model_dump(exclude_unset=True)
+    if task.is_final:
+        protected_fields = {"title", "deadline", "subject", "priority"}
+        if protected_fields.intersection(update_data):
+            raise HTTPException(status_code=400, detail="最终节点的标题和时间由流程主任务统一管理")
     for key, value in update_data.items():
         setattr(task, key, value)
+
+    # 流程主任务的最终节点始终与主任务同标题、同截止时间。
+    if task.parent_id is None and task.task_type == TaskType.process:
+        final_task = db.query(TaskModel).filter(
+            TaskModel.parent_id == task.id,
+            TaskModel.user_id == current_user.id,
+            TaskModel.is_final.is_(True),
+        ).first()
+        if final_task:
+            final_task.title = task.title
+            final_task.deadline = task.deadline
+            final_task.subject = task.subject
+            final_task.priority = task.priority
     db.commit()
     db.refresh(task)
     return TaskResponse.model_validate(task)
@@ -111,6 +176,13 @@ def delete_task(
     ).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    if task.is_final:
+        raise HTTPException(status_code=400, detail="最终节点由流程任务自动维护，不能单独删除")
+    if task.parent_id is None and task.task_type == TaskType.process:
+        db.query(TaskModel).filter(
+            TaskModel.parent_id == task.id,
+            TaskModel.user_id == current_user.id,
+        ).delete(synchronize_session=False)
     db.delete(task)
     db.commit()
     return {"ok": True}
@@ -128,6 +200,8 @@ async def breakdown_task(
     ).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    if task.task_type != TaskType.process or task.parent_id is not None:
+        raise HTTPException(status_code=400, detail="只有流程主任务可以拆解为子任务")
 
     subtasks_data = await ai_service.breakdown_task(
         title=task.title,
@@ -140,6 +214,8 @@ async def breakdown_task(
         subtask = TaskModel(
             user_id=current_user.id,
             parent_id=task.id,
+            task_type=TaskType.todo,
+            is_final=False,
             title=st["title"],
             description=st.get("description", ""),
             subject=task.subject,
@@ -178,6 +254,7 @@ async def plan_task(
 
     parent_task = TaskModel(
         user_id=current_user.id,
+        task_type=TaskType.process,
         title=data.title,
         description=f"任务规模：{data.word_count}\n{data.description or ''}",
         priority="urgent",

@@ -1,213 +1,591 @@
 <template>
-  <div class="h-100">
-    <div class="d-flex align-center mb-4">
-      <v-icon size="28" color="primary" class="mr-2">mdi-clipboard-list-outline</v-icon>
-      <div>
-        <div class="text-h6 font-weight-bold">任务管理</div>
-        <div class="text-caption text-grey">任务管理、进度跟踪、高效执行</div>
+  <section class="tasks-page">
+    <div class="tasks-shell">
+      <header class="tasks-header">
+        <div class="tasks-header__main">
+          <div class="title-mark"><v-icon icon="mdi-clipboard-text-clock-outline" size="27" /></div>
+          <div>
+            <div class="eyebrow">TASK MANAGEMENT</div>
+            <h1>任务管理</h1>
+            <p>把简单事项放进日历，将复杂目标拆成清晰、可执行的流程节点。</p>
+          </div>
+        </div>
+
+        <div class="tasks-header__side">
+          <div class="task-overview" aria-label="任务数量概览">
+            <div><strong>{{ tasks.length }}</strong><span>全部</span></div>
+            <i></i>
+            <div><strong>{{ todoCount }}</strong><span>待办</span></div>
+            <i></i>
+            <div><strong>{{ processCount }}</strong><span>流程</span></div>
+          </div>
+          <div class="header-actions">
+            <v-btn class="back-calendar-btn" prepend-icon="mdi-calendar-arrow-left" size="large" variant="tonal" @click="router.push('/calendar')">返回日历</v-btn>
+            <v-btn class="create-task-btn" color="primary" prepend-icon="mdi-plus" size="large" @click="openCreate">新建任务</v-btn>
+          </div>
+        </div>
+      </header>
+
+      <div class="task-filters">
+        <div class="filter-block">
+          <span class="filter-label">任务类型</span>
+          <v-chip-group v-model="typeFilter" mandatory selected-class="filter-chip--selected">
+            <v-chip value="all" variant="text">全部类型</v-chip>
+            <v-chip value="todo" variant="text" prepend-icon="mdi-checkbox-marked-circle-outline">待办事项</v-chip>
+            <v-chip value="process" variant="text" prepend-icon="mdi-timeline-text-outline">流程任务</v-chip>
+          </v-chip-group>
+        </div>
+        <div class="filter-block filter-block--status">
+          <span class="filter-label">完成状态</span>
+          <v-chip-group v-model="statusFilter" mandatory selected-class="filter-chip--selected">
+            <v-chip value="all" size="small" variant="text">全部状态</v-chip>
+            <v-chip value="todo" size="small" variant="text">待办</v-chip>
+            <v-chip value="in_progress" size="small" variant="text">进行中</v-chip>
+            <v-chip value="done" size="small" variant="text">已完成</v-chip>
+          </v-chip-group>
+        </div>
       </div>
-      <v-spacer />
-      <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">
-        新建任务
-      </v-btn>
+
+    <div v-if="loading" class="task-empty">
+      <v-progress-circular indeterminate color="primary" />
+      <span>正在加载任务…</span>
     </div>
 
-    <!-- 筛选 -->
-    <v-row class="mb-4">
-      <v-col cols="auto">
-        <v-chip-group v-model="filter" mandatory>
-          <v-chip value="all" variant="tonal">全部</v-chip>
-          <v-chip value="todo" variant="tonal" color="warning">待办</v-chip>
-          <v-chip value="in_progress" variant="tonal" color="primary">进行中</v-chip>
-          <v-chip value="done" variant="tonal" color="success">已完成</v-chip>
-          <v-chip value="overdue" variant="tonal" color="error">已逾期</v-chip>
-        </v-chip-group>
-      </v-col>
-    </v-row>
+    <div v-else-if="filteredTasks.length" class="task-grid">
+      <v-card
+        v-for="task in filteredTasks"
+        :key="task.id"
+        class="task-card"
+        :class="{ 'task-card--process': task.task_type === 'process' }"
+        rounded="xl"
+        elevation="0"
+      >
+        <div class="task-card__top">
+          <v-checkbox
+            class="task-check"
+            :model-value="task.status === 'done'"
+            :color="task.status === 'overdue' ? 'error' : 'primary'"
+            density="compact"
+            hide-details
+            @update:model-value="toggleDone(task)"
+          />
+          <div class="task-card__title">
+            <div class="d-flex align-center ga-2 flex-wrap">
+              <h2>{{ task.title }}</h2>
+              <v-chip
+                size="x-small"
+                :color="task.task_type === 'process' ? 'deep-purple' : 'primary'"
+                variant="tonal"
+              >
+                {{ task.task_type === 'process' ? '流程任务' : '待办事项' }}
+              </v-chip>
+            </div>
+            <p v-if="task.description">{{ task.description }}</p>
+          </div>
+          <v-btn
+            v-if="task.task_type === 'process'"
+            prepend-icon="mdi-plus"
+            color="deep-purple"
+            variant="tonal"
+            size="small"
+            @click="openSubtask(task)"
+          >
+            添加子任务
+          </v-btn>
+        </div>
 
-    <!-- 任务列表 -->
-    <v-row v-if="tasks.length > 0">
-      <v-col cols="12" md="6" v-for="task in filteredTasks" :key="task.id">
-        <v-card :border="task.status === 'overdue'" :color="task.status === 'overdue' ? 'error' : undefined" variant="outlined">
-          <v-card-item>
-            <template v-slot:prepend>
+        <div class="task-meta">
+          <span v-if="task.subject"><v-icon icon="mdi-tag-outline" size="14" />{{ task.subject }}</span>
+          <span><v-icon icon="mdi-flag-outline" size="14" />{{ priorityLabel(task.priority) }}</span>
+          <span v-if="task.deadline"><v-icon icon="mdi-calendar-outline" size="14" />{{ formatDate(task.deadline) }}</span>
+          <span v-if="task.estimated_hours"><v-icon icon="mdi-clock-outline" size="14" />{{ task.estimated_hours }} 小时</span>
+        </div>
+
+        <div class="progress-block">
+          <div><span>{{ task.task_type === 'process' ? '流程进度' : '任务进度' }}</span><strong>{{ displayProgress(task) }}%</strong></div>
+          <v-progress-linear
+            :model-value="displayProgress(task)"
+            :color="task.status === 'overdue' ? 'error' : (task.task_type === 'process' ? 'deep-purple' : 'primary')"
+            height="7"
+            rounded
+          />
+        </div>
+
+        <div v-if="task.task_type === 'process'" class="subtask-section">
+          <div class="subtask-heading">
+            <span>流程节点</span>
+            <small>{{ task.subtasks?.length || 0 }} 项</small>
+          </div>
+
+          <div v-if="task.subtasks?.length" class="subtask-list">
+            <div v-for="(subtask, index) in task.subtasks" :key="subtask.id" class="subtask-row">
+              <span class="subtask-index">{{ index + 1 }}</span>
               <v-checkbox
-                :model-value="task.status === 'done'"
-                :color="task.status === 'overdue' ? 'error' : 'primary'"
-                @update:model-value="toggleDone(task)"
+                :model-value="subtask.status === 'done'"
+                density="compact"
                 hide-details
+                @update:model-value="toggleDone(subtask)"
               />
-            </template>
-            <v-card-title class="text-body-1 font-weight-bold">{{ task.title }}</v-card-title>
-            <template v-slot:append>
-              <v-btn icon="mdi-dots-vertical" variant="text" size="small" />
-            </template>
-
-            <v-card-subtitle v-if="task.description" class="text-caption mt-1">
-              {{ task.description }}
-            </v-card-subtitle>
-
-            <div class="d-flex align-center gap-2 mt-2 flex-wrap">
-              <v-chip v-if="task.subject" size="x-small" variant="tonal" color="primary">
-                {{ task.subject }}
-              </v-chip>
-              <v-chip size="x-small" :color="priorityColor(task.priority)" variant="tonal">
-                {{ priorityLabel(task.priority) }}
-              </v-chip>
-              <v-chip v-if="task.deadline" size="x-small" variant="tonal" color="grey">
-                📅 {{ task.deadline }}
-              </v-chip>
-              <v-chip v-if="task.estimated_hours" size="x-small" variant="tonal" color="grey">
-                ⏱ {{ task.estimated_hours }}h
-              </v-chip>
-            </div>
-
-            <!-- 进度条 -->
-            <div class="mt-3" v-if="task.status !== 'done'">
-              <div class="d-flex justify-space-between text-caption text-grey mb-1">
-                <span>进度</span>
-                <span>{{ task.progress || 0 }}%</span>
+              <div class="subtask-copy">
+                <div>
+                  <strong>{{ subtask.title }}</strong>
+                  <v-chip v-if="subtask.is_final" size="x-small" color="deep-purple" variant="tonal">最终节点</v-chip>
+                </div>
+                <small>{{ subtask.deadline ? formatDate(subtask.deadline) : '未设置日期' }}</small>
               </div>
-              <v-progress-linear
-                :model-value="task.progress || 0"
-                :color="task.status === 'overdue' ? 'error' : 'primary'"
-                height="6"
-                rounded
-              />
+              <v-chip size="x-small" :color="priorityColor(subtask.priority)" variant="tonal">
+                {{ priorityLabel(subtask.priority) }}
+              </v-chip>
             </div>
+          </div>
 
-            <!-- 子任务 -->
-            <div v-if="task.subtasks && task.subtasks.length > 0" class="mt-3">
-              <div class="text-caption text-grey mb-1">子任务 ({{ task.subtasks.length }})</div>
-              <div v-for="sub in task.subtasks" :key="sub.id" class="d-flex align-center py-1">
-                <v-icon size="14" color="grey" class="mr-1">mdi-chevron-right</v-icon>
-                <span class="text-caption" :class="{ 'text-decoration-line-through': sub.status === 'done' }">
-                  {{ sub.title }}
-                </span>
-                <v-spacer />
-                <v-chip size="x-small" variant="text">
-                  {{ sub.status === 'done' ? '✅' : '⏳' }}
-                </v-chip>
-              </div>
-            </div>
-          </v-card-item>
-        </v-card>
-      </v-col>
-    </v-row>
+          <button v-else type="button" class="add-first-subtask" @click="openSubtask(task)">
+            <v-icon icon="mdi-plus-circle-outline" />
+            添加第一个流程节点
+          </button>
+        </div>
 
-    <v-sheet v-else class="d-flex flex-column align-center justify-center pa-8" rounded="lg">
-      <v-icon size="60" color="grey-lighten-1">mdi-clipboard-text-outline</v-icon>
-      <div class="text-h6 text-grey-darken-1 mt-3">还没有任务</div>
-      <div class="text-body-2 text-grey mt-1">创建一个任务，或者在任务规划页面生成执行计划</div>
-      <v-btn color="primary" class="mt-4" @click="openCreate">创建第一个任务</v-btn>
-    </v-sheet>
+        <div v-else class="todo-calendar-note">
+          <v-icon icon="mdi-calendar-check-outline" color="primary" />
+          <span>该待办会按截止日期显示在日历中，且不能添加子任务。</span>
+        </div>
+      </v-card>
+    </div>
 
-    <!-- 创建任务对话框 -->
-    <v-dialog v-model="dialog" max-width="500">
-      <v-card title="新建任务">
+    <div v-else class="task-empty">
+      <v-icon icon="mdi-clipboard-text-outline" size="58" color="grey-lighten-1" />
+      <strong>还没有符合条件的任务</strong>
+      <span>创建待办事项或流程任务，开始安排你的工作。</span>
+      <v-btn color="primary" variant="tonal" @click="openCreate">创建任务</v-btn>
+    </div>
+    </div>
+
+    <v-dialog v-model="createDialog" max-width="580">
+      <v-card rounded="xl" title="新建任务">
         <v-card-text>
+          <div class="type-selector">
+            <button
+              type="button"
+              :class="{ active: form.task_type === 'todo' }"
+              @click="form.task_type = 'todo'"
+            >
+              <v-icon icon="mdi-checkbox-marked-circle-outline" />
+              <span><strong>待办事项</strong><small>直接显示在日历，不能添加子任务</small></span>
+            </button>
+            <button
+              type="button"
+              :class="{ active: form.task_type === 'process' }"
+              @click="form.task_type = 'process'"
+            >
+              <v-icon icon="mdi-timeline-text-outline" />
+              <span><strong>流程任务</strong><small>主任务不进日历，子任务按日期显示</small></span>
+            </button>
+          </div>
+
+          <v-alert v-if="form.task_type === 'process'" type="info" variant="tonal" density="compact" class="mb-4">
+            创建后会自动生成一个与主任务同标题、同截止日期的最终节点。
+          </v-alert>
+
           <v-text-field v-model="form.title" label="任务名称" variant="outlined" density="comfortable" class="mb-2" />
           <v-textarea v-model="form.description" label="描述（可选）" variant="outlined" density="comfortable" rows="2" class="mb-2" />
           <v-text-field v-model="form.subject" label="分类/标签（可选）" variant="outlined" density="comfortable" class="mb-2" />
-          <v-select
-            v-model="form.priority"
-            label="优先级"
-            :items="['low','medium','high','urgent']"
-            variant="outlined"
-            density="comfortable"
-            class="mb-2"
-          />
-          <v-text-field v-model="form.deadline" label="截止日期 YYYY-MM-DD" variant="outlined" density="comfortable" class="mb-2" />
-          <v-text-field v-model="form.estimated_hours" label="预计耗时（小时）" type="number" variant="outlined" density="comfortable" />
+          <v-row dense>
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="form.priority"
+                label="优先级"
+                :items="priorityOptions"
+                item-title="title"
+                item-value="value"
+                variant="outlined"
+                density="comfortable"
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model="form.deadline" label="截止日期" type="date" variant="outlined" density="comfortable" />
+            </v-col>
+          </v-row>
+          <v-text-field v-model="form.estimated_hours" label="预计耗时（小时）" type="number" min="0" variant="outlined" density="comfortable" />
         </v-card-text>
-        <v-card-actions>
+        <v-card-actions class="px-6 pb-5">
           <v-spacer />
-          <v-btn variant="text" @click="dialog = false">取消</v-btn>
-          <v-btn color="primary" @click="createTask" :disabled="!form.title">创建</v-btn>
+          <v-btn variant="text" @click="createDialog = false">取消</v-btn>
+          <v-btn color="primary" :loading="saving" :disabled="!canCreate" @click="createTask">创建</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
-  </div>
+
+    <v-dialog v-model="subtaskDialog" max-width="520">
+      <v-card rounded="xl">
+        <v-card-title class="pt-5 px-6">添加流程节点</v-card-title>
+        <v-card-subtitle class="px-6">{{ selectedParent?.title }}</v-card-subtitle>
+        <v-card-text class="pt-5">
+          <v-text-field v-model="subtaskForm.title" label="子任务名称" variant="outlined" density="comfortable" class="mb-2" />
+          <v-textarea v-model="subtaskForm.description" label="描述（可选）" rows="2" variant="outlined" density="comfortable" class="mb-2" />
+          <v-row dense>
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="subtaskForm.priority"
+                label="优先级"
+                :items="priorityOptions"
+                item-title="title"
+                item-value="value"
+                variant="outlined"
+                density="comfortable"
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model="subtaskForm.deadline" label="节点日期" type="date" variant="outlined" density="comfortable" />
+            </v-col>
+          </v-row>
+        </v-card-text>
+        <v-card-actions class="px-6 pb-5">
+          <v-spacer />
+          <v-btn variant="text" @click="subtaskDialog = false">取消</v-btn>
+          <v-btn color="deep-purple" :loading="saving" :disabled="!subtaskForm.title" @click="createSubtask">添加节点</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-snackbar v-model="errorVisible" color="error" timeout="3500">{{ errorMessage }}</v-snackbar>
+  </section>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useAuth } from '@/stores/auth'
-
-const { token } = useAuth()
-
-const tasks = ref([])
-const filter = ref('all')
-const dialog = ref(false)
-const form = ref({
-  title: '',
-  description: '',
-  subject: '',
-  priority: 'medium',
-  deadline: '',
-  estimated_hours: 0,
-})
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { authFetch } from '@/stores/auth'
+import { notifyTasksChanged, onTasksChanged } from '@/services/taskSync'
 
 const API_BASE = '/api'
+const router = useRouter()
+const tasks = ref([])
+const loading = ref(true)
+const saving = ref(false)
+const typeFilter = ref('all')
+const statusFilter = ref('all')
+const createDialog = ref(false)
+const subtaskDialog = ref(false)
+const selectedParent = ref(null)
+const errorVisible = ref(false)
+const errorMessage = ref('')
 
-const filteredTasks = computed(() => {
-  if (filter.value === 'all') return tasks.value
-  return tasks.value.filter(t => t.status === filter.value)
+const priorityOptions = [
+  { title: '低', value: 'low' },
+  { title: '中', value: 'medium' },
+  { title: '高', value: 'high' },
+  { title: '紧急', value: 'urgent' },
+]
+
+const emptyForm = () => ({
+  task_type: 'todo', title: '', description: '', subject: '', priority: 'medium', deadline: '', estimated_hours: 0,
 })
+const emptySubtaskForm = () => ({ title: '', description: '', priority: 'medium', deadline: '' })
+const form = ref(emptyForm())
+const subtaskForm = ref(emptySubtaskForm())
 
-function priorityColor(p) {
-  return { low: 'grey', medium: 'primary', high: 'warning', urgent: 'error' }[p] || 'grey'
-}
-function priorityLabel(p) {
-  return { low: '低', medium: '中', high: '高', urgent: '紧急' }[p] || p
+const filteredTasks = computed(() => tasks.value.filter((task) => {
+  const matchesType = typeFilter.value === 'all' || task.task_type === typeFilter.value
+  const matchesStatus = statusFilter.value === 'all' || task.status === statusFilter.value
+  return matchesType && matchesStatus
+}))
+const todoCount = computed(() => tasks.value.filter((task) => task.task_type !== 'process').length)
+const processCount = computed(() => tasks.value.filter((task) => task.task_type === 'process').length)
+
+const canCreate = computed(() => Boolean(form.value.title && (form.value.task_type !== 'process' || form.value.deadline)))
+
+function priorityColor(priority) {
+  return { low: 'grey', medium: 'primary', high: 'warning', urgent: 'error' }[priority] || 'grey'
 }
 
-function authHeaders() {
-  return token.value ? { Authorization: `Bearer ${token.value}` } : {}
+function priorityLabel(priority) {
+  return { low: '低', medium: '中', high: '高', urgent: '紧急' }[priority] || priority
+}
+
+function formatDate(value) {
+  const date = new Date(`${value}T00:00:00`)
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
+}
+
+function displayProgress(task) {
+  if (task.task_type !== 'process' || !task.subtasks?.length) return Number(task.progress || 0)
+  const total = task.subtasks.reduce((sum, item) => sum + (item.status === 'done' ? 100 : Number(item.progress || 0)), 0)
+  return Math.round(total / task.subtasks.length)
+}
+
+function showError(message) {
+  errorMessage.value = message
+  errorVisible.value = true
 }
 
 async function loadTasks() {
+  loading.value = true
   try {
-    const res = await fetch(`${API_BASE}/tasks`, { headers: authHeaders() })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    tasks.value = await res.json()
-  } catch { /* ignore */ }
+    const response = await authFetch(`${API_BASE}/tasks`)
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    tasks.value = await response.json()
+  } catch (error) {
+    showError(`加载任务失败：${error.message}`)
+  } finally {
+    loading.value = false
+  }
 }
 
 function openCreate() {
-  form.value = { title: '', description: '', subject: '', priority: 'medium', deadline: '', estimated_hours: 0 }
-  dialog.value = true
+  form.value = emptyForm()
+  createDialog.value = true
+}
+
+function openSubtask(task) {
+  selectedParent.value = task
+  subtaskForm.value = { ...emptySubtaskForm(), deadline: task.deadline || '' }
+  subtaskDialog.value = true
+}
+
+async function postTask(payload) {
+  const response = await authFetch(`${API_BASE}/tasks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error(data.detail || `HTTP ${response.status}`)
+  }
+  return response.json()
 }
 
 async function createTask() {
+  saving.value = true
   try {
-    const res = await fetch(`${API_BASE}/tasks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify(form.value),
+    await postTask(form.value)
+    createDialog.value = false
+    notifyTasksChanged()
+  } catch (error) {
+    showError(`创建失败：${error.message}`)
+  } finally {
+    saving.value = false
+  }
+}
+
+async function createSubtask() {
+  if (!selectedParent.value) return
+  saving.value = true
+  try {
+    await postTask({
+      ...subtaskForm.value,
+      parent_id: selectedParent.value.id,
+      task_type: 'todo',
+      subject: selectedParent.value.subject || '',
+      estimated_hours: 0,
     })
-    if (res.ok) {
-      dialog.value = false
-      await loadTasks()
-    }
-  } catch { /* ignore */ }
+    subtaskDialog.value = false
+    notifyTasksChanged()
+  } catch (error) {
+    showError(`添加子任务失败：${error.message}`)
+  } finally {
+    saving.value = false
+  }
 }
 
 async function toggleDone(task) {
-  const newStatus = task.status === 'done' ? 'todo' : 'done'
+  const nextStatus = task.status === 'done' ? 'todo' : 'done'
   try {
-    await fetch(`${API_BASE}/tasks/${task.id}`, {
+    const response = await authFetch(`${API_BASE}/tasks/${task.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ status: newStatus, progress: newStatus === 'done' ? 100 : task.progress }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: nextStatus, progress: nextStatus === 'done' ? 100 : 0 }),
     })
-    await loadTasks()
-  } catch { /* ignore */ }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    notifyTasksChanged()
+  } catch (error) {
+    showError(`更新任务失败：${error.message}`)
+  }
 }
 
-onMounted(loadTasks)
+let stopTaskSync
+onMounted(() => {
+  loadTasks()
+  stopTaskSync = onTasksChanged(loadTasks)
+})
+onBeforeUnmount(() => stopTaskSync?.())
 </script>
 
 <style scoped>
-.gap-2 { gap: 8px; }
+.tasks-page {
+  position: relative;
+  min-height: calc(100vh - 64px);
+  overflow: hidden;
+  padding: clamp(28px, 4vw, 58px) clamp(24px, 5vw, 80px) 120px;
+  color: #1e2942;
+  background:
+    radial-gradient(circle at 12% 2%, rgba(86, 111, 235, .12), transparent 30%),
+    radial-gradient(circle at 90% 18%, rgba(143, 101, 222, .08), transparent 28%),
+    #f7f8fc;
+}
+.tasks-page::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+  background-image: linear-gradient(rgba(68, 85, 139, .025) 1px, transparent 1px), linear-gradient(90deg, rgba(68, 85, 139, .025) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(to bottom, #000, transparent 58%);
+}
+.tasks-shell { position: relative; z-index: 1; width: 100%; max-width: 1480px; margin: 0 auto; }
+.tasks-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  overflow: hidden;
+  padding: 28px 30px;
+  border: 1px solid rgba(72, 93, 156, .12);
+  border-radius: 26px;
+  background: linear-gradient(120deg, rgba(255,255,255,.97), rgba(247,249,255,.94));
+  box-shadow: 0 18px 55px rgba(36, 49, 89, .08);
+}
+.tasks-header::after {
+  position: absolute;
+  top: -95px;
+  right: -60px;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  content: '';
+  background: radial-gradient(circle, rgba(75, 103, 224, .17), transparent 67%);
+}
+.tasks-header__main, .tasks-header__side { position: relative; z-index: 1; display: flex; align-items: center; }
+.tasks-header__main { flex: 1 1 auto; gap: 17px; min-width: 0; }
+.tasks-header__main > div:last-child { min-width: 0; }
+.tasks-header__side { flex-shrink: 0; gap: 20px; }
+.header-actions { display: flex; align-items: center; gap: 9px; }
+.title-mark {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 18px;
+  color: #fff;
+  background: linear-gradient(145deg, #5275ef, #7257d5);
+  box-shadow: 0 12px 24px rgba(78, 94, 210, .28);
+}
+.eyebrow { color: #5c72d8; font-size: 10px; font-weight: 800; letter-spacing: .18em; }
+.tasks-header h1 { margin: 4px 0 0; color: #18233b; font-size: clamp(29px, 3vw, 40px); font-weight: 780; line-height: 1.08; letter-spacing: -.045em; }
+.tasks-header p { max-width: 650px; margin-top: 8px; color: #7c879d; font-size: 13px; line-height: 1.65; }
+.task-overview {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 15px;
+  border: 1px solid rgba(74, 94, 154, .1);
+  border-radius: 16px;
+  background: rgba(255,255,255,.72);
+}
+.task-overview div { min-width: 34px; text-align: center; }
+.task-overview strong, .task-overview span { display: block; }
+.task-overview strong { color: #2b3853; font-size: 16px; line-height: 1.2; }
+.task-overview span { margin-top: 2px; color: #929bae; font-size: 9px; }
+.task-overview i { width: 1px; height: 24px; background: #e5e8f0; }
+.back-calendar-btn { min-width: 116px; color: #4e61a1 !important; background: #eef2fc !important; }
+.create-task-btn { min-width: 128px; box-shadow: 0 10px 22px rgba(49, 95, 220, .22) !important; }
+.task-filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 22px 0 20px;
+  padding: 13px 17px;
+  border: 1px solid rgba(49, 65, 110, .09);
+  border-radius: 19px;
+  background: rgba(255,255,255,.84);
+  box-shadow: 0 8px 24px rgba(38, 50, 82, .045);
+  backdrop-filter: blur(12px);
+}
+.filter-block { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.filter-label { flex: 0 0 auto; padding-right: 10px; border-right: 1px solid #e5e8ef; color: #9aa2b3; font-size: 9px; font-weight: 750; letter-spacing: .08em; }
+.task-filters :deep(.v-chip-group) { padding: 0; }
+.task-filters :deep(.v-chip) { color: #68738a; font-size: 11px; transition: color .2s, background .2s; }
+.task-filters :deep(.filter-chip--selected) { color: #3f62d6 !important; background: #edf2ff !important; }
+.task-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.task-card {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  padding: 22px 23px 21px;
+  border: 1px solid rgba(31,44,75,.09);
+  border-radius: 22px !important;
+  background: rgba(255,255,255,.96) !important;
+  box-shadow: 0 14px 38px rgba(31,44,75,.065) !important;
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+.task-card::before { position: absolute; top: 0; left: 0; width: 100%; height: 4px; content: ''; background: linear-gradient(90deg, #4d72e5, #8ba2f2); }
+.task-card:hover { transform: translateY(-2px); border-color: rgba(70, 100, 203, .2); box-shadow: 0 20px 46px rgba(31,44,75,.1) !important; }
+.task-card--process { grid-column: span 2; border-color: rgba(104,74,190,.16); }
+.task-card--process::before { background: linear-gradient(90deg, #7657cd, #ad8eea); }
+.task-card__top { display: flex; align-items: flex-start; gap: 12px; }
+.task-check { flex: 0 0 auto; margin: -3px 0 0 -6px; }
+.task-check :deep(.v-selection-control) { min-height: 36px; }
+.task-card__title { flex: 1; min-width: 0; padding-top: 2px; }
+.task-card__title h2 { overflow-wrap: anywhere; color: #25314a; font-size: 17px; font-weight: 720; line-height: 1.4; }
+.task-card__title p { margin-top: 7px; color: #818b9f; font-size: 12px; line-height: 1.55; }
+.task-meta { display: flex; flex-wrap: wrap; gap: 7px; margin: 17px 0 15px 42px; color: #707c93; font-size: 10px; }
+.task-meta span { display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border-radius: 9px; background: #f5f7fb; }
+.progress-block { margin-left: 42px; padding: 11px 12px 12px; border: 1px solid #eef0f5; border-radius: 12px; background: #fafbfe; }
+.progress-block > div { display: flex; justify-content: space-between; margin-bottom: 7px; color: #8a93a5; font-size: 10px; }
+.progress-block strong { color: #4f5a70; font-size: 11px; }
+.subtask-section { margin: 20px 0 0 42px; padding: 16px; border: 1px solid rgba(109, 81, 190, .08); border-radius: 16px; background: linear-gradient(135deg, #f8f7fd, #f4f2fb); }
+.subtask-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #53476f; font-size: 12px; font-weight: 720; }
+.subtask-heading small { padding: 2px 7px; border-radius: 999px; color: #897ba8; background: #ebe6f7; font-weight: 550; }
+.subtask-list { display: flex; flex-direction: column; gap: 7px; }
+.subtask-row { display: flex; align-items: center; gap: 9px; min-height: 52px; padding: 8px 11px; border: 1px solid rgba(74, 58, 112, .07); border-radius: 12px; background: rgba(255,255,255,.92); }
+.subtask-index { width: 24px; height: 24px; display: grid; flex: 0 0 auto; place-items: center; border-radius: 8px; color: #7355c5; background: #eee9fb; font-size: 9px; font-weight: 800; }
+.subtask-row :deep(.v-selection-control) { min-height: 32px; }
+.subtask-copy { flex: 1; min-width: 0; }
+.subtask-copy > div { display: flex; align-items: center; gap: 7px; }
+.subtask-copy strong { overflow-wrap: anywhere; color: #3d3552; font-size: 12px; }
+.subtask-copy small { display: block; margin-top: 3px; color: #939bac; font-size: 9px; }
+.add-first-subtask { width: 100%; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 14px; border: 1px dashed #b9addd; border-radius: 11px; color: #7355c5; background: rgba(255,255,255,.55); cursor: pointer; font-size: 11px; transition: background .2s, border-color .2s; }
+.add-first-subtask:hover { border-color: #8468cd; background: #fff; }
+.todo-calendar-note { display: flex; align-items: center; gap: 8px; margin: 16px 0 0 42px; padding: 10px 12px; border: 1px solid #e9edf9; border-radius: 11px; color: #66718a; background: #f5f7fd; font-size: 10px; line-height: 1.45; }
+.task-empty { min-height: 370px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 40px; border: 1px dashed #dce1ec; border-radius: 22px; color: #8d96a8; background: rgba(255,255,255,.66); text-align: center; }
+.task-empty strong { color: #465168; font-size: 15px; }
+.task-empty span { font-size: 11px; }
+.type-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+.type-selector button { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid #e1e5ed; border-radius: 13px; color: #566178; background: #fff; cursor: pointer; text-align: left; }
+.type-selector button.active { color: #315fdc; border-color: #6685eb; background: #f2f5ff; box-shadow: inset 0 0 0 1px #6685eb; }
+.type-selector span, .type-selector strong, .type-selector small { display: block; }
+.type-selector strong { font-size: 12px; }
+.type-selector small { margin-top: 4px; color: #8992a4; font-size: 9px; line-height: 1.4; }
+@media (max-width: 1050px) {
+  .tasks-header, .tasks-header__side { align-items: flex-start; }
+  .tasks-header { flex-direction: column; }
+  .tasks-header__side { width: 100%; justify-content: space-between; }
+  .task-filters { align-items: flex-start; flex-direction: column; gap: 8px; }
+}
+@media (max-width: 850px) {
+  .tasks-page { padding: 24px 18px 100px; }
+  .task-grid { grid-template-columns: 1fr; }
+  .task-card--process { grid-column: auto; }
+}
+@media (max-width: 620px) {
+  .tasks-page { padding-inline: 14px; }
+  .tasks-header { padding: 21px 18px; border-radius: 21px; }
+  .title-mark { width: 48px; height: 48px; border-radius: 15px; }
+  .tasks-header__main { align-items: flex-start; }
+  .tasks-header__side { flex-direction: column; }
+  .task-overview, .header-actions { width: 100%; }
+  .task-overview { justify-content: space-around; }
+  .header-actions > .v-btn { flex: 1; }
+  .filter-block { width: 100%; align-items: flex-start; flex-direction: column; gap: 4px; }
+  .filter-label { padding: 0; border: 0; }
+  .task-card { padding: 19px 16px; }
+  .task-card__top { flex-wrap: wrap; }
+  .task-card__top > .v-btn { margin-left: 40px; }
+  .task-meta, .progress-block, .subtask-section, .todo-calendar-note { margin-left: 0; }
+  .subtask-row > .v-chip { display: none; }
+  .type-selector { grid-template-columns: 1fr; }
+}
 </style>

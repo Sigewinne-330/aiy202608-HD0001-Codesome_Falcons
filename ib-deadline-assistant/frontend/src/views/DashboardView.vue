@@ -95,6 +95,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { authFetch } from '@/stores/auth'
 
 const tasks = ref([])
 const upcomingDeadlines = ref([])
@@ -123,8 +124,8 @@ const inProgressTasks = computed(() =>
 async function loadData() {
   try {
     const [taskRes, deadlineRes] = await Promise.all([
-      fetch(`${API_BASE}/tasks`).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
-      fetch(`${API_BASE}/deadlines/upcoming?days=7`).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
+      authFetch(`${API_BASE}/tasks`).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
+      authFetch(`${API_BASE}/deadlines/upcoming?days=7`).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
     ])
 
     // 展平任务树

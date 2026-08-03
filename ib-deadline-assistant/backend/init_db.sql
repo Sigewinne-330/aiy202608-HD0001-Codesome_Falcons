@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     parent_id INT DEFAULT NULL,
+    task_type ENUM('todo','process') NOT NULL DEFAULT 'todo',
+    is_final BOOLEAN NOT NULL DEFAULT FALSE,
     title VARCHAR(255) NOT NULL,
     description TEXT,
     subject VARCHAR(100),

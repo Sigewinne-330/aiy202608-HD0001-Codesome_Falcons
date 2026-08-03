@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Date, DECIMAL, ForeignKey, Enum, TIMESTAMP
+from sqlalchemy import Boolean, Column, Integer, String, Text, Date, DECIMAL, ForeignKey, Enum, TIMESTAMP
 from sqlalchemy.sql import func
 from database import Base
 import enum
@@ -18,12 +18,19 @@ class TaskStatus(str, enum.Enum):
     overdue = "overdue"
 
 
+class TaskType(str, enum.Enum):
+    todo = "todo"
+    process = "process"
+
+
 class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     parent_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), default=None)
+    task_type = Column(Enum(TaskType), default=TaskType.todo, nullable=False)
+    is_final = Column(Boolean, default=False, nullable=False)
     title = Column(String(255), nullable=False)
     description = Column(Text)
     subject = Column(String(100))

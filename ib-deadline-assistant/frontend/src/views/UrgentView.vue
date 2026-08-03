@@ -144,6 +144,7 @@ async function loadItems() {
     const deadlines = deadlineResponse.ok ? await deadlineResponse.json() : []
 
     const taskItems = tasks
+      .filter((item) => item.task_type !== 'process')
       .filter((item) => item.deadline && !['done', 'completed'].includes(item.status))
       .map((item) => ({ ...item, type: 'task', date: item.deadline, daysLeft: daysUntil(item.deadline) }))
     const deadlineItems = deadlines

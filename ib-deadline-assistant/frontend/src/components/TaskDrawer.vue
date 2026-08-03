@@ -81,9 +81,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/stores/auth'
+import { onTasksChanged } from '@/services/taskSync'
 
 defineEmits(['close'])
 
@@ -153,7 +154,14 @@ async function loadTasks() {
   }
 }
 
-onMounted(loadTasks)
+let stopTaskSync
+
+onMounted(() => {
+  loadTasks()
+  stopTaskSync = onTasksChanged(loadTasks)
+})
+
+onBeforeUnmount(() => stopTaskSync?.())
 </script>
 
 <style scoped>

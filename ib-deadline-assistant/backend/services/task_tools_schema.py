@@ -46,6 +46,11 @@ TASK_TOOLS: List[Dict[str, Any]] = [
                         "type": "integer",
                         "description": "父任务 ID，如果这是某个已有任务的子任务则传入",
                     },
+                    "task_type": {
+                        "type": "string",
+                        "enum": ["todo", "process"],
+                        "description": "任务类型：todo=可直接显示在日历的待办事项；process=流程主任务，会自动创建最终节点，主任务本身不显示在日历",
+                    },
                 },
                 "required": ["title"],
             },

@@ -117,6 +117,7 @@ import { ref, onMounted, nextTick } from 'vue'
 import MarkdownIt from 'markdown-it'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
+import { authFetch } from '@/stores/auth'
 
 // 开启 html，允许 KaTeX 生成的 HTML 直接嵌入
 const md = new MarkdownIt({ html: true, breaks: true, linkify: true })
@@ -229,7 +230,7 @@ async function sendMessage() {
 
   try {
     abortController = new AbortController()
-    const res = await fetch(`${API_BASE}/chat/stream`, {
+    const res = await authFetch(`${API_BASE}/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content }),
@@ -301,7 +302,7 @@ async function saveTaskFromChat(index) {
 
   msg.saving = true
   try {
-    const res = await fetch(`${API_BASE}/chat/save-tasks`, {
+    const res = await authFetch(`${API_BASE}/chat/save-tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(msg.taskData),
@@ -341,7 +342,7 @@ function stopGeneration() {
 
 async function loadHistory() {
   try {
-    const res = await fetch(`${API_BASE}/chat/history`)
+    const res = await authFetch(`${API_BASE}/chat/history`)
     const data = await res.json()
     if (data.messages) {
       messages.value = data.messages.map(m => ({ role: m.role, content: m.content }))
@@ -353,7 +354,7 @@ async function loadHistory() {
 
 async function clearHistory() {
   try {
-    await fetch(`${API_BASE}/chat/history`, { method: 'DELETE' })
+    await authFetch(`${API_BASE}/chat/history`, { method: 'DELETE' })
   } catch { /* ignore */ }
   messages.value = []
 }

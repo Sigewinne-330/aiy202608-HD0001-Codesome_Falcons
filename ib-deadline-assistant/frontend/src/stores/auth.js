@@ -19,11 +19,15 @@ function loadUser() {
 const isAuthenticated = computed(() => !!token.value)
 
 // ---- API 请求封装 ----
+export async function authFetch(path, options = {}) {
+  const headers = { ...(options.headers || {}) }
+  if (token.value) headers.Authorization = `Bearer ${token.value}`
+  return fetch(path, { ...options, headers })
+}
+
 async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...options.headers }
-  if (token.value) headers['Authorization'] = `Bearer ${token.value}`
-
-  const res = await fetch(path, { ...options, headers })
+  const res = await authFetch(path, { ...options, headers })
 
   // 先拿文本，再尝试解析 JSON，避免空响应 / 非 JSON 响应直接抛错
   const text = await res.text()

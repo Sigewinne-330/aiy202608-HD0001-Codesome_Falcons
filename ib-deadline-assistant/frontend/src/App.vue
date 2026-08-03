@@ -130,12 +130,13 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/stores/auth'
 import TaskDrawer from '@/components/TaskDrawer.vue'
 import AgentDrawer from '@/components/AgentDrawer.vue'
 import SettingsDialog from '@/components/SettingsDialog.vue'
+import { onTasksChanged } from '@/services/taskSync'
 
 const router = useRouter()
 const route = useRoute()
@@ -179,6 +180,7 @@ async function loadUpcoming() {
     nextWeek.setDate(nextWeek.getDate() + 7)
 
     const taskItems = tasks
+      .filter((item) => item.task_type !== 'process')
       .filter((item) => item.deadline && !['done', 'completed'].includes(item.status))
       .filter((item) => {
         const date = new Date(`${item.deadline}T00:00:00`)
@@ -225,6 +227,9 @@ onMounted(async () => {
   await restoreSession()
   await loadUpcoming()
 })
+
+const stopTaskSync = onTasksChanged(loadUpcoming)
+onBeforeUnmount(stopTaskSync)
 </script>
 
 <style>

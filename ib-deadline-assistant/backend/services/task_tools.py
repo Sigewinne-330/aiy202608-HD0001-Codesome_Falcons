@@ -8,7 +8,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from datetime import date as date_type
 from sqlalchemy.orm import Session
-from models.task import Task, Priority, TaskStatus
+from models.task import Task, Priority, TaskStatus, TaskType
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ def create_task(
     priority: str = "medium",
     estimated_hours: float = 0,
     parent_id: Optional[int] = None,
+    task_type: str = "todo",
 ) -> Dict[str, Any]:
     """创建任务。可以是独立任务，也可以指定 parent_id 作为某个任务的子任务。
 
@@ -54,9 +55,27 @@ def create_task(
     except ValueError:
         pri = Priority.medium
 
+    try:
+        kind = TaskType(task_type)
+    except ValueError:
+        kind = TaskType.todo
+
+    if parent_id is not None:
+        parent = db.query(Task).filter(
+            Task.id == parent_id,
+            Task.user_id == user_id,
+        ).first()
+        if not parent:
+            return {"error": f"父任务 {parent_id} 不存在或无权操作"}
+        if parent.task_type != TaskType.process:
+            return {"error": "待办事项不能添加子任务"}
+        kind = TaskType.todo
+
     task = Task(
         user_id=user_id,
         parent_id=parent_id,
+        task_type=kind,
+        is_final=False,
         title=title,
         description=description,
         subject=subject,
@@ -66,6 +85,24 @@ def create_task(
         status=TaskStatus.todo,
     )
     db.add(task)
+
+    if parent_id is None and kind == TaskType.process:
+        db.flush()
+        db.add(Task(
+            user_id=user_id,
+            parent_id=task.id,
+            task_type=TaskType.todo,
+            is_final=True,
+            title=task.title,
+            description="流程任务最终节点",
+            subject=task.subject,
+            priority=task.priority,
+            deadline=task.deadline,
+            status=TaskStatus.todo,
+            estimated_hours=0,
+            progress=0,
+        ))
+
     db.commit()
     db.refresh(task)
 
@@ -117,7 +154,7 @@ def delete_task(
     task_id: int,
     user_id: int,
 ) -> Dict[str, Any]:
-    """删除任务（同时级联删除其所有子任务，因为 ForeignKey 设了 ondelete=CASCADE）。
+    """删除任务；流程主任务会同时删除其全部子任务。
 
     Args:
         db: 数据库会话
@@ -133,8 +170,15 @@ def delete_task(
     ).first()
     if not task:
         return {"error": f"任务 {task_id} 不存在或无权操作"}
+    if task.is_final:
+        return {"error": "最终节点由流程任务自动维护，不能单独删除"}
 
     deleted_title = task.title
+    if task.parent_id is None and task.task_type == TaskType.process:
+        db.query(Task).filter(
+            Task.parent_id == task.id,
+            Task.user_id == user_id,
+        ).delete(synchronize_session=False)
     db.delete(task)
     db.commit()
 
@@ -178,6 +222,8 @@ def create_subtask(
     ).first()
     if not owner_task:
         return {"error": f"任务 {task_id} 不存在或无权操作"}
+    if owner_task.task_type != TaskType.process:
+        return {"error": "待办事项不能添加子任务，请先创建流程任务"}
 
     # notice_time 映射到 deadline
     try:
@@ -198,6 +244,8 @@ def create_subtask(
     subtask = Task(
         user_id=user_id,
         parent_id=task_id,
+        task_type=TaskType.todo,
+        is_final=False,
         title=name,
         description=description,
         priority=pri,
@@ -275,6 +323,8 @@ def delete_subtask(
     ).first()
     if not subtask:
         return {"error": f"子任务 {subtask_id} 不存在或无权操作（可能不是子任务）"}
+    if subtask.is_final:
+        return {"error": "最终节点由流程任务自动维护，不能单独删除"}
 
     deleted_title = subtask.title
     db.delete(subtask)
@@ -294,6 +344,8 @@ def _task_to_dict(t: Task) -> Dict[str, Any]:
         "id": t.id,
         "user_id": t.user_id,
         "parent_id": t.parent_id,
+        "task_type": t.task_type.value if t.task_type else "todo",
+        "is_final": bool(t.is_final),
         "title": t.title,
         "description": t.description,
         "subject": t.subject,

@@ -209,6 +209,8 @@ async def _run_tool_loop_stream(
                     yield {"type": "status", "content": "✓ 操作成功"}
                 elif result.get("error"):
                     yield {"type": "status", "content": f"✗ {result['error']}"}
+                elif result.get("id"):
+                    yield {"type": "status", "content": "✓ 操作成功"}
 
         # 工具执行完，继续下一轮（AI 基于结果生成后续回复）
         full_reply = []  # 重置，因为后续回复是新一轮

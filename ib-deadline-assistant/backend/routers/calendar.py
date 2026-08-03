@@ -6,7 +6,7 @@ from calendar import monthrange
 from pydantic import BaseModel
 from database import get_db
 from models.user import User
-from models.task import Task as TaskModel, TaskStatus
+from models.task import Task as TaskModel, TaskStatus, TaskType
 from models.deadline import Deadline as DeadlineModel, DeadlineStatus
 from services.auth import get_current_user
 
@@ -65,10 +65,11 @@ def get_calendar_data(
     start_date = first_day - timedelta(days=first_day.weekday())  # 扩展到周日
     end_date = last_day + timedelta(days=(6 - last_day.weekday()))  # 扩展到周六
 
-    # 查询该时间段内的所有任务（仅父任务，子任务从 sub_tasks 表读取避免重复）
+    # 只有顶层待办事项进入日历；流程主任务由其子任务代表。
     tasks = db.query(TaskModel).filter(
         TaskModel.user_id == current_user.id,
         TaskModel.parent_id == None,
+        TaskModel.task_type == TaskType.todo,
         TaskModel.deadline >= start_date,
         TaskModel.deadline <= end_date,
     ).order_by(TaskModel.deadline.asc(), TaskModel.priority.desc()).all()

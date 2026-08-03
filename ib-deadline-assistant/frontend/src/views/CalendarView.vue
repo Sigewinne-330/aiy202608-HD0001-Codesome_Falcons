@@ -85,9 +85,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/stores/auth'
+import { onTasksChanged } from '@/services/taskSync'
 
 const route = useRoute()
 const router = useRouter()
@@ -192,7 +193,14 @@ function openDay(day) {
   dayNotice.value = true
 }
 
-onMounted(loadCalendar)
+let stopTaskSync
+
+onMounted(() => {
+  loadCalendar()
+  stopTaskSync = onTasksChanged(loadCalendar)
+})
+
+onBeforeUnmount(() => stopTaskSync?.())
 </script>
 
 <style scoped>

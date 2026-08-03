@@ -113,6 +113,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { authFetch } from '@/stores/auth'
 
 const weekDays = ['一', '二', '三', '四', '五', '六', '日']
 
@@ -125,7 +126,7 @@ const monthData = ref([])  // 从 API 获取的当月数据
 // 加载日历数据
 async function loadCalendarData() {
   try {
-    const resp = await fetch(`/api/calendar?year=${currentYear.value}&month=${currentMonth.value}`)
+    const resp = await authFetch(`/api/calendar?year=${currentYear.value}&month=${currentMonth.value}`)
     if (resp.ok) {
       const data = await resp.json()
       // 按日期建立索引

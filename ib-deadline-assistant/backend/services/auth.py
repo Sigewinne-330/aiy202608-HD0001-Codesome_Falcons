@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from typing import Optional
 from jose import JWTError, jwt
 import bcrypt
 from fastapi import Depends, HTTPException, status
@@ -9,7 +8,7 @@ from config import settings
 from database import get_db
 from models.user import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 def hash_password(password: str) -> str:
@@ -27,17 +26,10 @@ def create_access_token(user_id: int) -> str:
 
 
 def get_current_user(
-    token: Optional[str] = Depends(oauth2_scheme),
+    token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    """获取当前用户，token 为空时返回 demo 用户"""
-    if not token:
-        # 无 token 时使用 demo 用户
-        user = db.query(User).filter(User.id == 1).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="未登录且无 demo 用户")
-        return user
-
+    """从 Bearer Token 获取当前用户；未登录请求直接返回 401。"""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id = int(payload.get("sub"))

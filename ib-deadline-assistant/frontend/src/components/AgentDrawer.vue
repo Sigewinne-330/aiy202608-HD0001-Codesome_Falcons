@@ -68,6 +68,7 @@
 <script setup>
 import { nextTick, onMounted, ref } from 'vue'
 import { useAuth } from '@/stores/auth'
+import { notifyTasksChanged } from '@/services/taskSync'
 import MarkdownIt from 'markdown-it'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
@@ -147,6 +148,7 @@ async function sendMessage() {
   const responseIndex = messages.value.length - 1
   input.value = ''
   loading.value = true
+  let taskMutationSucceeded = false
   await scrollToBottom()
 
   try {
@@ -176,9 +178,12 @@ async function sendMessage() {
         if (!payload || payload === '[DONE]') continue
         try {
           const parsed = JSON.parse(payload)
-          messages.value[responseIndex].content += typeof parsed === 'string' ? parsed : (parsed.error || '')
+          const chunk = typeof parsed === 'string' ? parsed : (parsed.error || '')
+          messages.value[responseIndex].content += chunk
+          if (chunk.includes('✓ 操作成功')) taskMutationSucceeded = true
         } catch {
           messages.value[responseIndex].content += payload
+          if (payload.includes('✓ 操作成功')) taskMutationSucceeded = true
         }
       }
       await scrollToBottom()
@@ -191,6 +196,7 @@ async function sendMessage() {
     messages.value[responseIndex] = { ...old, streaming: false }
     loading.value = false
     controller = null
+    if (taskMutationSucceeded) notifyTasksChanged()
     await scrollToBottom()
   }
 }

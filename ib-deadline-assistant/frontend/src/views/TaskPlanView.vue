@@ -190,6 +190,8 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { authFetch } from '@/stores/auth'
+import { notifyTasksChanged } from '@/services/taskSync'
 
 const form = ref({
   title: '',
@@ -233,7 +235,7 @@ async function generatePlan() {
   plan.value = null
 
   try {
-    const res = await fetch(`${API_BASE}/tasks/plan`, {
+    const res = await authFetch(`${API_BASE}/tasks/plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -245,6 +247,7 @@ async function generatePlan() {
     })
     if (res.ok) {
       plan.value = await res.json()
+      notifyTasksChanged()
     } else {
       const err = await res.json()
       console.error('Plan error:', err)

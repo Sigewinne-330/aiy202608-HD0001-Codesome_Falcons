@@ -150,6 +150,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { authFetch } from '@/stores/auth'
 
 const deadlines = ref([])
 const upcoming = ref([])
@@ -191,8 +192,8 @@ function daysLeft(d) {
 async function loadDeadlines() {
   try {
     const [all, up] = await Promise.all([
-      fetch(`${API_BASE}/deadlines`).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
-      fetch(`${API_BASE}/deadlines/upcoming?days=7`).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
+      authFetch(`${API_BASE}/deadlines`).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
+      authFetch(`${API_BASE}/deadlines/upcoming?days=7`).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
     ])
     deadlines.value = all
     upcoming.value = up
@@ -206,7 +207,7 @@ function openCreate() {
 
 async function createDeadline() {
   try {
-    const res = await fetch(`${API_BASE}/deadlines`, {
+    const res = await authFetch(`${API_BASE}/deadlines`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form.value),
@@ -221,7 +222,7 @@ async function createDeadline() {
 async function markDone(d) {
   const newStatus = d.status === 'done' ? 'pending' : 'done'
   try {
-    await fetch(`${API_BASE}/deadlines/${d.id}`, {
+    await authFetch(`${API_BASE}/deadlines/${d.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: newStatus }),
@@ -233,7 +234,7 @@ async function markDone(d) {
 async function checkCollision() {
   if (!checkDate.value) return
   try {
-    const res = await fetch(`${API_BASE}/deadlines/check/collisions?date=${checkDate.value}`)
+    const res = await authFetch(`${API_BASE}/deadlines/check/collisions?date=${checkDate.value}`)
     collision.value = await res.json()
   } catch { /* ignore */ }
 }
