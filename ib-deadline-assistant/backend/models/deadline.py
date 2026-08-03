@@ -15,7 +15,7 @@ class Deadline(Base):
     __tablename__ = "deadlines"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
     source = Column(String(100))
     title = Column(String(255), nullable=False)
     description = Column(Text)

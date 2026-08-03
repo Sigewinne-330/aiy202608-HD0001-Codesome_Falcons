@@ -1,4 +1,3 @@
-from .user import User
 from .task import Task
 from .deadline import Deadline
 from .chat import ChatHistory
@@ -11,6 +10,6 @@ from .conversation import Conversation
 from .chat_message_new import ChatMessage
 
 __all__ = [
-    "User", "Task", "Deadline", "ChatHistory",
+    "Task", "Deadline", "ChatHistory",
     "AppUser", "AppTask", "SubTask", "Conversation", "ChatMessage",
 ]
