@@ -101,6 +101,7 @@ export default {
     title2: '讓 AI 幫你提前規劃',
     subtitle: '全模態輸入 · AI 逆向拆解 · 智慧排程 —— 把每一項 Deadline 變成有條不紊的推進計畫。',
     startNow: '立即開始',
+    enterApp: '進入工作台',
     learnMore: '了解功能',
     point1: '語音 / 圖片 / 文字全模態輸入',
     point2: '從 DDL 倒推子任務',

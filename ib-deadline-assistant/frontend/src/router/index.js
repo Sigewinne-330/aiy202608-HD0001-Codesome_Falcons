@@ -3,12 +3,12 @@ import { useAuth } from '@/stores/auth'
 import i18n from '@/i18n'
 
 const routes = [
-  // ---- 项目介绍页（不需要登录，展示于注册/登录之前） ----
+  // ---- 项目介绍页（所有人进入网站的第一个界面，已登录用户也停留在此） ----
   {
     path: '/',
     name: 'Landing',
     component: () => import('../views/LandingView.vue'),
-    meta: { titleKey: 'nav.landing', guest: true },
+    meta: { titleKey: 'nav.landing', guest: true, guestRedirect: false },
   },
   // ---- 认证页面（不需要登录） ----
   {
@@ -100,9 +100,9 @@ router.beforeEach((to, from, next) => {
     return next({ path: '/login', query: { redirect: to.fullPath } })
   }
 
-  // 已登录用户访问登录/注册页 → 跳转到首页
-  if (to.meta.guest && isAuthenticated.value) {
-    return next({ path: '/calendar' })
+  // 已登录用户访问登录/注册页 → 跳转到首页（Landing 例外：所有人都先看介绍页）
+  if (to.meta.guest && to.meta.guestRedirect !== false && isAuthenticated.value) {
+    return next({ path: '/' })
   }
 
   next()

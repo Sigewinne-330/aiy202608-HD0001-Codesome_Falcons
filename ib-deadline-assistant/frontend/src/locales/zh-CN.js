@@ -101,6 +101,7 @@ export default {
     title2: '让 AI 帮你提前规划',
     subtitle: '全模态录入 · AI 逆向拆解 · 智能排期 —— 把每一项 Deadline 变成有条不紊的推进计划。',
     startNow: '立即开始',
+    enterApp: '进入工作台',
     learnMore: '了解功能',
     point1: '语音 / 图片 / 文本全模态录入',
     point2: '从 DDL 倒推子任务',
