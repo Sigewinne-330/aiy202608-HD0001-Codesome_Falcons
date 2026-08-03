@@ -14,7 +14,6 @@ import logging
 from typing import Optional, List, Dict, Any
 from datetime import date as date_type, datetime
 from sqlalchemy.orm import Session
-from models.task import Task, Priority, TaskStatus, TaskType
 from models.user import User
 from models.app_user import AppUser
 from models.task_new import Task as AppTask
@@ -80,16 +79,9 @@ def create_task(
     title: str,
     description: str = "",
     deadline: Optional[str] = None,
-<<<<<<< HEAD
-    priority: str = "medium",
-    estimated_hours: float = 0,
-    parent_id: Optional[int] = None,
-    task_type: str = "todo",
-=======
     status: str = "pending",
     personal_deadline: Optional[str] = None,
     **kwargs,
->>>>>>> 081b93a (function call数据表调用问题修复)
 ) -> Dict[str, Any]:
     """创建任务。新架构中 task 表不再支持 parent_id，子任务统一使用 sub_task 表。
 
@@ -127,58 +119,15 @@ def create_task(
         except (ValueError, TypeError):
             pd_dt = None
 
-<<<<<<< HEAD
-    try:
-        kind = TaskType(task_type)
-    except ValueError:
-        kind = TaskType.todo
-
-    if parent_id is not None:
-        parent = db.query(Task).filter(
-            Task.id == parent_id,
-            Task.user_id == user_id,
-        ).first()
-        if not parent:
-            return {"error": f"父任务 {parent_id} 不存在或无权操作"}
-        if parent.task_type != TaskType.process:
-            return {"error": "待办事项不能添加子任务"}
-        kind = TaskType.todo
-
-    task = Task(
-        user_id=user_id,
-        parent_id=parent_id,
-        task_type=kind,
-        is_final=False,
-        title=title,
-=======
     task = AppTask(
         user_id=bridged_user_id,
         id_name=title,
->>>>>>> 081b93a (function call数据表调用问题修复)
         description=description,
         deadline=due,
         status=status,
         personal_deadline=pd_dt,
     )
     db.add(task)
-
-    if parent_id is None and kind == TaskType.process:
-        db.flush()
-        db.add(Task(
-            user_id=user_id,
-            parent_id=task.id,
-            task_type=TaskType.todo,
-            is_final=True,
-            title=task.title,
-            description="流程任务最终节点",
-            subject=task.subject,
-            priority=task.priority,
-            deadline=task.deadline,
-            status=TaskStatus.todo,
-            estimated_hours=0,
-            progress=0,
-        ))
-
     db.commit()
     db.refresh(task)
 
@@ -248,8 +197,6 @@ def delete_task(
     ).first()
     if not task:
         return {"error": f"任务 {task_id} 不存在或无权操作"}
-    if task.is_final:
-        return {"error": "最终节点由流程任务自动维护，不能单独删除"}
 
     deleted_title = task.id_name
 
@@ -315,8 +262,6 @@ def create_subtask(
     ).first()
     if not owner_task:
         return {"error": f"任务 {task_id} 不存在或无权操作"}
-    if owner_task.task_type != TaskType.process:
-        return {"error": "待办事项不能添加子任务，请先创建流程任务"}
 
     # 解析 notice_time
     try:
@@ -324,28 +269,9 @@ def create_subtask(
     except (ValueError, TypeError):
         nt = None
 
-<<<<<<< HEAD
-    try:
-        pri = Priority(level)
-    except ValueError:
-        pri = Priority.medium
-
-    try:
-        st = TaskStatus(status)
-    except ValueError:
-        st = TaskStatus.todo
-
-    subtask = Task(
-        user_id=user_id,
-        parent_id=task_id,
-        task_type=TaskType.todo,
-        is_final=False,
-        title=name,
-=======
     subtask = SubTask(
         task_id=task_id,
         name=name,
->>>>>>> 081b93a (function call数据表调用问题修复)
         description=description,
         notice_time=nt,
         level=level,
@@ -428,13 +354,7 @@ def delete_subtask(
         .first()
     )
     if not subtask:
-<<<<<<< HEAD
-        return {"error": f"子任务 {subtask_id} 不存在或无权操作（可能不是子任务）"}
-    if subtask.is_final:
-        return {"error": "最终节点由流程任务自动维护，不能单独删除"}
-=======
         return {"error": f"子任务 {subtask_id} 不存在或无权操作"}
->>>>>>> 081b93a (function call数据表调用问题修复)
 
     deleted_name = subtask.name
     db.delete(subtask)
@@ -453,14 +373,7 @@ def _task_to_dict(t: AppTask) -> Dict[str, Any]:
     return {
         "id": t.id,
         "user_id": t.user_id,
-<<<<<<< HEAD
-        "parent_id": t.parent_id,
-        "task_type": t.task_type.value if t.task_type else "todo",
-        "is_final": bool(t.is_final),
-        "title": t.title,
-=======
         "id_name": t.id_name,
->>>>>>> 081b93a (function call数据表调用问题修复)
         "description": t.description,
         "deadline": t.deadline.isoformat() if t.deadline else None,
         "status": t.status,
