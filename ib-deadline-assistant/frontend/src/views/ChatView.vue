@@ -213,6 +213,7 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { compressImageFile } from '@/services/imageCompress'
 import MarkdownIt from 'markdown-it'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
@@ -283,18 +284,23 @@ function isImageFile(file) {
   return file && file.type && file.type.startsWith('image/')
 }
 
-/** 将文件转 base64 加入待发送列表（最多 5 张） */
-function addFiles(files) {
+/** 将文件压缩后转 base64 加入待发送列表（最多 5 张） */
+async function addFiles(files) {
   const imgFiles = Array.from(files || []).filter(isImageFile)
   const remaining = 5 - selectedImages.value.length
   if (remaining <= 0) return
-  imgFiles.slice(0, remaining).forEach(file => {
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      selectedImages.value.push({ dataUrl: ev.target.result, file })
+  const batch = imgFiles.slice(0, remaining)
+  // 逐张异步压缩（不阻塞 UI），压缩完成后依次加入
+  for (const file of batch) {
+    try {
+      const dataUrl = await compressImageFile(file)
+      // 并行压缩期间用户可能已移除/添加，这里按剩余容量兜底
+      if (selectedImages.value.length >= 5) break
+      selectedImages.value.push({ dataUrl, file })
+    } catch {
+      // 单张压缩失败静默跳过，不影响其他图片
     }
-    reader.readAsDataURL(file)
-  })
+  }
 }
 
 function onImagesSelected(e) {
