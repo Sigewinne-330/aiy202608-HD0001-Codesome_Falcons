@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from datetime import date, datetime
 from database import get_db
 from models.app_user import AppUser as User
 from models.task_new import Task as TaskModel, TaskStatus, TaskType
+from models.sub_task import SubTask as SubTaskModel
 from schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskBreakdownRequest, TaskPlanRequest, TaskPlanResponse, TaskPlanPhase
 from services.auth import get_current_user
 from services.ai_service import ai_service
@@ -40,6 +41,53 @@ def list_tasks(
 
     # 构建任务树（基于 tasks 表的 parent_id 自引用）
     tree = _build_task_tree(tasks)
+
+    # 同时从 sub_task 表查询子任务，合并到对应的流程任务中
+    sub_tasks = db.query(SubTaskModel).join(
+        TaskModel, SubTaskModel.task_id == TaskModel.id
+    ).filter(
+        TaskModel.user_id == current_user.id
+    ).order_by(SubTaskModel.notice_time.asc()).all()
+
+    # 建立 task_id → TaskResponse 的索引，用于快速定位父任务
+    if sub_tasks:
+        id_to_response = {}
+        for root in tree:
+            id_to_response[root.id] = root
+            for child in root.subtasks:
+                id_to_response[child.id] = child
+
+    for st in sub_tasks:
+        parent = id_to_response.get(st.task_id)
+        if parent is None:
+            continue
+        # 将 sub_task 记录映射为 TaskResponse
+        mapped = TaskResponse(
+            id=st.id,
+            user_id=current_user.id,
+            parent_id=st.task_id,
+            task_type="todo",
+            is_final=False,
+            title=st.name,
+            description=st.description or "",
+            subject=parent.subject,
+            priority=st.level or "medium",
+            status=st.status or "pending",
+            deadline=st.notice_time,
+            estimated_hours=0,
+            progress=0,
+            created_at=st.created_at or datetime.now(),
+            update_time=st.updated_at,
+        )
+        # 标记来源，前端用于区分 toggle/update API
+        mapped.sub_task_source = True  # type: ignore[attr-defined]
+        parent.subtasks.append(mapped)
+
+    # 动态判断 task_type：任何有 sub_task 子任务的顶层任务自动变为 process
+    _process_ids = {st.task_id for st in sub_tasks}
+    for root in tree:
+        if root.id in _process_ids:
+            root.task_type = "process"
 
     return tree
 
@@ -298,3 +346,88 @@ async def plan_task(
         total_hours=total_hours,
         total_days=total_days,
     )
+
+
+# ── sub_task 表操作 ────────────────────────────────────────────
+
+from pydantic import BaseModel as PydanticBase
+
+class SubTaskCreate(PydanticBase):
+    task_id: int
+    name: str
+    description: Optional[str] = ""
+    notice_time: Optional[str] = None  # YYYY-MM-DD
+    level: str = "medium"
+    status: str = "pending"
+
+
+@router.post("/sub-tasks")
+def create_sub_task(
+    data: SubTaskCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """在 sub_task 表中创建子任务（供前端"添加子任务"调用）"""
+    # 校验父任务存在且属于当前用户
+    parent = db.query(TaskModel).filter(
+        TaskModel.id == data.task_id,
+        TaskModel.user_id == current_user.id,
+    ).first()
+    if not parent:
+        raise HTTPException(status_code=404, detail="父任务不存在")
+
+    try:
+        notice = date.fromisoformat(data.notice_time) if data.notice_time else None
+    except (ValueError, TypeError):
+        notice = None
+
+    sub = SubTaskModel(
+        task_id=data.task_id,
+        name=data.name,
+        description=data.description or "",
+        notice_time=notice,
+        level=data.level,
+        status=data.status,
+    )
+    db.add(sub)
+    db.commit()
+    db.refresh(sub)
+
+    # 返回前端兼容格式
+    return {
+        "ok": True,
+        "id": sub.id,
+        "task_id": sub.task_id,
+        "name": sub.name,
+        "notice_time": sub.notice_time.isoformat() if sub.notice_time else None,
+        "level": sub.level,
+        "status": sub.status,
+    }
+
+
+@router.put("/sub-tasks/{subtask_id}")
+def update_sub_task(
+    subtask_id: int,
+    data: TaskUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """更新 sub_task 表中子任务的状态/进度（供前端 toggle 调用）"""
+    sub = db.query(SubTaskModel).join(
+        TaskModel, SubTaskModel.task_id == TaskModel.id
+    ).filter(
+        SubTaskModel.id == subtask_id,
+        TaskModel.user_id == current_user.id,
+    ).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="子任务不存在")
+
+    update_data = data.model_dump(exclude_unset=True)
+    # 映射 TaskUpdate 字段到 SubTask 字段
+    if "status" in update_data:
+        sub.status = update_data["status"]
+    if "progress" in update_data and hasattr(sub, "progress"):
+        sub.progress = update_data["progress"]
+
+    db.commit()
+    return {"ok": True, "id": subtask_id, "status": sub.status}

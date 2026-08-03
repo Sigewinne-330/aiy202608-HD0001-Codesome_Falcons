@@ -5,8 +5,10 @@ from datetime import date, timedelta
 from calendar import monthrange
 from pydantic import BaseModel
 from database import get_db
+from sqlalchemy import exists, and_
 from models.app_user import AppUser as User
 from models.task_new import Task as TaskModel, TaskStatus, TaskType
+from models.sub_task import SubTask as SubTaskModel
 from models.deadline import Deadline as DeadlineModel, DeadlineStatus
 from services.auth import get_current_user
 
@@ -65,11 +67,16 @@ def get_calendar_data(
     start_date = first_day - timedelta(days=first_day.weekday())  # 扩展到周日
     end_date = last_day + timedelta(days=(6 - last_day.weekday()))  # 扩展到周六
 
-    # 只有顶层待办事项进入日历；流程主任务由其子任务代表。
+    # 只有无 sub_task 子任务的顶层任务进入日历；有子任务的主任务由子任务代表。
+    has_sub_task = exists().where(
+        and_(
+            SubTaskModel.task_id == TaskModel.id,
+        )
+    )
     tasks = db.query(TaskModel).filter(
         TaskModel.user_id == current_user.id,
         TaskModel.parent_id == None,
-        TaskModel.task_type == TaskType.todo,
+        ~has_sub_task,
         TaskModel.deadline >= start_date,
         TaskModel.deadline <= end_date,
     ).order_by(TaskModel.deadline.asc(), TaskModel.priority.desc()).all()
@@ -130,6 +137,29 @@ def get_calendar_data(
                 priority=st.priority or "medium",
                 status=st.status or "todo",
                 subject=st.subject,
+            )
+            day_map[date_key]["tasks"].append(item)
+            day_map[date_key]["count"] += 1
+
+    # 查询 sub_task 表中的子任务（加入 task 表做用户过滤）
+    sub_task_records = db.query(SubTaskModel).join(
+        TaskModel, SubTaskModel.task_id == TaskModel.id
+    ).filter(
+        TaskModel.user_id == current_user.id,
+        SubTaskModel.notice_time >= start_date,
+        SubTaskModel.notice_time <= end_date,
+    ).order_by(SubTaskModel.notice_time.asc()).all()
+
+    for st in sub_task_records:
+        if st.notice_time:
+            date_key = st.notice_time.isoformat() if isinstance(st.notice_time, date) else st.notice_time
+            item = CalendarDayItem(
+                id=st.id,
+                title=st.name,
+                type="task",
+                priority=st.level or "medium",
+                status=st.status or "pending",
+                subject=None,
             )
             day_map[date_key]["tasks"].append(item)
             day_map[date_key]["count"] += 1

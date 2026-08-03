@@ -38,33 +38,62 @@
         <span>{{ $t('taskDrawer.loading') }}</span>
       </div>
 
-      <button
-        v-for="task in filteredTasks"
-        v-else
-        :key="task.id"
-        type="button"
-        class="drawer-task"
-        @click="openTask(task)"
-      >
-        <span class="drawer-task__state" :class="`priority-${task.priority}`">
-          <v-icon :icon="isDone(task) ? 'mdi-check' : 'mdi-circle-outline'" size="16" />
-        </span>
-        <span class="drawer-task__body">
-          <span class="drawer-task__title">{{ task.title }}</span>
-          <span class="drawer-task__meta">
-            <span v-if="task.subject">{{ task.subject }}</span>
-            <span v-if="task.deadline">{{ formatDate(task.deadline) }}</span>
+      <template v-for="task in filteredTasks" v-else :key="task.id">
+        <!-- 父任务行 -->
+        <button
+          type="button"
+          class="drawer-task"
+          :class="{ 'drawer-task--parent': task.subtasks?.length }"
+          @click="task.subtasks?.length ? toggleExpand(task.id) : openTask(task)"
+        >
+          <span class="drawer-task__state" :class="`priority-${task.priority}`">
+            <v-icon
+              v-if="task.subtasks?.length"
+              :icon="expanded.has(task.id) ? 'mdi-chevron-down' : 'mdi-chevron-right'"
+              size="16"
+            />
+            <v-icon v-else :icon="isDone(task) ? 'mdi-check' : 'mdi-circle-outline'" size="16" />
           </span>
-          <v-progress-linear
-            :model-value="task.progress || 0"
-            :color="priorityColor(task.priority)"
-            height="3"
-            rounded
-            class="mt-2"
-          />
-        </span>
-        <v-icon icon="mdi-chevron-right" size="18" color="grey-lighten-1" />
-      </button>
+          <span class="drawer-task__body">
+            <span class="drawer-task__title">{{ task.title }}</span>
+            <span class="drawer-task__meta">
+              <span v-if="task.subject">{{ task.subject }}</span>
+              <span v-if="task.deadline">{{ formatDate(task.deadline) }}</span>
+              <span v-if="task.subtasks?.length" class="drawer-task__subcount">{{ task.subtasks.length }} 项子任务</span>
+            </span>
+            <v-progress-linear
+              :model-value="task.progress || 0"
+              :color="priorityColor(task.priority)"
+              height="3"
+              rounded
+              class="mt-2"
+            />
+          </span>
+        </button>
+
+        <!-- 子任务列表（缩进嵌套） -->
+        <div v-if="task.subtasks?.length && expanded.has(task.id)" class="drawer-subtasks">
+          <button
+            v-for="sub in task.subtasks"
+            :key="sub.id"
+            type="button"
+            class="drawer-task drawer-task--child"
+            :class="{ 'drawer-task--done': isDone(sub) }"
+            @click="openTask(sub)"
+          >
+            <span class="drawer-task__state" :class="`priority-${sub.priority}`">
+              <v-icon :icon="isDone(sub) ? 'mdi-check' : 'mdi-circle-outline'" size="14" />
+            </span>
+            <span class="drawer-task__body">
+              <span class="drawer-task__title">{{ sub.title }}</span>
+              <span class="drawer-task__meta">
+                <span v-if="sub.deadline">{{ formatDate(sub.deadline) }}</span>
+              </span>
+            </span>
+            <v-icon icon="mdi-chevron-right" size="16" color="grey-lighten-1" />
+          </button>
+        </div>
+      </template>
 
       <div v-if="!loading && filteredTasks.length === 0" class="task-panel__empty">
         <v-icon icon="mdi-checkbox-marked-circle-outline" color="success" size="42" />
@@ -99,11 +128,13 @@ const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 const { token } = useAuth()
-const tasks = ref([])
+const tasks = ref([])       // 原始树
 const loading = ref(true)
 const search = ref('')
+const expanded = ref(new Set())
 const isTasksPage = computed(() => route.path === '/tasks')
 
+/** 递归 flatten 用于计数和完成率计算 */
 function flatten(nodes, output = []) {
   for (const task of nodes || []) {
     output.push(task)
@@ -112,19 +143,42 @@ function flatten(nodes, output = []) {
   return output
 }
 
+/** 根据搜索关键词过滤任务树 */
+function filterTree(nodes, keyword) {
+  if (!nodes) return []
+  const results = []
+  for (const task of nodes) {
+    const titleMatch = !keyword || `${task.title} ${task.subject || ''}`.toLowerCase().includes(keyword)
+    const filteredSubtasks = filterTree(task.subtasks, keyword)
+    const hasMatchingSubtasks = filteredSubtasks.length > 0
+    if (titleMatch || hasMatchingSubtasks) {
+      results.push({ ...task, subtasks: filteredSubtasks })
+    }
+  }
+  return results
+}
+
 const filteredTasks = computed(() => {
   const keyword = search.value.trim().toLowerCase()
-  return tasks.value
-    .filter((task) => !isDone(task))
-    .filter((task) => !keyword || `${task.title} ${task.subject || ''}`.toLowerCase().includes(keyword))
+  return filterTree(tasks.value, keyword)
+    .filter((task) => !isDone(task) || (task.subtasks?.length))
     .sort((a, b) => priorityWeight(b.priority) - priorityWeight(a.priority))
 })
 
-const pendingCount = computed(() => tasks.value.filter((task) => !isDone(task)).length)
+const allFlattened = computed(() => flatten(tasks.value))
+
+const pendingCount = computed(() => allFlattened.value.filter((task) => !isDone(task)).length)
 const completionRate = computed(() => {
-  if (!tasks.value.length) return 0
-  return Math.round((tasks.value.filter(isDone).length / tasks.value.length) * 100)
+  if (!allFlattened.value.length) return 0
+  return Math.round((allFlattened.value.filter(isDone).length / allFlattened.value.length) * 100)
 })
+
+function toggleExpand(id) {
+  const s = new Set(expanded.value)
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+  expanded.value = s
+}
 
 function isDone(task) {
   return ['done', 'completed'].includes(task.status)
@@ -167,7 +221,7 @@ async function loadTasks() {
   try {
     const headers = token.value ? { Authorization: `Bearer ${token.value}` } : {}
     const response = await fetch('/api/tasks', { headers })
-    tasks.value = response.ok ? flatten(await response.json()) : []
+    tasks.value = response.ok ? await response.json() : []
   } catch {
     tasks.value = []
   } finally {
@@ -195,6 +249,13 @@ onBeforeUnmount(() => stopTaskSync?.())
 .task-panel__list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px 12px; }
 .drawer-task { width: 100%; display: flex; align-items: center; gap: 11px; border: 0; background: transparent; padding: 13px 10px; border-radius: 14px; cursor: pointer; text-align: left; color: #1e2942; transition: background .16s ease, transform .16s ease; }
 .drawer-task:hover { background: #f4f6fc; transform: translateX(2px); }
+.drawer-task--parent { font-weight: 600; }
+.drawer-task--child { padding-left: 26px; border-radius: 10px; }
+.drawer-task--done { opacity: .55; }
+.drawer-task--done .drawer-task__title { text-decoration: line-through; }
+.drawer-task__state { width: 28px; height: 28px; flex: 0 0 28px; border-radius: 9px; display: grid; place-items: center; }
+.drawer-task--child .drawer-task__state { width: 22px; height: 22px; border-radius: 7px; }
+.drawer-subtasks { position: relative; margin-left: 18px; padding-left: 12px; border-left: 2px solid #e8e4f3; }
 .drawer-task__state { width: 28px; height: 28px; flex: 0 0 28px; border-radius: 9px; display: grid; place-items: center; }
 .priority-urgent { color: #e54545; background: #fff0f0; }
 .priority-high { color: #ed941c; background: #fff6e9; }
@@ -203,6 +264,7 @@ onBeforeUnmount(() => stopTaskSync?.())
 .drawer-task__body { flex: 1; min-width: 0; display: block; }
 .drawer-task__title { display: block; font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .drawer-task__meta { display: flex; gap: 8px; margin-top: 4px; color: #8a94a9; font-size: 11px; }
+.drawer-task__subcount { color: #7e6fa4; font-weight: 600; }
 .task-panel__empty { min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #929bad; font-size: 13px; }
 .task-panel__footer { padding: 14px 18px 20px; border-top: 1px solid #edf0f6; }
 </style>

@@ -42,6 +42,7 @@ class TaskResponse(BaseModel):
     created_at: datetime
     update_time: Optional[datetime] = None
     subtasks: List["TaskResponse"] = Field(default_factory=list)
+    sub_task_source: bool = False  # True 表示该记录来自 sub_task 表
 
     class Config:
         from_attributes = True

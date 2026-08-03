@@ -427,13 +427,22 @@ async function createSubtask() {
   if (!selectedParent.value) return
   saving.value = true
   try {
-    await postTask({
-      ...subtaskForm.value,
-      parent_id: selectedParent.value.id,
-      task_type: 'todo',
-      subject: selectedParent.value.subject || '',
-      estimated_hours: 0,
+    const response = await authFetch(`${API_BASE}/tasks/sub-tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task_id: selectedParent.value.id,
+        name: subtaskForm.value.title,
+        description: subtaskForm.value.description || '',
+        notice_time: subtaskForm.value.deadline || null,
+        level: subtaskForm.value.priority || 'medium',
+        status: 'pending',
+      }),
     })
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      throw new Error(data.detail || `HTTP ${response.status}`)
+    }
     subtaskDialog.value = false
     notifyTasksChanged()
   } catch (error) {
@@ -445,8 +454,11 @@ async function createSubtask() {
 
 async function toggleDone(task) {
   const nextStatus = task.status === 'done' ? 'todo' : 'done'
+  const endpoint = task.sub_task_source
+    ? `${API_BASE}/tasks/sub-tasks/${task.id}`
+    : `${API_BASE}/tasks/${task.id}`
   try {
-    const response = await authFetch(`${API_BASE}/tasks/${task.id}`, {
+    const response = await authFetch(endpoint, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: nextStatus, progress: nextStatus === 'done' ? 100 : 0 }),
