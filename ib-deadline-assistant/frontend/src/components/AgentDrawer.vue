@@ -99,6 +99,11 @@
           <div v-else class="agent-md"
             :key="'md-' + index + '-' + (message.streaming ? 1 : 0)"
             v-html="renderMarkdown(message.content)" />
+          <!-- 每条 AI 回复的 token 统计：流式中实时估算增长，结束后显示 API 真实值 -->
+          <div v-if="message.role === 'assistant' && message.token" class="agent-token-meta">
+            <v-icon icon="mdi-lightning-bolt" size="11" />
+            {{ tokenLabel(message) }} tokens
+          </div>
         </div>
       </div>
     </div>
@@ -197,6 +202,24 @@ function renderMarkdown(text) {
   } catch {
     return text
   }
+}
+
+/** 流式中实时估算 token：中文 1 字 ≈ 1 token，其他字符 ≈ 4 字/token（结束时会用 API 真实值替换） */
+function estimateTokens(text) {
+  if (!text) return 0
+  let cjk = 0
+  let other = 0
+  for (const ch of text) {
+    if (/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(ch)) cjk++
+    else other++
+  }
+  return Math.max(1, Math.round(cjk + other / 4))
+}
+
+/** 渲染 token 标签：流式中显示估算值（≈ 前缀），结束后显示 API 真实值 */
+function tokenLabel(message) {
+  if (!message || !message.token) return ''
+  return (message.tokenIsEstimate ? '≈ ' : '') + message.token.toLocaleString()
 }
 
 defineEmits(['close'])
@@ -309,7 +332,7 @@ async function switchConversation(convId) {
     const response = await fetch(`/api/chat/history?conversation_id=${convId}`, { headers: headers() })
     if (response.ok) {
       const data = await response.json()
-      messages.value = (data.messages || []).map((item) => ({ role: item.role, content: item.content }))
+      messages.value = (data.messages || []).map((item) => ({ role: item.role, content: item.content, token: item.token || 0 }))
       await scrollToBottom()
     }
   } catch {
@@ -388,11 +411,24 @@ async function sendMessage() {
         if (!payload || payload === '[DONE]') continue
         try {
           const parsed = JSON.parse(payload)
+          // 流式结束事件：携带本轮实际消耗的 token 数（真实值替换估算值）
+          if (parsed && typeof parsed === 'object' && parsed.done) {
+            if (parsed.tokens) {
+              messages.value[responseIndex].token = parsed.tokens
+              messages.value[responseIndex].tokenIsEstimate = false
+            }
+            continue
+          }
           const chunk = typeof parsed === 'string' ? parsed : (parsed.error || '')
           messages.value[responseIndex].content += chunk
+          // 实时估算 token，让数字随生成过程增长（结束时用 API 真实值替换）
+          messages.value[responseIndex].token = estimateTokens(messages.value[responseIndex].content)
+          messages.value[responseIndex].tokenIsEstimate = true
           if (chunk.includes('✓ 操作成功')) taskMutationSucceeded = true
         } catch {
           messages.value[responseIndex].content += payload
+          messages.value[responseIndex].token = estimateTokens(messages.value[responseIndex].content)
+          messages.value[responseIndex].tokenIsEstimate = true
           if (payload.includes('✓ 操作成功')) taskMutationSucceeded = true
         }
       }
@@ -474,6 +510,16 @@ onMounted(() => {
 .agent-bubble--md { max-width: 92%; background: transparent; padding: 0; }
 .agent-text { white-space: pre-wrap; word-break: break-word; }
 .agent-md { padding: 11px 13px; border-radius: 5px 15px 15px 15px; background: #f0f2f7; color: #28334b; word-break: break-word; font-size: 13px; line-height: 1.55; }
+.agent-token-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  padding: 4px 13px 0;
+  color: #9aa3b5;
+  font-size: 10.5px;
+  font-weight: 500;
+}
 .agent-md :deep(p) { margin-bottom: 6px; }
 .agent-md :deep(p:last-child) { margin-bottom: 0; }
 .agent-md :deep(h1), .agent-md :deep(h2), .agent-md :deep(h3), .agent-md :deep(h4) { margin: 10px 0 6px; font-weight: 700; }

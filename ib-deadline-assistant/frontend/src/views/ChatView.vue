@@ -100,6 +100,11 @@
                     :key="'md-' + i + '-' + (msg.streaming ? 1 : 0)"
                     v-html="renderMarkdown(msg.content)" />
                 </div>
+                <!-- 每条 AI 回复的 token 统计：流式中实时估算增长，结束后显示 API 真实值 -->
+                <div v-if="msg.role === 'assistant' && msg.token" class="d-flex align-center justify-end pa-2 text-caption text-grey" style="border-top: 1px solid #E0E0E0;">
+                  <v-icon size="13" class="mr-1">mdi-lightning-bolt-outline</v-icon>
+                  {{ tokenLabel(msg) }} tokens
+                </div>
                 <!-- 提取到任务 JSON 时显示操作按钮 -->
                 <div v-if="!msg.streaming && msg.taskData" class="d-flex align-center pa-2" style="border-top: 1px solid #E0E0E0;">
                   <v-icon size="18" color="primary" class="mr-1">mdi-clipboard-list-outline</v-icon>
@@ -299,6 +304,24 @@ function extractTaskJson(content) {
   }
 }
 
+/** 流式中实时估算 token：中文 1 字 ≈ 1 token，其他字符 ≈ 4 字/token（结束时会用 API 真实值替换） */
+function estimateTokens(text) {
+  if (!text) return 0
+  let cjk = 0
+  let other = 0
+  for (const ch of text) {
+    if (/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(ch)) cjk++
+    else other++
+  }
+  return Math.max(1, Math.round(cjk + other / 4))
+}
+
+/** 渲染 token 标签：流式中显示估算值（≈ 前缀），结束后显示 API 真实值 */
+function tokenLabel(message) {
+  if (!message || !message.token) return ''
+  return (message.tokenIsEstimate ? '≈ ' : '') + message.token.toLocaleString()
+}
+
 // ---- 消息发送 / 流式 ----
 
 async function sendMessage() {
@@ -368,11 +391,22 @@ async function sendMessage() {
         // 新格式：JSON 编码（chunk 内换行被转义，SSE 帧不再被破坏）
         try {
           const parsed = JSON.parse(data)
+          if (parsed && typeof parsed === 'object' && parsed.done) {
+            // 流式结束事件：API 真实值替换估算值
+            if (parsed.tokens) {
+              messages.value[aiIndex].token = parsed.tokens
+              messages.value[aiIndex].tokenIsEstimate = false
+            }
+            continue
+          }
           if (typeof parsed === 'string') {
             messages.value[aiIndex].content += parsed
           } else if (parsed && parsed.error) {
             messages.value[aiIndex].content = t('chat.errorPrefix') + parsed.error
           }
+          // 实时估算 token，让数字随生成过程增长（结束时用 API 真实值替换）
+          messages.value[aiIndex].token = estimateTokens(messages.value[aiIndex].content)
+          messages.value[aiIndex].tokenIsEstimate = true
         } catch {
           // 兼容旧格式：[ERROR] 前缀或裸文本
           if (data.startsWith('[ERROR]')) {
@@ -380,6 +414,8 @@ async function sendMessage() {
           } else {
             messages.value[aiIndex].content += data
           }
+          messages.value[aiIndex].token = estimateTokens(messages.value[aiIndex].content)
+          messages.value[aiIndex].tokenIsEstimate = true
         }
         scheduleScroll()
       }
@@ -465,7 +501,7 @@ async function loadHistory(convId) {
     const res = await authFetch(`${API_BASE}/chat/history?conversation_id=${convId}`)
     if (!res.ok) return
     const data = await res.json()
-    messages.value = (data.messages || []).map(m => ({ role: m.role, content: m.content }))
+    messages.value = (data.messages || []).map(m => ({ role: m.role, content: m.content, token: m.token || 0 }))
     scrollToBottom()
   } catch {
     // 忽略加载失败

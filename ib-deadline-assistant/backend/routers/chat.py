@@ -487,6 +487,8 @@ async def chat_stream(
 
                 elif event["type"] == "done":
                     final_reply = event["content"]
+                    # 把本轮累计 token 数一并下发给前端（用于每条消息展示）
+                    yield f"data: {json.dumps({'done': True, 'tokens': total_tokens}, ensure_ascii=False)}\n\n"
                     yield "data: [DONE]\n\n"
 
         except Exception as e:

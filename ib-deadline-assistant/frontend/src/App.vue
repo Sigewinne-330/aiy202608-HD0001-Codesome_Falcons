@@ -121,23 +121,25 @@
         </v-card>
       </v-slide-x-reverse-transition>
 
-      <div class="quick-actions" :aria-label="$t('app.quickActions')">
-        <v-tooltip :text="$t('app.urgent')" location="left">
-          <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-alert-outline" color="error" elevation="8" :aria-label="$t('app.openUrgent')" @click="router.push('/urgent')" />
-          </template>
-        </v-tooltip>
-        <v-tooltip :text="$t('app.progress')" location="left">
-          <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-chart-timeline-variant" color="primary" elevation="8" :aria-label="$t('app.openProgress')" @click="router.push('/progress')" />
-          </template>
-        </v-tooltip>
-        <v-tooltip :text="$t('app.settings')" location="left">
-          <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-cog-outline" color="grey-darken-3" elevation="8" :aria-label="$t('app.openSettings')" @click="settingsOpen = true" />
-          </template>
-        </v-tooltip>
-      </div>
+      <transition name="quick-actions-fade">
+        <div v-show="!agentDrawer" class="quick-actions" :aria-label="$t('app.quickActions')">
+          <v-tooltip :text="$t('app.urgent')" location="left">
+            <template #activator="{ props }">
+              <v-btn v-bind="props" icon="mdi-alert-outline" color="error" elevation="8" :aria-label="$t('app.openUrgent')" @click="router.push('/urgent')" />
+            </template>
+          </v-tooltip>
+          <v-tooltip :text="$t('app.progress')" location="left">
+            <template #activator="{ props }">
+              <v-btn v-bind="props" icon="mdi-chart-timeline-variant" color="primary" elevation="8" :aria-label="$t('app.openProgress')" @click="router.push('/progress')" />
+            </template>
+          </v-tooltip>
+          <v-tooltip :text="$t('app.settings')" location="left">
+            <template #activator="{ props }">
+              <v-btn v-bind="props" icon="mdi-cog-outline" color="grey-darken-3" elevation="8" :aria-label="$t('app.openSettings')" @click="settingsOpen = true" />
+            </template>
+          </v-tooltip>
+        </div>
+      </transition>
 
       <SettingsDialog v-model="settingsOpen" @logout="handleLogout" />
     </template>
@@ -498,6 +500,12 @@ onBeforeUnmount(() => {
 }
 
 .quick-actions .v-btn { width: 48px; height: 48px; }
+
+/* Agent 抽屉打开时：三个快捷按钮收回去（淡出+下沉），关闭时弹回来 */
+.quick-actions-fade-enter-active,
+.quick-actions-fade-leave-active { transition: opacity .2s ease, transform .2s ease; }
+.quick-actions-fade-enter-from,
+.quick-actions-fade-leave-to { opacity: 0; transform: translateY(18px) scale(.96); }
 
 .page-fade-enter-active,
 .page-fade-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
