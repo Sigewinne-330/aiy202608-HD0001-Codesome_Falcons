@@ -19,7 +19,12 @@ export default defineConfig({
       '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
-      }
+      },
+      // 上传的图片（chat_message.extra 存 /uploads/... URL）
+      '/uploads': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
     }
   }
 })

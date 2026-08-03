@@ -33,6 +33,7 @@ from services.task_tools_schema import TASK_TOOLS
 from services.knowledge_base_tools import KNOWLEDGE_BASE_TOOLS, get_subject_guidelines
 from services import task_tools
 from services.billing import ensure_balance, deduct_credits
+from services.image_storage import save_images
 
 # 合并所有可用工具（任务 CRUD + 知识库查询）
 ALL_TOOLS = TASK_TOOLS + KNOWLEDGE_BASE_TOOLS
@@ -406,14 +407,14 @@ async def chat(
     total_tokens = usage_tracker.get("total_tokens", 0)
     deduct_credits(db, current_user, total_tokens, note=f"AI 对话消耗 {total_tokens} tokens")
 
-    # 保存用户消息（附带的图片写入 extra，历史记录永久保留）
+    # 保存用户消息（图片落盘为文件，extra 只存 URL，历史记录永久保留）
     user_msg = ChatMessageModel(
         user_id=current_user.id,
         conversation_id=conv.id,
         role="user",
         content=data.content,
         token=0,
-        extra={"images": data.images} if data.images else None,
+        extra={"images": save_images(data.images)} if data.images else None,
     )
     db.add(user_msg)
 
@@ -451,14 +452,14 @@ async def chat_stream(
         db, uid, data.conversation_id, first_message=data.content
     )
 
-    # 先保存用户消息（附带的图片写入 extra，历史记录永久保留）
+    # 先保存用户消息（图片落盘为文件，extra 只存 URL，历史记录永久保留）
     user_msg = ChatMessageModel(
         user_id=uid,
         conversation_id=conv.id,
         role="user",
         content=data.content,
         token=0,
-        extra={"images": data.images} if data.images else None,
+        extra={"images": save_images(data.images)} if data.images else None,
     )
     db.add(user_msg)
     db.commit()

@@ -31,3 +31,6 @@ build/
 .env.*.local
 venv/
 .venv/
+
+# 上传的图片文件（库里只存 URL，文件不入库）
+ib-deadline-assistant/backend/uploads/
