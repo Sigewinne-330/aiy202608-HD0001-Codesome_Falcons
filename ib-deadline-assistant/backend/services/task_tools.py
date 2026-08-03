@@ -104,7 +104,7 @@ def list_tasks(
         q = q.filter(Task.parent_id == parent_id)
 
     tasks = (
-        q.order_by(Task.deadline.asc().nullslast(), Task.priority.desc())
+        q.order_by(Task.deadline.asc(), Task.priority.desc())
         .limit(limit)
         .all()
     )
@@ -245,7 +245,7 @@ def list_subtasks(
             pass
 
     subtasks = (
-        q.order_by(Task.deadline.asc().nullslast(), Task.priority.desc())
+        q.order_by(Task.deadline.asc(), Task.priority.desc())
         .limit(limit)
         .all()
     )

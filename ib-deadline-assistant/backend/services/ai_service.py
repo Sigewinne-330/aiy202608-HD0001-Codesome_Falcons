@@ -287,6 +287,103 @@ class AIService:
         # 所有引擎失败：直接报错
         yield "抱歉，所有 AI 引擎调用均失败，无法完成流式对话。"
 
+    async def chat_stream_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """流式对话 + 工具调用。逐 chunk 推送文本，流结束时若有 tool_calls 则集中 yield。
+
+        产出事件格式：
+          {"type": "text", "content": "..."}       — 普通文本 delta，可直接推前端
+          {"type": "tool_calls", "tool_calls": [...]} — 模型决定调工具，返回完整调用列表
+
+        调用方拿到 tool_calls 事件后应执行工具、喂回结果、重新调用本方法。
+
+        引擎：Ark → DeepSeek（均用 AsyncOpenAI）
+        """
+        if not self.ark_async and not self.ds_async:
+            raise RuntimeError("所有 AI 引擎均未配置 API Key，无法完成流式工具调用。")
+
+        last_error = None
+        for cli, mdl in [
+            (self.ark_async, settings.ARK_MODEL),
+            (self.ds_async, settings.DEEPSEEK_MODEL),
+        ]:
+            if not cli:
+                continue
+            try:
+                kwargs = {
+                    "model": mdl,
+                    "messages": messages,
+                    "tools": tools,
+                    "tool_choice": "auto",
+                    "temperature": 0.7,
+                    "max_tokens": 2048,
+                    "stream": True,
+                }
+                # Ark 关闭深度思考，加速首字
+                if cli is self.ark_async:
+                    kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+
+                engine = "Ark" if cli is self.ark_async else "DeepSeek"
+                logger.info(f"[LLM-STREAM-TOOLS] engine={engine}, model={mdl}")
+
+                stream = await cli.chat.completions.create(**kwargs)
+
+                # 累积工具调用的 delta 分片
+                tool_calls_acc: List[Dict[str, Any]] = []
+                full_text: List[str] = []
+
+                async for chunk in stream:
+                    delta = chunk.choices[0].delta if chunk.choices else None
+                    if not delta:
+                        continue
+
+                    # 普通文本 → 即时推送 + 终端日志
+                    if delta.content:
+                        full_text.append(delta.content)
+                        logger.info(f"[LLM-CHUNK] {delta.content!r}")
+                        yield {"type": "text", "content": delta.content}
+
+                    # 工具调用 delta → 累积不推送 + 终端日志
+                    if delta.tool_calls:
+                        for tc in delta.tool_calls:
+                            while len(tool_calls_acc) <= tc.index:
+                                tool_calls_acc.append({
+                                    "id": "",
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""},
+                                })
+                            acc = tool_calls_acc[tc.index]
+                            if tc.id:
+                                acc["id"] = tc.id
+                            if tc.function and tc.function.name:
+                                logger.info(f"[LLM-TOOL] name={tc.function.name!r}")
+                                acc["function"]["name"] = tc.function.name
+                            if tc.function and tc.function.arguments:
+                                logger.info(f"[LLM-TOOL-ARG] {tc.function.arguments!r}")
+                                acc["function"]["arguments"] += tc.function.arguments
+
+                # 流结束：日志汇总
+                final_text = "".join(full_text)
+                if tool_calls_acc:
+                    logger.info(f"[LLM-TOOLS] tool_calls={[t['function']['name'] for t in tool_calls_acc]} text={final_text[:80]!r}")
+                    yield {"type": "tool_calls", "tool_calls": tool_calls_acc}
+                else:
+                    logger.info(f"[LLM-DONE] 完整返回（{len(final_text)} 字符）:\n{final_text}")
+
+                return  # 成功
+
+            except Exception as e:
+                engine = "Ark" if cli is self.ark_async else "DeepSeek"
+                logger.warning(f"{engine} chat_stream_with_tools failed: {e}")
+                last_error = e
+                if cli is self.ark_async:
+                    continue
+
+        raise RuntimeError(f"所有 AI 引擎流式工具调用均失败。最后错误：{last_error}")
+
     async def chat_with_tools(
         self,
         messages: List[Dict[str, Any]],

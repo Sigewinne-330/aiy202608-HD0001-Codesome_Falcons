@@ -9,7 +9,7 @@
 import json
 import logging
 from datetime import date
-from typing import List, Dict, Any
+from typing import List, Dict, Any, AsyncGenerator
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
@@ -119,6 +119,100 @@ async def _run_tool_loop(
     return "抱歉，处理过程中超过了最大工具调用次数，请简化你的请求后重试。"
 
 
+async def _run_tool_loop_stream(
+    messages: List[Dict[str, Any]],
+    db: Session,
+    user_id: int,
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """流式工具调用循环：边推文本边处理工具调用，工具执行时推送状态反馈。
+
+    产出事件格式：
+      {"type": "text", "content": "..."}   — 普通文本，可直接推前端
+      {"type": "status", "content": "..."} — 状态提示（如"正在创建任务..."）
+      {"type": "done", "content": "..."}   — 完整回复文本（用于保存）
+
+    Args:
+        messages: 初始消息列表
+        db: 数据库会话
+        user_id: 当前用户 ID
+    """
+    full_reply: List[str] = []  # 跨轮累积完整回复
+
+    for _round in range(MAX_TOOL_ROUNDS):
+        tool_calls = None
+
+        async for event in ai_service.chat_stream_with_tools(messages, TASK_TOOLS):
+            if event["type"] == "text":
+                full_reply.append(event["content"])
+                yield event  # 直接透传文本
+
+            elif event["type"] == "tool_calls":
+                tool_calls = event["tool_calls"]
+
+        # 没有工具调用 → 纯文本对话完成
+        if tool_calls is None:
+            yield {"type": "done", "content": "".join(full_reply)}
+            return
+
+        # 有工具调用 → 推送状态 + 执行
+        tool_names = [tc["function"]["name"] for tc in tool_calls]
+        logger.info(f"Stream tool calls: {tool_names}")
+
+        # 构建 assistant 消息（保存已流式输出的文本 + tool_calls）
+        assistant_msg = {
+            "role": "assistant",
+            "content": "".join(full_reply) if full_reply else None,
+            "tool_calls": tool_calls,
+        }
+        messages.append(assistant_msg)
+
+        for tc in tool_calls:
+            func_name = tc["function"]["name"]
+            try:
+                func_args = json.loads(tc["function"]["arguments"])
+            except json.JSONDecodeError:
+                func_args = {}
+
+            # 状态反馈
+            status_map = {
+                "create_task": "正在创建任务...",
+                "delete_task": "正在删除任务...",
+                "create_subtask": "正在添加子任务...",
+                "delete_subtask": "正在删除子任务...",
+            }
+            status = status_map.get(func_name, f"正在执行 {func_name}...")
+            yield {"type": "status", "content": status}
+
+            # 执行工具
+            handler = TOOL_DISPATCH.get(func_name)
+            if handler:
+                try:
+                    result = handler(db=db, user_id=user_id, **func_args)
+                except Exception as e:
+                    result = {"error": f"工具执行失败: {e}"}
+                    logger.error(f"Tool {func_name} error: {e}")
+            else:
+                result = {"error": f"未知工具: {func_name}"}
+
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tc["id"],
+                "content": json.dumps(result, ensure_ascii=False),
+            })
+
+            # 工具执行完毕后推送结果状态
+            if result.get("ok"):
+                yield {"type": "status", "content": "✓ 操作成功"}
+            elif result.get("error"):
+                yield {"type": "status", "content": f"✗ {result['error']}"}
+
+        # 工具执行完，继续下一轮（AI 基于结果生成后续回复）
+        full_reply = []  # 重置，因为后续回复是新一轮
+
+    # 超过最大轮次
+    yield {"type": "done", "content": "抱歉，处理过程中超过了最大工具调用次数，请简化你的请求后重试。"}
+
+
 # ═══════════════════════════════════════════════════════════════
 # 端点
 # ═══════════════════════════════════════════════════════════════
@@ -180,7 +274,7 @@ async def chat_stream(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """流式对话 — 先执行工具调用循环拿到最终回复，再 SSE 逐字推流"""
+    """流式对话 — 实时推送 AI 文本 + 工具调用状态反馈"""
     uid = current_user.id
 
     # 先保存用户消息
@@ -206,34 +300,42 @@ async def chat_stream(
         for h in recent_history
     ]
 
-    # 构建消息 + 执行工具调用循环（非流式，拿到完整回复）
+    # 构建消息
     messages = _build_messages(data.content, history)
-    try:
-        reply = await _run_tool_loop(messages, db, uid)
-    except Exception as e:
-        reply = f"抱歉，处理请求时出错：{e}"
-        logger.error(f"Tool loop error in stream: {e}")
+    final_reply = ""  # 最终完整回复（用于保存到 chat_history）
 
     async def generate():
+        nonlocal final_reply
         try:
-            for ch in reply:
-                yield f"data: {json.dumps(ch, ensure_ascii=False)}\n\n"
-            yield "data: [DONE]\n\n"
+            async for event in _run_tool_loop_stream(messages, db, uid):
+                if event["type"] == "text":
+                    yield f"data: {json.dumps(event['content'], ensure_ascii=False)}\n\n"
+
+                elif event["type"] == "status":
+                    status_text = f"[{event['content']}]"
+                    yield f"data: {json.dumps(status_text, ensure_ascii=False)}\n\n"
+
+                elif event["type"] == "done":
+                    final_reply = event["content"]
+                    yield "data: [DONE]\n\n"
+
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+            final_reply = f"错误：{e}"
         finally:
-            from database import SessionLocal
-            save_db = SessionLocal()
-            try:
-                assistant_msg = ChatHistoryModel(
-                    user_id=uid,
-                    role=MessageRole.assistant,
-                    content=reply,
-                )
-                save_db.add(assistant_msg)
-                save_db.commit()
-            finally:
-                save_db.close()
+            if final_reply:
+                from database import SessionLocal
+                save_db = SessionLocal()
+                try:
+                    assistant_msg = ChatHistoryModel(
+                        user_id=uid,
+                        role=MessageRole.assistant,
+                        content=final_reply,
+                    )
+                    save_db.add(assistant_msg)
+                    save_db.commit()
+                finally:
+                    save_db.close()
 
     return StreamingResponse(
         generate(),
