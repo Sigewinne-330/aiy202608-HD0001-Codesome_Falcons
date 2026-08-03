@@ -12,6 +12,29 @@
         </router-link>
 
         <div class="nav-actions">
+          <v-menu>
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                variant="text"
+                color="primary"
+                rounded="lg"
+                prepend-icon="mdi-translate"
+              >
+                {{ currentLanguageLabel }}
+              </v-btn>
+            </template>
+            <v-list density="compact" min-width="160">
+              <v-list-item
+                v-for="opt in languageOptions"
+                :key="opt.value"
+                :active="opt.value === currentLocale"
+                @click="changeLanguage(opt.value)"
+              >
+                <v-list-item-title class="text-body-2">{{ opt.title }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
           <v-btn variant="text" color="primary" rounded="lg" to="/login">{{ $t('landing.login') }}</v-btn>
           <v-btn color="primary" rounded="lg" to="/register" class="nav-register">{{ $t('landing.startFree') }}</v-btn>
         </div>
@@ -280,6 +303,20 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { setLocale, LOCALE_NAMES, SUPPORTED_LOCALES } from '@/i18n'
+
+const { locale } = useI18n()
+
+const currentLocale = computed(() => locale.value)
+const currentLanguageLabel = computed(() => LOCALE_NAMES[locale.value] || '简体中文')
+const languageOptions = SUPPORTED_LOCALES.map((code) => ({ title: LOCALE_NAMES[code], value: code }))
+
+function changeLanguage(code) {
+  setLocale(code)
+}
+
 function scrollToId(selector) {
   document.querySelector(selector)?.scrollIntoView({ behavior: 'smooth' })
 }
