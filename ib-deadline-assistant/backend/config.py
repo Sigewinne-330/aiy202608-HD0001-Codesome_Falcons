@@ -26,7 +26,7 @@ class Settings:
     # Ark（豆包 - 主 AI 引擎）
     ARK_API_KEY: str = os.getenv("ARK_API_KEY", "")
     ARK_BASE_URL: str = os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
-    ARK_MODEL: str = os.getenv("ARK_MODEL", "deepseek-v4-pro-260425")
+    ARK_MODEL: str = os.getenv("ARK_MODEL", "doubao-seed-2-1-pro-260628")
 
     # JWT
     SECRET_KEY: str = os.getenv("SECRET_KEY", "ib-assistant-secret-key-change-me")
