@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 # 最大工具调用轮次，防止无限循环
-MAX_TOOL_ROUNDS = 5
+MAX_TOOL_ROUNDS = 30
 
 # 工具名 → 执行函数的映射
 TOOL_DISPATCH: Dict[str, Any] = {
