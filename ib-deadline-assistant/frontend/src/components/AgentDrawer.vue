@@ -93,8 +93,20 @@
         <div class="agent-bubble" :class="{ 'agent-bubble--md': message.role === 'assistant' }">
           <!-- 流式中且无内容：打字动画 -->
           <div v-if="message.streaming && !message.content" class="typing-dots"><i /><i /><i /></div>
-          <!-- 用户消息：纯文本 -->
-          <div v-else-if="message.role === 'user'" class="agent-text">{{ message.content }}</div>
+          <!-- 用户消息：图片 + 文本 -->
+          <div v-else-if="message.role === 'user'">
+            <div v-if="message.images && message.images.length" class="agent-images">
+              <img
+                v-for="(img, i) in message.images"
+                :key="i"
+                :src="img"
+                class="agent-img"
+                :alt="`image-${i + 1}`"
+                @click="previewImage(img)"
+              />
+            </div>
+            <div v-if="message.content" class="agent-text">{{ message.content }}</div>
+          </div>
           <!-- AI 消息：Markdown + LaTeX 实时渲染（key 切换强制结束重渲染） -->
           <div v-else class="agent-md"
             :key="'md-' + index + '-' + (message.streaming ? 1 : 0)"
@@ -157,6 +169,11 @@
       </div>
     </div>
     <div class="agent-panel__note">{{ $t('agent.note') }}</div>
+
+    <!-- 图片大图预览 -->
+    <v-dialog v-model="previewOpen" max-width="85vw" @click:outside="previewOpen = false">
+      <v-img :src="previewUrl" contain max-height="80vh" style="border-radius: 12px;" />
+    </v-dialog>
   </div>
 </template>
 
@@ -236,6 +253,8 @@ const conversations = ref([])
 const selectedImages = ref([])  // [{ dataUrl, file }]
 const imageInput = ref(null)
 const balance = ref(0)
+const previewUrl = ref('')   // 图片大图预览
+const previewOpen = ref(false)
 let controller = null
 
 const suggestions = [
@@ -323,6 +342,12 @@ function removeImage(idx) {
   selectedImages.value.splice(idx, 1)
 }
 
+/** 点击历史/发送的图片 → 大图预览 */
+function previewImage(url) {
+  previewUrl.value = url
+  previewOpen.value = true
+}
+
 /** 切换对话：加载该对话的历史消息 */
 async function switchConversation(convId) {
   if (loading.value) return
@@ -332,7 +357,7 @@ async function switchConversation(convId) {
     const response = await fetch(`/api/chat/history?conversation_id=${convId}`, { headers: headers() })
     if (response.ok) {
       const data = await response.json()
-      messages.value = (data.messages || []).map((item) => ({ role: item.role, content: item.content, token: item.token || 0 }))
+      messages.value = (data.messages || []).map((item) => ({ role: item.role, content: item.content, token: item.token || 0, images: item.images || null }))
       await scrollToBottom()
     }
   } catch {
@@ -356,10 +381,11 @@ async function sendMessage() {
   const content = input.value.trim()
   if (!content || loading.value) return
 
-  messages.value.push({ role: 'user', content })
+  // 先取出待发送图片（挂到用户消息上，气泡里永久显示）
+  const images = selectedImages.value.map(img => img.dataUrl)
+  messages.value.push({ role: 'user', content, images: images.length ? [...images] : null })
   messages.value.push({ role: 'assistant', content: '', streaming: true })
   const responseIndex = messages.value.length - 1
-  const images = selectedImages.value.map(img => img.dataUrl)
   input.value = ''
   selectedImages.value = []
   loading.value = true
@@ -509,6 +535,9 @@ onMounted(() => {
 .agent-message--user .agent-bubble { border-radius: 15px 15px 5px 15px; color: #fff; background: #315fdf; }
 .agent-bubble--md { max-width: 92%; background: transparent; padding: 0; }
 .agent-text { white-space: pre-wrap; word-break: break-word; }
+.agent-images { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.agent-img { width: 116px; height: 116px; object-fit: cover; border-radius: 10px; cursor: zoom-in; border: 1px solid rgba(0,0,0,.08); }
+.agent-img:hover { opacity: .92; }
 .agent-md { padding: 11px 13px; border-radius: 5px 15px 15px 15px; background: #f0f2f7; color: #28334b; word-break: break-word; font-size: 13px; line-height: 1.55; }
 .agent-token-meta {
   display: flex;

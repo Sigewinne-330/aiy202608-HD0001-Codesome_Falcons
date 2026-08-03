@@ -17,6 +17,7 @@ class ChatResponse(BaseModel):
     role: str
     content: str
     token: Optional[int] = 0
+    images: Optional[List[str]] = None  # 用户消息附带的图片（base64 data URL）
     update_time: datetime
 
     class Config:

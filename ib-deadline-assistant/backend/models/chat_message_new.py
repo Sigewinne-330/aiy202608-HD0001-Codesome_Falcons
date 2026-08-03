@@ -16,3 +16,10 @@ class ChatMessage(Base):
     extra = Column(JSON, default=None, comment="扩展字段")
     token = Column(Integer, default=0, comment="token 消耗数")
     update_time = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+
+    @property
+    def images(self) -> list | None:
+        """用户消息附带的图片（base64 data URL 列表），从 extra 读取"""
+        if isinstance(self.extra, dict) and self.extra.get("images"):
+            return self.extra["images"]
+        return None

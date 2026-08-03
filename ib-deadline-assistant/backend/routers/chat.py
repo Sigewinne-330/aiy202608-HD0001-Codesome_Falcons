@@ -406,13 +406,14 @@ async def chat(
     total_tokens = usage_tracker.get("total_tokens", 0)
     deduct_credits(db, current_user, total_tokens, note=f"AI 对话消耗 {total_tokens} tokens")
 
-    # 保存用户消息
+    # 保存用户消息（附带的图片写入 extra，历史记录永久保留）
     user_msg = ChatMessageModel(
         user_id=current_user.id,
         conversation_id=conv.id,
         role="user",
         content=data.content,
         token=0,
+        extra={"images": data.images} if data.images else None,
     )
     db.add(user_msg)
 
@@ -450,13 +451,14 @@ async def chat_stream(
         db, uid, data.conversation_id, first_message=data.content
     )
 
-    # 先保存用户消息
+    # 先保存用户消息（附带的图片写入 extra，历史记录永久保留）
     user_msg = ChatMessageModel(
         user_id=uid,
         conversation_id=conv.id,
         role="user",
         content=data.content,
         token=0,
+        extra={"images": data.images} if data.images else None,
     )
     db.add(user_msg)
     db.commit()

@@ -77,9 +77,19 @@
 
         <div v-else>
           <div v-for="(msg, i) in messages" :key="i" class="mb-3">
-            <!-- 用户消息 -->
+            <!-- 用户消息：图片 + 文本 -->
             <div v-if="msg.role === 'user'" class="d-flex justify-end mb-2">
               <div class="user-message pa-3">
+                <div v-if="msg.images && msg.images.length" class="d-flex flex-wrap gap-2 mb-1" style="justify-content: flex-end;">
+                  <img
+                    v-for="(img, idx) in msg.images"
+                    :key="idx"
+                    :src="img"
+                    class="chat-user-img"
+                    :alt="`image-${idx + 1}`"
+                    @click="previewImage(img)"
+                  />
+                </div>
                 <div class="text-body-2" v-text="msg.content" />
               </div>
             </div>
@@ -159,6 +169,11 @@
           </div>
         </v-card-text>
       </v-card>
+
+      <!-- 图片大图预览 -->
+      <v-dialog v-model="previewOpen" max-width="85vw" @click:outside="previewOpen = false">
+        <v-img :src="previewUrl" contain max-height="80vh" style="border-radius: 12px;" />
+      </v-dialog>
     </div>
   </div>
 </template>
@@ -216,7 +231,15 @@ function renderMath(text) {
 const messages = ref([])
 const input = ref('')
 const loading = ref(false)
+const previewUrl = ref('')   // 图片大图预览
+const previewOpen = ref(false)
 let abortController = null
+
+/** 点击历史消息里的图片 → 大图预览 */
+function previewImage(url) {
+  previewUrl.value = url
+  previewOpen.value = true
+}
 
 // ---- 对话窗口管理 ----
 const conversations = ref([])
@@ -501,7 +524,7 @@ async function loadHistory(convId) {
     const res = await authFetch(`${API_BASE}/chat/history?conversation_id=${convId}`)
     if (!res.ok) return
     const data = await res.json()
-    messages.value = (data.messages || []).map(m => ({ role: m.role, content: m.content, token: m.token || 0 }))
+    messages.value = (data.messages || []).map(m => ({ role: m.role, content: m.content, token: m.token || 0, images: m.images || null }))
     scrollToBottom()
   } catch {
     // 忽略加载失败
@@ -565,6 +588,15 @@ onMounted(async () => {
   max-width: 85%;
   word-break: break-word;
 }
+.chat-user-img {
+  width: 112px;
+  height: 112px;
+  object-fit: cover;
+  border-radius: 10px;
+  cursor: zoom-in;
+  border: 1px solid rgba(255, 255, 255, .25);
+}
+.chat-user-img:hover { opacity: .92; }
 
 .assistant-message {
   background: #F3F4F6;
