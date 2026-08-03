@@ -82,16 +82,27 @@
             </div>
             <p v-if="task.description">{{ task.description }}</p>
           </div>
-          <v-btn
-            v-if="task.task_type === 'process'"
-            prepend-icon="mdi-plus"
-            color="deep-purple"
-            variant="tonal"
-            size="small"
-            @click="openSubtask(task)"
-          >
-            添加子任务
-          </v-btn>
+          <div class="task-card__actions">
+            <v-btn
+              v-if="task.task_type === 'process'"
+              prepend-icon="mdi-plus"
+              color="deep-purple"
+              variant="tonal"
+              size="small"
+              @click="openSubtask(task)"
+            >
+              添加子任务
+            </v-btn>
+            <v-btn
+              class="delete-task-btn"
+              icon="mdi-delete-outline"
+              color="error"
+              variant="tonal"
+              size="small"
+              aria-label="删除任务"
+              @click="requestDelete(task)"
+            />
+          </div>
         </div>
 
         <div class="task-meta">
@@ -145,10 +156,6 @@
           </button>
         </div>
 
-        <div v-else class="todo-calendar-note">
-          <v-icon icon="mdi-calendar-check-outline" color="primary" />
-          <span>该待办会按截止日期显示在日历中，且不能添加子任务。</span>
-        </div>
       </v-card>
     </div>
 
@@ -170,7 +177,7 @@
               @click="form.task_type = 'todo'"
             >
               <v-icon icon="mdi-checkbox-marked-circle-outline" />
-              <span><strong>待办事项</strong><small>直接显示在日历，不能添加子任务</small></span>
+              <span><strong>待办事项</strong></span>
             </button>
             <button
               type="button"
@@ -178,13 +185,9 @@
               @click="form.task_type = 'process'"
             >
               <v-icon icon="mdi-timeline-text-outline" />
-              <span><strong>流程任务</strong><small>主任务不进日历，子任务按日期显示</small></span>
+              <span><strong>流程任务</strong></span>
             </button>
           </div>
-
-          <v-alert v-if="form.task_type === 'process'" type="info" variant="tonal" density="compact" class="mb-4">
-            创建后会自动生成一个与主任务同标题、同截止日期的最终节点。
-          </v-alert>
 
           <v-text-field v-model="form.title" label="任务名称" variant="outlined" density="comfortable" class="mb-2" />
           <v-textarea v-model="form.description" label="描述（可选）" variant="outlined" density="comfortable" rows="2" class="mb-2" />
@@ -247,18 +250,36 @@
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="deleteDialog" max-width="440">
+      <v-card rounded="xl">
+        <v-card-title class="pt-5 px-6">确认删除任务</v-card-title>
+        <v-card-text class="px-6 pt-3">
+          <p>确定要删除“{{ selectedTask?.title }}”吗？此操作无法恢复。</p>
+          <v-alert v-if="selectedTask?.task_type === 'process'" type="warning" variant="tonal" density="compact" class="mt-4">
+            删除流程任务会一并删除其全部流程节点。
+          </v-alert>
+        </v-card-text>
+        <v-card-actions class="px-6 pb-5">
+          <v-spacer />
+          <v-btn variant="text" :disabled="deleting" @click="deleteDialog = false">取消</v-btn>
+          <v-btn color="error" variant="flat" :loading="deleting" @click="confirmDelete">确认删除</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="errorVisible" color="error" timeout="3500">{{ errorMessage }}</v-snackbar>
   </section>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { authFetch } from '@/stores/auth'
 import { notifyTasksChanged, onTasksChanged } from '@/services/taskSync'
 
 const API_BASE = '/api'
 const router = useRouter()
+const route = useRoute()
 const tasks = ref([])
 const loading = ref(true)
 const saving = ref(false)
@@ -267,6 +288,9 @@ const statusFilter = ref('all')
 const createDialog = ref(false)
 const subtaskDialog = ref(false)
 const selectedParent = ref(null)
+const deleteDialog = ref(false)
+const selectedTask = ref(null)
+const deleting = ref(false)
 const errorVisible = ref(false)
 const errorMessage = ref('')
 
@@ -342,6 +366,30 @@ function openSubtask(task) {
   subtaskDialog.value = true
 }
 
+function requestDelete(task) {
+  selectedTask.value = task
+  deleteDialog.value = true
+}
+
+async function confirmDelete() {
+  if (!selectedTask.value) return
+  deleting.value = true
+  try {
+    const response = await authFetch(`${API_BASE}/tasks/${selectedTask.value.id}`, { method: 'DELETE' })
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      throw new Error(data.detail || `HTTP ${response.status}`)
+    }
+    deleteDialog.value = false
+    selectedTask.value = null
+    notifyTasksChanged()
+  } catch (error) {
+    showError(`删除任务失败：${error.message}`)
+  } finally {
+    deleting.value = false
+  }
+}
+
 async function postTask(payload) {
   const response = await authFetch(`${API_BASE}/tasks`, {
     method: 'POST',
@@ -404,6 +452,14 @@ async function toggleDone(task) {
 }
 
 let stopTaskSync
+watch(() => route.query.create, (value) => {
+  if (value !== '1') return
+  openCreate()
+  const query = { ...route.query }
+  delete query.create
+  router.replace({ query })
+}, { immediate: true })
+
 onMounted(() => {
   loadTasks()
   stopTaskSync = onTasksChanged(loadTasks)
@@ -526,6 +582,9 @@ onBeforeUnmount(() => stopTaskSync?.())
 .task-card--process { grid-column: span 2; border-color: rgba(104,74,190,.16); }
 .task-card--process::before { background: linear-gradient(90deg, #7657cd, #ad8eea); }
 .task-card__top { display: flex; align-items: flex-start; gap: 12px; }
+.task-card__actions { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; }
+.delete-task-btn { opacity: .78; }
+.delete-task-btn:hover { opacity: 1; }
 .task-check { flex: 0 0 auto; margin: -3px 0 0 -6px; }
 .task-check :deep(.v-selection-control) { min-height: 36px; }
 .task-card__title { flex: 1; min-width: 0; padding-top: 2px; }
@@ -549,16 +608,14 @@ onBeforeUnmount(() => stopTaskSync?.())
 .subtask-copy small { display: block; margin-top: 3px; color: #939bac; font-size: 9px; }
 .add-first-subtask { width: 100%; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 14px; border: 1px dashed #b9addd; border-radius: 11px; color: #7355c5; background: rgba(255,255,255,.55); cursor: pointer; font-size: 11px; transition: background .2s, border-color .2s; }
 .add-first-subtask:hover { border-color: #8468cd; background: #fff; }
-.todo-calendar-note { display: flex; align-items: center; gap: 8px; margin: 16px 0 0 42px; padding: 10px 12px; border: 1px solid #e9edf9; border-radius: 11px; color: #66718a; background: #f5f7fd; font-size: 10px; line-height: 1.45; }
 .task-empty { min-height: 370px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 40px; border: 1px dashed #dce1ec; border-radius: 22px; color: #8d96a8; background: rgba(255,255,255,.66); text-align: center; }
 .task-empty strong { color: #465168; font-size: 15px; }
 .task-empty span { font-size: 11px; }
 .type-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
 .type-selector button { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid #e1e5ed; border-radius: 13px; color: #566178; background: #fff; cursor: pointer; text-align: left; }
 .type-selector button.active { color: #315fdc; border-color: #6685eb; background: #f2f5ff; box-shadow: inset 0 0 0 1px #6685eb; }
-.type-selector span, .type-selector strong, .type-selector small { display: block; }
+.type-selector span, .type-selector strong { display: block; }
 .type-selector strong { font-size: 12px; }
-.type-selector small { margin-top: 4px; color: #8992a4; font-size: 9px; line-height: 1.4; }
 @media (max-width: 1050px) {
   .tasks-header, .tasks-header__side { align-items: flex-start; }
   .tasks-header { flex-direction: column; }
@@ -583,8 +640,8 @@ onBeforeUnmount(() => stopTaskSync?.())
   .filter-label { padding: 0; border: 0; }
   .task-card { padding: 19px 16px; }
   .task-card__top { flex-wrap: wrap; }
-  .task-card__top > .v-btn { margin-left: 40px; }
-  .task-meta, .progress-block, .subtask-section, .todo-calendar-note { margin-left: 0; }
+  .task-card__actions { width: 100%; margin-left: 40px; justify-content: flex-end; }
+  .task-meta, .progress-block, .subtask-section { margin-left: 0; }
   .subtask-row > .v-chip { display: none; }
   .type-selector { grid-template-columns: 1fr; }
 }

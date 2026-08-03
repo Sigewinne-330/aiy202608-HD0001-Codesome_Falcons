@@ -29,7 +29,7 @@
         hide-details
         clearable
       />
-      <v-btn icon="mdi-plus" color="primary" variant="flat" aria-label="新建任务" @click="goToTasks" />
+      <v-btn icon="mdi-plus" color="primary" variant="flat" aria-label="新建任务" @click="openCreateTask" />
     </div>
 
     <div class="task-panel__list scroll-container">
@@ -73,8 +73,14 @@
     </div>
 
     <div class="task-panel__footer">
-      <v-btn variant="tonal" color="primary" block prepend-icon="mdi-view-list-outline" @click="goToTasks">
-        打开任务管理
+      <v-btn
+        variant="tonal"
+        color="primary"
+        block
+        :prepend-icon="isTasksPage ? 'mdi-calendar-arrow-left' : 'mdi-view-list-outline'"
+        @click="handleFooterAction"
+      >
+        {{ isTasksPage ? '回到日历' : '打开任务管理' }}
       </v-btn>
     </div>
   </div>
@@ -82,17 +88,19 @@
 
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/stores/auth'
 import { onTasksChanged } from '@/services/taskSync'
 
-defineEmits(['close'])
+const emit = defineEmits(['close'])
 
 const router = useRouter()
+const route = useRoute()
 const { token } = useAuth()
 const tasks = ref([])
 const loading = ref(true)
 const search = ref('')
+const isTasksPage = computed(() => route.path === '/tasks')
 
 function flatten(nodes, output = []) {
   for (const task of nodes || []) {
@@ -138,7 +146,18 @@ function openTask(task) {
 }
 
 function goToTasks() {
+  emit('close')
   router.push('/tasks')
+}
+
+function openCreateTask() {
+  emit('close')
+  router.push({ path: '/tasks', query: { create: '1' } })
+}
+
+function handleFooterAction() {
+  emit('close')
+  router.push(isTasksPage.value ? '/calendar' : '/tasks')
 }
 
 async function loadTasks() {

@@ -54,6 +54,14 @@
         <AgentDrawer @close="agentDrawer = false" />
       </v-navigation-drawer>
 
+      <button
+        v-if="taskDrawer || agentDrawer"
+        class="drawer-backdrop"
+        type="button"
+        aria-label="关闭抽屉"
+        @click="closeDrawers"
+      />
+
       <v-main class="workspace-main">
         <router-view v-slot="{ Component }">
           <transition name="page-fade" mode="out-in">
@@ -219,6 +227,47 @@ function handleLogout() {
   router.push('/login')
 }
 
+function closeDrawers() {
+  taskDrawer.value = false
+  agentDrawer.value = false
+}
+
+let drawerScrollLocked = false
+let previousBodyOverflow = ''
+let previousHtmlOverflow = ''
+let previousBodyOverscrollBehavior = ''
+let previousHtmlOverscrollBehavior = ''
+
+function syncDrawerScrollLock(isOpen) {
+  if (typeof document === 'undefined') return
+
+  if (isOpen && !drawerScrollLocked) {
+    previousBodyOverflow = document.body.style.overflow
+    previousHtmlOverflow = document.documentElement.style.overflow
+    previousBodyOverscrollBehavior = document.body.style.overscrollBehavior
+    previousHtmlOverscrollBehavior = document.documentElement.style.overscrollBehavior
+
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+    document.body.style.overscrollBehavior = 'none'
+    document.documentElement.style.overscrollBehavior = 'none'
+    drawerScrollLocked = true
+    return
+  }
+
+  if (!isOpen && drawerScrollLocked) {
+    document.body.style.overflow = previousBodyOverflow
+    document.documentElement.style.overflow = previousHtmlOverflow
+    document.body.style.overscrollBehavior = previousBodyOverscrollBehavior
+    document.documentElement.style.overscrollBehavior = previousHtmlOverscrollBehavior
+    drawerScrollLocked = false
+  }
+}
+
+watch([taskDrawer, agentDrawer], ([taskOpen, agentOpen]) => {
+  syncDrawerScrollLock(taskOpen || agentOpen)
+})
+
 watch(isAuthenticated, (authenticated) => {
   if (authenticated) loadUpcoming()
 })
@@ -229,7 +278,10 @@ onMounted(async () => {
 })
 
 const stopTaskSync = onTasksChanged(loadUpcoming)
-onBeforeUnmount(stopTaskSync)
+onBeforeUnmount(() => {
+  stopTaskSync()
+  syncDrawerScrollLock(false)
+})
 </script>
 
 <style>
@@ -286,7 +338,22 @@ onBeforeUnmount(stopTaskSync)
   top: 64px !important;
   height: calc(100% - 64px) !important;
   border: 0 !important;
+  z-index: 1005 !important;
   box-shadow: 0 20px 50px rgba(20, 30, 60, 0.15) !important;
+  overscroll-behavior: contain;
+}
+
+.drawer-backdrop {
+  position: fixed;
+  z-index: 1001;
+  inset: 64px 0 0;
+  width: 100%;
+  border: 0;
+  background: rgba(25, 35, 66, .08);
+  backdrop-filter: blur(1.5px);
+  cursor: pointer;
+  touch-action: none;
+  overscroll-behavior: contain;
 }
 
 .reminder-popover {
