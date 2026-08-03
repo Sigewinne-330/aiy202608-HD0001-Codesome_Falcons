@@ -267,6 +267,8 @@ class AIService:
                     "temperature": 0.7,
                     "max_tokens": 2048,
                     "stream": True,
+                    # 让流式响应末尾携带 usage 统计（用于 token 计费）
+                    "stream_options": {"include_usage": True},
                 }
                 # Ark 关闭深度思考，加速首字
                 if cli is self.ark_async:
@@ -280,8 +282,18 @@ class AIService:
                 # 累积工具调用的 delta 分片
                 tool_calls_acc: List[Dict[str, Any]] = []
                 full_text: List[str] = []
+                usage_acc: Dict[str, int] = {}
 
                 async for chunk in stream:
+                    # 流结束前最后会有一个带 usage 的空 chunk
+                    if chunk.usage:
+                        usage_acc = {
+                            "prompt_tokens": chunk.usage.prompt_tokens or 0,
+                            "completion_tokens": chunk.usage.completion_tokens or 0,
+                            "total_tokens": chunk.usage.total_tokens or 0,
+                        }
+                        continue
+
                     delta = chunk.choices[0].delta if chunk.choices else None
                     if not delta:
                         continue
@@ -318,6 +330,11 @@ class AIService:
                     yield {"type": "tool_calls", "tool_calls": tool_calls_acc}
                 else:
                     logger.info(f"[LLM-DONE] 完整返回（{len(final_text)} 字符）:\n{final_text}")
+
+                # 把本轮真实 token 用量交给调用方（计费用）
+                if usage_acc:
+                    yield {"type": "usage", "usage": usage_acc}
+                    logger.info(f"[LLM-USAGE] {usage_acc}")
 
                 return  # 成功
 

@@ -139,22 +139,31 @@
           </template>
 
           <template v-else>
-            <SettingsHeading :title="$t('settings.subscription')" :subtitle="$t('settings.subscriptionSub')" />
+            <SettingsHeading :title="$t('settingsBilling.balanceTitle')" :subtitle="$t('settingsBilling.balanceDesc')" />
             <div class="subscription-card">
               <div>
-                <div class="subscription-badge">{{ $t('settings.currentPlan') }}</div>
-                <div class="text-h5 font-weight-bold mt-3">{{ $t('settings.planFree') }}</div>
-                <div class="text-body-2 text-medium-emphasis mt-1">{{ $t('settings.planFreeDesc') }}</div>
+                <div class="subscription-badge">{{ $t('billing.balance') }}</div>
+                <div class="text-h5 font-weight-bold mt-3">
+                  {{ balance.toLocaleString() }}
+                  <span style="font-size: 13px; font-weight: 500;">{{ $t('billing.creditsUnit') }}</span>
+                </div>
+                <div class="text-body-2 text-medium-emphasis mt-1">{{ $t('billing.tokensPerCredit') }}</div>
               </div>
-              <v-icon icon="mdi-diamond-stone" size="50" color="primary" />
+              <v-icon icon="mdi-wallet-outline" size="50" color="primary" />
             </div>
             <div class="feature-list">
-              <div v-for="feature in planFeatures" :key="feature">
-                <v-icon icon="mdi-check-circle" color="success" size="20" />
-                <span>{{ $t(feature) }}</span>
+              <div>
+                <v-icon icon="mdi-chart-line" color="success" size="20" />
+                <span>{{ $t('billing.todaySpent') }}: -{{ summary.today_spent.toLocaleString() }}</span>
+              </div>
+              <div>
+                <v-icon icon="mdi-calendar-month" color="success" size="20" />
+                <span>{{ $t('billing.monthSpent') }}: -{{ summary.month_spent.toLocaleString() }}</span>
               </div>
             </div>
-            <v-btn color="primary" size="large" block class="mt-6" disabled>{{ $t('settings.upgrade') }}</v-btn>
+            <v-btn color="primary" size="large" block class="mt-6" prepend-icon="mdi-cash-plus" @click="goBilling">
+              {{ $t('settingsBilling.goRecharge') }}
+            </v-btn>
           </template>
 
           <div class="settings-actions">
@@ -171,14 +180,40 @@
 
 <script setup>
 import { computed, defineComponent, h, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuth } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
 import { setLocale, SUPPORTED_LOCALES, LOCALE_NAMES } from '@/i18n'
 
 const props = defineProps({ modelValue: Boolean })
 const emit = defineEmits(['update:modelValue', 'logout'])
-const { user } = useAuth()
+const { user, token } = useAuth()
 const { locale, t } = useI18n()
+const router = useRouter()
+const balance = ref(0)
+const summary = ref({ today_spent: 0, month_spent: 0 })
+
+function billingHeaders() {
+  return token.value ? { Authorization: `Bearer ${token.value}` } : {}
+}
+
+async function loadBalance() {
+  try {
+    const res = await fetch('/api/billing/summary', { headers: billingHeaders() })
+    if (res.ok) {
+      const data = await res.json()
+      balance.value = data.balance || 0
+      summary.value = data
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function goBilling() {
+  dialogOpen.value = false
+  router.push('/billing')
+}
 
 const SettingsHeading = defineComponent({
   props: { title: String, subtitle: String },
@@ -246,7 +281,7 @@ const sections = [
   { value: 'account', titleKey: 'settings.account', icon: 'mdi-account-circle-outline' },
   { value: 'connections', titleKey: 'settings.connections', icon: 'mdi-link-variant' },
   { value: 'time', titleKey: 'settings.time', icon: 'mdi-clock-outline' },
-  { value: 'subscription', titleKey: 'settings.subscription', icon: 'mdi-credit-card-outline' },
+  { value: 'subscription', titleKey: 'settingsBilling.balanceTitle', icon: 'mdi-wallet-outline' },
 ]
 
 const connections = [
@@ -271,7 +306,6 @@ function reminderTitle(item) {
   return item.titleKey ? t(item.titleKey) : item.title
 }
 
-const planFeatures = ['settings.planFeature1', 'settings.planFeature2', 'settings.planFeature3', 'settings.planFeature4']
 const userInitial = computed(() => (user.value?.username || 'I').charAt(0).toUpperCase())
 
 function saveSettings() {
@@ -282,6 +316,7 @@ function saveSettings() {
 
 watch(dialogOpen, (isOpen) => {
   if (isOpen && !settings.displayName) settings.displayName = user.value?.username || ''
+  if (isOpen) loadBalance()
 })
 </script>
 

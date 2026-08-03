@@ -32,6 +32,7 @@ from services.ai_service import ai_service, SYSTEM_PROMPT
 from services.task_tools_schema import TASK_TOOLS
 from services.knowledge_base_tools import KNOWLEDGE_BASE_TOOLS, get_subject_guidelines
 from services import task_tools
+from services.billing import ensure_balance, deduct_credits
 
 # 合并所有可用工具（任务 CRUD + 知识库查询）
 ALL_TOOLS = TASK_TOOLS + KNOWLEDGE_BASE_TOOLS
@@ -134,6 +135,7 @@ async def _run_tool_loop(
     messages: List[Dict[str, Any]],
     db: Session,
     user_id: int,
+    usage_tracker: Optional[Dict[str, int]] = None,
 ) -> str:
     """执行工具调用循环：调 AI → 执行工具 → 喂回结果 → 重复，直到 AI 返回最终文本。
 
@@ -141,12 +143,17 @@ async def _run_tool_loop(
         messages: 初始消息列表（已含 system + history + user）
         db: 数据库会话
         user_id: 当前用户 ID
+        usage_tracker: 可选 dict，累计每轮真实 token 用量（{"total_tokens": int}）
 
     Returns:
         AI 的最终文本回复
     """
     for _round in range(MAX_TOOL_ROUNDS):
         choice = await ai_service.chat_with_tools(messages, ALL_TOOLS)
+
+        # 累计本轮 token 用量（用于计费）
+        if usage_tracker is not None and choice.usage and getattr(choice.usage, "total_tokens", None):
+            usage_tracker["total_tokens"] = usage_tracker.get("total_tokens", 0) + choice.usage.total_tokens
 
         # AI 要求调用工具
         if choice.finish_reason == "tool_calls" and choice.message.tool_calls:
@@ -221,6 +228,9 @@ async def _run_tool_loop_stream(
             if event["type"] == "text":
                 full_reply.append(event["content"])
                 yield event
+
+            elif event["type"] == "usage":
+                yield event  # 透传本轮 token 用量（计费用）
 
             elif event["type"] == "tool_calls":
                 tool_calls = event["tool_calls"]
@@ -375,6 +385,9 @@ async def chat(
     conversation_id 不传时自动新建对话窗口。
     用户消息与 AI 回复均作为 chat_message 保存。
     """
+    # 计费：发送前检查余额
+    ensure_balance(current_user)
+
     # 获取或新建对话窗口
     conv = _get_or_create_conversation(
         db, current_user.id, data.conversation_id, first_message=data.content
@@ -384,8 +397,14 @@ async def chat(
     history = _load_history(db, conv.id, limit=20)
 
     # 构建消息并执行工具调用循环
+    # 构建消息并执行工具调用循环
     messages = _build_messages(data.content, history, images=data.images)
-    reply = await _run_tool_loop(messages, db, current_user.id)
+    usage_tracker: Dict[str, int] = {}
+    reply = await _run_tool_loop(messages, db, current_user.id, usage_tracker)
+
+    # 计费：按实际 token 扣积分并写流水
+    total_tokens = usage_tracker.get("total_tokens", 0)
+    deduct_credits(db, current_user, total_tokens, note=f"AI 对话消耗 {total_tokens} tokens")
 
     # 保存用户消息
     user_msg = ChatMessageModel(
@@ -403,7 +422,7 @@ async def chat(
         conversation_id=conv.id,
         role="assistant",
         content=reply,
-        token=0,
+        token=total_tokens,
     )
     db.add(assistant_msg)
 
@@ -424,6 +443,9 @@ async def chat_stream(
 ):
     """流式对话 — 实时推送 AI 文本 + 工具调用状态反馈"""
     uid = current_user.id
+    # 计费：发送前检查余额
+    ensure_balance(current_user)
+
     conv = _get_or_create_conversation(
         db, uid, data.conversation_id, first_message=data.content
     )
@@ -446,13 +468,18 @@ async def chat_stream(
     has_images = bool(data.images)
     messages = _build_messages(data.content, history, images=data.images)
     final_reply = ""  # 最终完整回复（用于保存到 chat_message）
+    total_tokens = 0  # 本轮真实 token 用量（用于计费）
 
     async def generate():
-        nonlocal final_reply
+        nonlocal final_reply, total_tokens
         try:
             async for event in _run_tool_loop_stream(messages, db, uid, has_images=has_images):
                 if event["type"] == "text":
                     yield f"data: {json.dumps(event['content'], ensure_ascii=False)}\n\n"
+
+                elif event["type"] == "usage":
+                    # 累计多轮工具调用的 token 用量
+                    total_tokens += (event.get("usage") or {}).get("total_tokens", 0)
 
                 elif event["type"] == "status":
                     status_text = f"[{event['content']}]"
@@ -480,10 +507,20 @@ async def chat_stream(
                         conversation_id=conv.id,
                         role="assistant",
                         content=final_reply,
-                        token=0,
+                        token=total_tokens,
                     )
                     save_db.add(assistant_msg)
+                    save_db.flush()  # 拿到 assistant_msg.id 用于流水关联
+
+                    # 计费：按实际 token 扣积分并写流水
+                    user2 = save_db.query(User).filter(User.id == uid).first()
+                    if user2:
+                        deduct_credits(save_db, user2, total_tokens, ref_id=assistant_msg.id, note=f"AI 对话消耗 {total_tokens} tokens")
+
                     save_db.commit()
+                except HTTPException:
+                    # 余额不足等计费异常：回滚本次写入，保证不欠费
+                    save_db.rollback()
                 finally:
                     save_db.close()
 

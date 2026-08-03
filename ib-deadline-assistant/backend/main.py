@@ -2,7 +2,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
-from routers import auth, tasks, deadlines, chat, calendar
+from routers import auth, tasks, deadlines, chat, calendar, billing
 from database import engine, Base, auto_sync_tables
 
 # 配置日志输出到控制台（INFO 级别，用于调试 LLM 返回）
@@ -39,6 +39,7 @@ app.include_router(tasks.router)
 app.include_router(deadlines.router)
 app.include_router(chat.router)
 app.include_router(calendar.router)
+app.include_router(billing.router)
 
 
 @app.get("/api/health")

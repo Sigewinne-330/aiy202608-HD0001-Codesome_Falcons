@@ -78,6 +78,12 @@ const routes = [
     component: () => import('../views/DashboardView.vue'),
     meta: { titleKey: 'nav.dashboard', icon: 'mdi-view-dashboard', requiresAuth: true },
   },
+  {
+    path: '/billing',
+    name: 'Billing',
+    component: () => import('../views/BillingView.vue'),
+    meta: { titleKey: 'billing.title', icon: 'mdi-wallet-outline', requiresAuth: true },
+  },
 ]
 
 const router = createRouter({

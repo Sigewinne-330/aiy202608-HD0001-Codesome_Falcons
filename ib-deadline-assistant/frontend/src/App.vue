@@ -56,10 +56,17 @@
         temporary
         :scrim="false"
         location="right"
-        width="420"
+        :width="agentDrawerWidth"
         class="workspace-drawer agent-drawer"
       >
         <AgentDrawer @close="agentDrawer = false" />
+        <div
+          class="agent-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          :title="$t('app.resizeAgent')"
+          @mousedown.prevent="startAgentResize"
+        />
       </v-navigation-drawer>
 
       <button
@@ -165,6 +172,48 @@ const agentDrawer = ref(false)
 const settingsOpen = ref(false)
 const reminders = ref([])
 const reminderVisible = ref(true)
+
+// ---- Agent 抽屉：覆盖式浮层，默认 520px（比原 420 大），支持拖拽调整并记住偏好 ----
+const AGENT_WIDTH_KEY = 'ibuddy.agentDrawerWidth'
+const MIN_AGENT_WIDTH = 360
+const MAX_AGENT_WIDTH = 780
+// 兼容分屏时代存下的 Split key，取到像素值则沿用，否则默认 520
+const storedWidth = parseInt(localStorage.getItem('ibuddy.agentDrawerWidthSplit'), 10) || parseInt(localStorage.getItem(AGENT_WIDTH_KEY), 10)
+const agentDrawerWidth = ref(Math.min(MAX_AGENT_WIDTH, Math.max(MIN_AGENT_WIDTH, storedWidth || 520)))
+try { localStorage.removeItem('ibuddy.agentDrawerWidthSplit') } catch { /* ignore */ }
+
+let agentResizing = false
+let agentResizeStartX = 0
+let agentResizeStartWidth = 0
+
+function startAgentResize(event) {
+  agentResizing = true
+  agentResizeStartX = event.clientX
+  agentResizeStartWidth = agentDrawerWidth.value
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  window.addEventListener('mousemove', onAgentResize)
+  window.addEventListener('mouseup', stopAgentResize)
+}
+
+function onAgentResize(event) {
+  if (!agentResizing) return
+  // 抽屉在右侧：向左拖动 => 变宽
+  const delta = agentResizeStartX - event.clientX
+  agentDrawerWidth.value = Math.min(MAX_AGENT_WIDTH, Math.max(MIN_AGENT_WIDTH, agentResizeStartWidth + delta))
+}
+
+function stopAgentResize() {
+  if (!agentResizing) return
+  agentResizing = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  window.removeEventListener('mousemove', onAgentResize)
+  window.removeEventListener('mouseup', stopAgentResize)
+  try {
+    localStorage.setItem(AGENT_WIDTH_KEY, String(agentDrawerWidth.value))
+  } catch { /* ignore */ }
+}
 
 const currentPageTitle = computed(() => route.meta.titleKey ? t(`nav.${route.meta.titleKey}`) : t('app.defaultTitle'))
 const userInitial = computed(() => (user.value?.username || 'I').charAt(0).toUpperCase())
@@ -383,6 +432,37 @@ onBeforeUnmount(() => {
   cursor: pointer;
   touch-action: none;
   overscroll-behavior: contain;
+}
+
+/* Agent 抽屉拖拽调整宽度手柄 */
+.agent-resizer {
+  position: absolute;
+  top: 0;
+  left: -5px;
+  width: 12px;
+  height: 100%;
+  z-index: 1102;
+  cursor: col-resize;
+  touch-action: none;
+}
+.agent-resizer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 52px;
+  border-radius: 3px;
+  background: rgba(61, 84, 146, 0.18);
+  opacity: 0;
+  transition: opacity .15s ease, background .15s ease;
+  pointer-events: none;
+}
+.agent-resizer:hover::after,
+.agent-resizer:active::after {
+  opacity: 1;
+  background: rgba(50, 101, 245, 0.5);
 }
 
 .reminder-popover {

@@ -17,3 +17,4 @@ class AppUser(Base):
     email = Column(String(100), default=None)
     phone_number = Column(String(20), default=None)
     wechat_id = Column(String(50), default=None)
+    balance = Column(Integer, default=0, comment="积分余额（1 积分 = 1000 token）")

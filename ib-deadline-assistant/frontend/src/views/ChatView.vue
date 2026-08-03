@@ -336,6 +336,12 @@ async function sendMessage() {
       signal: abortController.signal,
     })
 
+    // 余额不足：给出明确提示（特殊错误码，catch 里不覆盖该文案）
+    if (res.status === 402) {
+      messages.value[aiIndex].content = t('billing.insufficient')
+      throw new Error('INSUFFICIENT_BALANCE')
+    }
+
     if (!res.ok || !res.body) {
       const errText = await res.text()
       let detail = errText
@@ -379,7 +385,7 @@ async function sendMessage() {
       }
     }
   } catch (e) {
-    if (e.name !== 'AbortError') {
+    if (e.name !== 'AbortError' && e.message !== 'INSUFFICIENT_BALANCE') {
       messages.value[aiIndex].content = t('chat.networkError') + (e.message || t('chat.saveFailedBackend'))
     }
   } finally {

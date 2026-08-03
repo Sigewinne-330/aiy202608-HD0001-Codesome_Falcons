@@ -4,6 +4,7 @@ from database import get_db
 from models.app_user import AppUser as User
 from schemas.user import UserCreate, UserLogin, UserResponse, TokenResponse
 from services.auth import hash_password, verify_password, create_access_token, get_current_user
+from services.billing import INITIAL_CREDITS, grant_credits
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -25,6 +26,14 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
         wechat_id=data.wechat_id,
     )
     db.add(user)
+    db.flush()
+    # 注册赠送初始积分（写流水留痕，balance 由 grant_credits 累加）
+    grant_credits(
+        db, user, INITIAL_CREDITS,
+        change_type="gift",
+        ref_type="register",
+        note=f"新用户注册赠送 {INITIAL_CREDITS} 积分",
+    )
     db.commit()
     db.refresh(user)
 

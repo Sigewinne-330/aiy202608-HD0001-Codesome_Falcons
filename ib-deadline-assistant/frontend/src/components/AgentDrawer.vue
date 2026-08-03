@@ -7,7 +7,18 @@
         </v-avatar>
         <div>
           <div class="text-subtitle-1 font-weight-bold">{{ $t('agent.title') }}</div>
-          <div class="agent-status"><span /> {{ $t('agent.status') }}</div>
+          <div class="agent-status-line">
+            <span class="agent-status"><span /> {{ $t('agent.status') }}</span>
+            <span
+              class="balance-pill"
+              :class="{ 'balance-pill--low': balance < 1000 }"
+              :title="$t('billing.balance')"
+              @click="goBilling"
+            >
+              <v-icon icon="mdi-lightning-bolt" size="11" />
+              {{ balance.toLocaleString() }} {{ $t('billing.creditsUnit') }}
+            </span>
+          </div>
         </div>
       </div>
       <div class="d-flex align-center">
@@ -146,6 +157,7 @@
 
 <script setup>
 import { nextTick, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
 import { notifyTasksChanged } from '@/services/taskSync'
@@ -191,6 +203,7 @@ defineEmits(['close'])
 
 const { t } = useI18n()
 const { token } = useAuth()
+const router = useRouter()
 const messages = ref([])
 const input = ref('')
 const loading = ref(false)
@@ -199,6 +212,7 @@ const activeConversationId = ref(null)
 const conversations = ref([])
 const selectedImages = ref([])  // [{ dataUrl, file }]
 const imageInput = ref(null)
+const balance = ref(0)
 let controller = null
 
 const suggestions = [
@@ -212,6 +226,24 @@ function headers(extra = {}) {
     ...extra,
     ...(token.value ? { Authorization: `Bearer ${token.value}` } : {}),
   }
+}
+
+/** 加载积分余额（头部显示） */
+async function loadBalance() {
+  try {
+    const res = await fetch('/api/billing/summary', { headers: headers() })
+    if (res.ok) {
+      const data = await res.json()
+      balance.value = data.balance || 0
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 点击余额 → 跳转充值页 */
+function goBilling() {
+  router.push('/billing')
 }
 
 async function scrollToBottom() {
@@ -332,6 +364,11 @@ async function sendMessage() {
       body: JSON.stringify(body),
       signal: controller.signal,
     })
+    // 余额不足：给出明确提示（特殊错误码，catch 里不覆盖该文案）
+    if (response.status === 402) {
+      messages.value[responseIndex].content = t('billing.insufficient')
+      throw new Error('INSUFFICIENT_BALANCE')
+    }
     if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
 
     const reader = response.body.getReader()
@@ -362,7 +399,9 @@ async function sendMessage() {
       await scrollToBottom()
     }
   } catch (error) {
-    if (error.name !== 'AbortError') messages.value[responseIndex].content = t('agent.connectError')
+    if (error.name !== 'AbortError' && error.message !== 'INSUFFICIENT_BALANCE') {
+      messages.value[responseIndex].content = t('agent.connectError')
+    }
   } finally {
     // 用新对象替换，强制 Vue 重新渲染 v-html（修复流式结束后 markdown 不重渲染）
     const old = messages.value[responseIndex]
@@ -372,6 +411,7 @@ async function sendMessage() {
     if (taskMutationSucceeded) notifyTasksChanged()
     // 刷新对话列表，让新对话出现在历史里
     await loadConversations()
+    await loadBalance()  // 扣费后刷新余额
     await scrollToBottom()
   }
 }
@@ -391,7 +431,10 @@ async function loadHistory() {
   }
 }
 
-onMounted(loadHistory)
+onMounted(() => {
+  loadHistory()
+  loadBalance()
+})
 </script>
 
 <style scoped>
@@ -400,6 +443,24 @@ onMounted(loadHistory)
 .agent-avatar { box-shadow: 0 8px 18px rgba(50, 101, 245, .25); }
 .agent-status { display: flex; align-items: center; gap: 5px; margin-top: 2px; color: #8b95a8; font-size: 11px; }
 .agent-status span { width: 6px; height: 6px; border-radius: 50%; background: #2bb978; box-shadow: 0 0 0 3px rgba(43,185,120,.12); }
+.agent-status-line { display: flex; align-items: center; gap: 8px; }
+.balance-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 2px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #4169e8;
+  background: #eef2ff;
+  font-size: 10.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background .15s;
+}
+.balance-pill:hover { background: #e2e9ff; }
+.balance-pill--low { color: #d4552e; background: #fff0ea; }
+.balance-pill--low:hover { background: #ffe6dc; }
 .agent-panel__messages { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 18px; background: linear-gradient(180deg, #fafbfe 0, #fff 35%); }
 .agent-welcome { min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .agent-welcome__icon { width: 62px; height: 62px; display: grid; place-items: center; border-radius: 20px; background: #eef2ff; color: #4169e8; }
