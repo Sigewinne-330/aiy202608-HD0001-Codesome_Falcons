@@ -30,6 +30,7 @@ class Task(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
     parent_id = Column(Integer, ForeignKey("task.id", ondelete="SET NULL"), default=None)
+    id_name = Column(String(255), nullable=False, default="")
     task_type = Column(Enum(TaskType), default=TaskType.todo, nullable=False)
     is_final = Column(Boolean, default=False, nullable=False)
     title = Column(String(255), nullable=False)

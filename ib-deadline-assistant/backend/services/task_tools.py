@@ -1,6 +1,6 @@
 """Task CRUD tools — agent 可调用的数据库操作函数
 
-所有操作基于 tasks 表，子任务通过 parent_id 字段实现。
+主任务 → `task` 表，子任务 → `sub_task` 表，通过 task_id 外键关联。
 约定：修改 = 先删除旧记录，再创建新记录。
 所有函数返回 dict/list，便于序列化为 JSON 喂回给 agent。
 """
@@ -9,6 +9,8 @@ from typing import Optional, List, Dict, Any
 from datetime import date as date_type
 from sqlalchemy.orm import Session
 from models.task_new import Task, Priority, TaskStatus, TaskType
+from models.sub_task import SubTask
+from models.app_user import AppUser
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,8 @@ def create_task(
     estimated_hours: float = 0,
     parent_id: Optional[int] = None,
     task_type: str = "todo",
+    status: str = "todo",
+    personal_deadline: Optional[str] = None,
 ) -> Dict[str, Any]:
     """创建任务。可以是独立任务，也可以指定 parent_id 作为某个任务的子任务。
 
@@ -45,6 +49,9 @@ def create_task(
     Returns:
         包含新任务完整信息的 dict
     """
+    # 桥接用户（旧 users 表 → 新 user 表）
+    actual_uid = _ensure_user_exists(db, user_id)
+
     try:
         due = date_type.fromisoformat(deadline) if deadline else None
     except (ValueError, TypeError):
@@ -60,10 +67,21 @@ def create_task(
     except ValueError:
         kind = TaskType.todo
 
+    # 映射 LLM 传入的 status（schema 接受 pending/in_progress/done 等）
+    status_map = {"pending": TaskStatus.todo, "todo": TaskStatus.todo,
+                  "in_progress": TaskStatus.in_progress, "done": TaskStatus.done,
+                  "overdue": TaskStatus.overdue}
+    try:
+        task_status = status_map.get(status, TaskStatus(status))
+    except ValueError:
+        task_status = TaskStatus.todo
+
+    # personal_deadline
+
     if parent_id is not None:
         parent = db.query(Task).filter(
             Task.id == parent_id,
-            Task.user_id == user_id,
+            Task.user_id == actual_uid,
         ).first()
         if not parent:
             return {"error": f"父任务 {parent_id} 不存在或无权操作"}
@@ -72,8 +90,9 @@ def create_task(
         kind = TaskType.todo
 
     task = Task(
-        user_id=user_id,
+        user_id=actual_uid,
         parent_id=parent_id,
+        id_name=title,
         task_type=kind,
         is_final=False,
         title=title,
@@ -82,15 +101,16 @@ def create_task(
         priority=pri,
         deadline=due,
         estimated_hours=estimated_hours,
-        status=TaskStatus.todo,
+        status=task_status,
     )
     db.add(task)
 
     if parent_id is None and kind == TaskType.process:
         db.flush()
         db.add(Task(
-            user_id=user_id,
+            user_id=actual_uid,
             parent_id=task.id,
+            id_name=task.title,
             task_type=TaskType.todo,
             is_final=True,
             title=task.title,
@@ -175,10 +195,21 @@ def delete_task(
 
     deleted_title = task.title
     if task.parent_id is None and task.task_type == TaskType.process:
+        # 清理 task 表中的子任务（parent_id 自引用）
         db.query(Task).filter(
             Task.parent_id == task.id,
             Task.user_id == user_id,
         ).delete(synchronize_session=False)
+        # 清理 sub_task 表中的子任务
+        db.query(SubTask).filter(
+            SubTask.task_id == task.id,
+        ).delete(synchronize_session=False)
+
+    # 非流程任务也可能有 sub_task 关联，一并清理
+    db.query(SubTask).filter(
+        SubTask.task_id == task.id,
+    ).delete(synchronize_session=False)
+
     db.delete(task)
     db.commit()
 
@@ -187,7 +218,52 @@ def delete_task(
 
 
 # ═══════════════════════════════════════════════════════════════
-# 子任务操作（基于 tasks 表 + parent_id，3 个函数）
+# 用户桥接（旧 users 表 ↔ 新 user 表，以 username 为桥梁）
+# ═══════════════════════════════════════════════════════════════
+
+def _ensure_user_exists(db: Session, user_id: int) -> int:
+    """确保调用方传入的 user_id 在新 user 表中有对应记录。
+    以 username 为桥梁在 users ↔ user 两表间同步，解决 FK 约束冲突。
+    返回实际写入 task 表时使用的 user.id。
+    注意：旧 users 表无 ORM 模型，通过原生 SQL 查询。
+    """
+    from sqlalchemy import text
+
+    # 1) 如果 user_id 直接在新表存在，直接返回
+    exists = db.query(AppUser).filter(AppUser.id == user_id).first()
+    if exists:
+        return user_id
+
+    # 2) 尝试从旧 users 表查找同名用户
+    old_row = db.execute(
+        text("SELECT id, username, password_hash FROM users WHERE id = :uid"),
+        {"uid": user_id},
+    ).fetchone()
+
+    if not old_row:
+        return user_id  # 无法桥接，原样返回
+
+    old_id, username, pwd_hash = old_row
+
+    # 3) 查新表是否有同名用户
+    new_user = db.query(AppUser).filter(AppUser.username == username).first()
+    if new_user:
+        logger.info(f"Bridged user: users.id={old_id} -> user.id={new_user.id} (matched by username='{username}')")
+        return new_user.id
+
+    # 4) 不存在则在新表创建
+    new_user = AppUser(
+        username=username,
+        password=pwd_hash or "",
+    )
+    db.add(new_user)
+    db.flush()
+    logger.info(f"Bridged user: users.id={old_id} -> new user.id={new_user.id} (created by username='{username}')")
+    return new_user.id
+
+
+# ═══════════════════════════════════════════════════════════════
+# 子任务操作（基于 sub_task 表，通过 task_id 外键关联，3 个函数）
 # ═══════════════════════════════════════════════════════════════
 
 def create_subtask(
@@ -200,7 +276,7 @@ def create_subtask(
     level: str = "medium",
     status: str = "todo",
 ) -> Dict[str, Any]:
-    """为指定任务创建子任务。实质：在 tasks 表中创建一条 parent_id = task_id 的记录。
+    """为指定任务创建子任务。写入 sub_task 表，通过 task_id 关联父任务。
 
     Args:
         db: 数据库会话
@@ -208,56 +284,53 @@ def create_subtask(
         task_id: 所属父任务 ID
         name: 子任务名称（必填）
         description: 详细描述
-        notice_time: 子任务截止日期，格式 YYYY-MM-DD，映射到 deadline 字段
+        notice_time: 子任务截止/提醒日期，格式 YYYY-MM-DD
         level: 优先级 low | medium | high | urgent
-        status: 状态 todo | in_progress | done | overdue
+        status: 状态 pending | in_progress | done
 
     Returns:
         包含新子任务完整信息的 dict，或 {"error": str}
     """
+    # 桥接用户
+    actual_uid = _ensure_user_exists(db, user_id)
+
     # 权限校验：确认父任务属于该用户
     owner_task = db.query(Task).filter(
         Task.id == task_id,
-        Task.user_id == user_id,
+        Task.user_id == actual_uid,
     ).first()
     if not owner_task:
         return {"error": f"任务 {task_id} 不存在或无权操作"}
-    if owner_task.task_type != TaskType.process:
-        return {"error": "待办事项不能添加子任务，请先创建流程任务"}
 
-    # notice_time 映射到 deadline
+    # 解析日期
     try:
         due = date_type.fromisoformat(notice_time) if notice_time else None
     except (ValueError, TypeError):
         due = None
 
-    try:
-        pri = Priority(level)
-    except ValueError:
-        pri = Priority.medium
+    # 校验 level 合法值
+    valid_levels = {"low", "medium", "high", "urgent"}
+    if level not in valid_levels:
+        level = "medium"
 
-    try:
-        st = TaskStatus(status)
-    except ValueError:
-        st = TaskStatus.todo
+    # 校验 status，映射值（agent 传入 todo/in_progress，表用 pending/in_progress）
+    status_map = {"todo": "pending", "pending": "pending", "in_progress": "in_progress", "done": "done"}
+    mapped_status = status_map.get(status, "pending")
 
-    subtask = Task(
-        user_id=user_id,
-        parent_id=task_id,
-        task_type=TaskType.todo,
-        is_final=False,
-        title=name,
+    subtask = SubTask(
+        task_id=task_id,
+        name=name,
         description=description,
-        priority=pri,
-        deadline=due,
-        status=st,
+        notice_time=due,
+        level=level,
+        status=mapped_status,
     )
     db.add(subtask)
     db.commit()
     db.refresh(subtask)
 
-    logger.info(f"SubTask created: id={subtask.id}, title={subtask.title}, parent_task={task_id}")
-    return _task_to_dict(subtask)
+    logger.info(f"SubTask created: id={subtask.id}, name={subtask.name}, task_id={task_id}")
+    return _subtask_to_dict(subtask)
 
 
 def list_subtasks(
@@ -267,38 +340,37 @@ def list_subtasks(
     status: Optional[str] = None,
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
-    """查询子任务列表。只查询有 parent_id 的任务记录。
+    """查询子任务列表。通过 JOIN task 表按用户过滤。
 
     Args:
         db: 数据库会话
-        user_id: 用户 ID（只返回该用户拥有的子任务）
-        task_id: 按父任务 ID 过滤。不传则返回该用户所有子任务（parent_id IS NOT NULL）
+        user_id: 用户 ID（JOIN task 表校验归属）
+        task_id: 按父任务 ID 过滤。不传则返回该用户所有子任务
         status: 按状态过滤
         limit: 最大返回条数
 
     Returns:
         子任务列表，每个元素包含全部字段
     """
-    q = db.query(Task).filter(Task.user_id == user_id)
+    actual_uid = _ensure_user_exists(db, user_id)
+
+    q = db.query(SubTask).join(Task, SubTask.task_id == Task.id).filter(
+        Task.user_id == actual_uid
+    )
 
     if task_id is not None:
-        q = q.filter(Task.parent_id == task_id)
-    else:
-        q = q.filter(Task.parent_id.isnot(None))
+        q = q.filter(SubTask.task_id == task_id)
 
     if status:
-        try:
-            q = q.filter(Task.status == TaskStatus(status))
-        except ValueError:
-            pass
+        q = q.filter(SubTask.status == status)
 
     subtasks = (
-        q.order_by(Task.deadline.asc(), Task.priority.desc())
+        q.order_by(SubTask.notice_time.asc(), SubTask.level.desc())
         .limit(limit)
         .all()
     )
 
-    return [_task_to_dict(st) for st in subtasks]
+    return [_subtask_to_dict(st) for st in subtasks]
 
 
 def delete_subtask(
@@ -306,32 +378,31 @@ def delete_subtask(
     subtask_id: int,
     user_id: int,
 ) -> Dict[str, Any]:
-    """删除子任务。实质：删除 tasks 表中一条有 parent_id 的记录。
+    """删除子任务。通过 JOIN task 表校验用户权限。
 
     Args:
         db: 数据库会话
-        subtask_id: 要删除的子任务 ID（即 tasks 表的 id）
+        subtask_id: 要删除的子任务 ID（sub_task 表的 id）
         user_id: 用户 ID
 
     Returns:
         操作结果 {"ok": True, "deleted_id": int} 或 {"error": str}
     """
-    subtask = db.query(Task).filter(
-        Task.id == subtask_id,
-        Task.user_id == user_id,
-        Task.parent_id.isnot(None),  # 确保是子任务而非顶层任务
+    actual_uid = _ensure_user_exists(db, user_id)
+
+    subtask = db.query(SubTask).join(Task, SubTask.task_id == Task.id).filter(
+        SubTask.id == subtask_id,
+        Task.user_id == actual_uid,
     ).first()
     if not subtask:
-        return {"error": f"子任务 {subtask_id} 不存在或无权操作（可能不是子任务）"}
-    if subtask.is_final:
-        return {"error": "最终节点由流程任务自动维护，不能单独删除"}
+        return {"error": f"子任务 {subtask_id} 不存在或无权操作"}
 
-    deleted_title = subtask.title
+    deleted_name = subtask.name
     db.delete(subtask)
     db.commit()
 
-    logger.info(f"SubTask deleted: id={subtask_id}, title={deleted_title}")
-    return {"ok": True, "deleted_id": subtask_id, "deleted_title": deleted_title}
+    logger.info(f"SubTask deleted: id={subtask_id}, name={deleted_name}")
+    return {"ok": True, "deleted_id": subtask_id, "deleted_name": deleted_name}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -356,4 +427,20 @@ def _task_to_dict(t: Task) -> Dict[str, Any]:
         "progress": t.progress,
         "created_at": t.created_at.isoformat() if t.created_at else None,
         "update_time": t.update_time.isoformat() if t.update_time else None,
+    }
+
+
+def _subtask_to_dict(st: SubTask) -> Dict[str, Any]:
+    """SubTask ORM → dict（包含所有字段）"""
+    return {
+        "id": st.id,
+        "task_id": st.task_id,
+        "name": st.name,
+        "description": st.description,
+        "notice_time": st.notice_time.isoformat() if st.notice_time else None,
+        "level": st.level or "medium",
+        "status": st.status or "pending",
+        "notice_method": st.notice_method,
+        "created_at": st.created_at.isoformat() if st.created_at else None,
+        "updated_at": st.updated_at.isoformat() if st.updated_at else None,
     }
