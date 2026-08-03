@@ -226,8 +226,10 @@ def delete_task(
         raise HTTPException(status_code=404, detail="任务不存在")
     if task.is_final:
         raise HTTPException(status_code=400, detail="最终节点由流程任务自动维护，不能单独删除")
+    # 级联删除流程主任务的全部子节点
+    child_count = 0
     if task.parent_id is None and task.task_type == TaskType.process:
-        db.query(TaskModel).filter(
+        child_count = db.query(TaskModel).filter(
             TaskModel.parent_id == task.id,
             TaskModel.user_id == current_user.id,
         ).delete(synchronize_session=False)

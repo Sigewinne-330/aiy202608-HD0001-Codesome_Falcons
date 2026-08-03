@@ -14,6 +14,10 @@ INITIAL_CREDITS = 10000          # 新用户注册赠送积分
 TOKENS_PER_CREDIT = 1000         # 1 积分 = 1000 token
 MIN_CREDITS_BALANCE = 0          # 余额阈值（<=0 拒绝服务）
 
+# 黑客松阶段：所有用户无限 tokens（不计费、不拦截）
+# 需要恢复计费时，改回 False 即可，无需改动其他代码
+UNLIMITED_TOKENS = True
+
 # 充值档位（模拟支付；真实支付时替换为渠道配置）
 RECHARGE_PLANS = [
     {"code": "p6", "amount": 6.0, "credits": 6000, "bonus": "基础包"},
@@ -31,7 +35,9 @@ def credits_for_tokens(tokens: int) -> int:
 
 
 def ensure_balance(user) -> None:
-    """发送消息前检查余额，不足则 402"""
+    """发送消息前检查余额，不足则 402（无限模式下跳过检查）"""
+    if UNLIMITED_TOKENS:
+        return
     if user.balance <= MIN_CREDITS_BALANCE:
         raise HTTPException(
             status_code=402,
@@ -46,7 +52,9 @@ def deduct_credits(
     ref_id: int | None = None,
     note: str = "",
 ) -> int:
-    """扣减积分并写流水；余额不足抛 402"""
+    """扣减积分并写流水；余额不足抛 402（无限模式下不扣费、不写流水）"""
+    if UNLIMITED_TOKENS:
+        return 0
     credits = credits_for_tokens(tokens)
     if credits <= 0:
         return 0

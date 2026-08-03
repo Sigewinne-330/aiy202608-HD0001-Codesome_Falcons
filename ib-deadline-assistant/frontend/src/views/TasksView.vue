@@ -55,8 +55,12 @@
       <v-card
         v-for="task in filteredTasks"
         :key="task.id"
+        :id="`task-card-${task.id}`"
         class="task-card"
-        :class="{ 'task-card--process': task.task_type === 'process' }"
+        :class="{
+          'task-card--process': task.task_type === 'process',
+          'task-card--focused': focusedTaskId === task.id,
+        }"
         rounded="xl"
         elevation="0"
       >
@@ -129,7 +133,12 @@
           </div>
 
           <div v-if="task.subtasks?.length" class="subtask-list">
-            <div v-for="(subtask, index) in task.subtasks" :key="subtask.id" class="subtask-row">
+            <div
+              v-for="(subtask, index) in task.subtasks"
+              :key="subtask.id"
+              class="subtask-row"
+              :class="{ 'subtask-row--focused': focusedTaskId === subtask.id }"
+            >
               <span class="subtask-index">{{ index + 1 }}</span>
               <v-checkbox
                 :model-value="subtask.status === 'done'"
@@ -272,7 +281,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { authFetch } from '@/stores/auth'
@@ -295,6 +304,7 @@ const selectedTask = ref(null)
 const deleting = ref(false)
 const errorVisible = ref(false)
 const errorMessage = ref('')
+const focusedTaskId = ref(null)  // 从提醒弹窗跳转后要高亮的任务/子任务 id
 
 const priorityOptions = [
   { titleKey: 'common.low', value: 'low' },
@@ -349,6 +359,32 @@ function showError(message) {
   errorVisible.value = true
 }
 
+/** 处理提醒弹窗跳转的 focus 参数：定位并高亮对应任务卡片 */
+function handleFocus() {
+  const focusId = route.query.focus
+  if (!focusId || !tasks.value.length) return
+  const target = Number(focusId)
+
+  // 顶级任务直接匹配
+  let card = tasks.value.find((task) => task.id === target)
+  // 否则在子任务中查找其父级卡片
+  if (!card) {
+    for (const task of tasks.value) {
+      if ((task.subtasks || []).some((s) => s.id === target)) {
+        card = task
+        break
+      }
+    }
+  }
+  if (!card) return
+
+  focusedTaskId.value = target
+  nextTick(() => {
+    document.getElementById(`task-card-${card.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+  window.setTimeout(() => { focusedTaskId.value = null }, 2600)
+}
+
 async function loadTasks() {
   loading.value = true
   try {
@@ -359,8 +395,12 @@ async function loadTasks() {
     showError(t('tasks.loadFail', { msg: error.message }))
   } finally {
     loading.value = false
+    handleFocus()  // 数据就绪后定位提醒跳转的目标
   }
 }
+
+// 已在任务页时再次跳转（同路由不同 query）也能响应 focus
+watch(() => route.query.focus, () => handleFocus())
 
 function openCreate() {
   form.value = emptyForm()
@@ -598,6 +638,8 @@ onBeforeUnmount(() => stopTaskSync?.())
 }
 .task-card::before { position: absolute; top: 0; left: 0; width: 100%; height: 4px; content: ''; background: linear-gradient(90deg, #4d72e5, #8ba2f2); }
 .task-card:hover { transform: translateY(-2px); border-color: rgba(70, 100, 203, .2); box-shadow: 0 20px 46px rgba(31,44,75,.1) !important; }
+.task-card--focused { border-color: #4169e8 !important; box-shadow: 0 0 0 3px rgba(65, 105, 232, .28), 0 20px 46px rgba(31,44,75,.1) !important; }
+.subtask-row--focused { background: #eaf0ff !important; border-color: rgba(65,105,232,.35) !important; }
 .task-card--process { grid-column: span 2; border-color: rgba(104,74,190,.16); }
 .task-card--process::before { background: linear-gradient(90deg, #7657cd, #ad8eea); }
 .task-card__top { display: flex; align-items: flex-start; gap: 12px; }

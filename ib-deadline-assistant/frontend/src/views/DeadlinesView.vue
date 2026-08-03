@@ -41,8 +41,9 @@
             <v-list-item
               v-for="d in filteredDeadlines"
               :key="d.id"
+              :id="`deadline-item-${d.id}`"
               :value="d.id"
-              :class="{ 'bg-red-lighten-5': d.status === 'overdue' }"
+              :class="{ 'bg-red-lighten-5': d.status === 'overdue', 'deadline-item--focused': focusedDeadlineId === d.id }"
             >
               <template v-slot:prepend>
                 <v-icon
@@ -149,17 +150,20 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { authFetch } from '@/stores/auth'
 
 const { t } = useI18n()
+const route = useRoute()
 const deadlines = ref([])
 const upcoming = ref([])
 const collision = ref(null)
 const statusFilter = ref('all')
 const checkDate = ref('')
 const dialog = ref(false)
+const focusedDeadlineId = ref(null)  // 从提醒弹窗跳转后要高亮的 deadline id
 const form = ref({
   title: '', source: '', subject: '', due_date: '', priority: 'medium', description: '',
 })
@@ -192,6 +196,20 @@ function daysLeft(d) {
   return Math.ceil((due - now) / (1000 * 60 * 60 * 24))
 }
 
+/** 处理提醒弹窗跳转的 focus 参数：定位并高亮对应 deadline */
+function handleFocus() {
+  const focusId = route.query.focus
+  if (!focusId || !deadlines.value.length) return
+  const target = Number(focusId)
+  if (!deadlines.value.some((d) => d.id === target)) return
+
+  focusedDeadlineId.value = target
+  nextTick(() => {
+    document.getElementById(`deadline-item-${target}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+  window.setTimeout(() => { focusedDeadlineId.value = null }, 2600)
+}
+
 async function loadDeadlines() {
   try {
     const [all, up] = await Promise.all([
@@ -200,8 +218,13 @@ async function loadDeadlines() {
     ])
     deadlines.value = all
     upcoming.value = up
-  } catch { /* ignore */ }
+  } catch { /* ignore */ } finally {
+    handleFocus()  // 数据就绪后定位提醒跳转的目标
+  }
 }
+
+// 已在 Deadline 页时再次跳转（同路由不同 query）也能响应 focus
+watch(() => route.query.focus, () => handleFocus())
 
 function openCreate() {
   form.value = { title: '', source: '', subject: '', due_date: '', priority: 'medium', description: '' }
@@ -244,3 +267,11 @@ async function checkCollision() {
 
 onMounted(loadDeadlines)
 </script>
+
+<style scoped>
+.deadline-item--focused {
+  background: #eaf0ff !important;
+  border-left: 3px solid #4169e8;
+  border-radius: 8px;
+}
+</style>
