@@ -439,6 +439,7 @@ export default {
     saveFailed: 'Save failed, please try again',
     saveFailedBackend: 'Save failed. Please check if the backend is running',
     requestFailed: 'Request failed',
+    creditsUnit: 'credits',
   },
   dashboard: {
     title: '📊 Dashboard',

@@ -32,7 +32,7 @@ from services.ai_service import ai_service, SYSTEM_PROMPT
 from services.task_tools_schema import TASK_TOOLS
 from services.knowledge_base_tools import KNOWLEDGE_BASE_TOOLS, get_subject_guidelines
 from services import task_tools
-from services.billing import ensure_balance, deduct_credits
+from services.billing import ensure_balance, deduct_credits, credits_for_tokens
 from services.image_storage import save_images
 
 # 合并所有可用工具（任务 CRUD + 知识库查询）
@@ -398,14 +398,9 @@ async def chat(
     history = _load_history(db, conv.id, limit=20)
 
     # 构建消息并执行工具调用循环
-    # 构建消息并执行工具调用循环
     messages = _build_messages(data.content, history, images=data.images)
     usage_tracker: Dict[str, int] = {}
     reply = await _run_tool_loop(messages, db, current_user.id, usage_tracker)
-
-    # 计费：按实际 token 扣积分并写流水
-    total_tokens = usage_tracker.get("total_tokens", 0)
-    deduct_credits(db, current_user, total_tokens, note=f"AI 对话消耗 {total_tokens} tokens")
 
     # 保存用户消息（图片落盘为文件，extra 只存 URL，历史记录永久保留）
     user_msg = ChatMessageModel(
@@ -419,6 +414,7 @@ async def chat(
     db.add(user_msg)
 
     # 保存 AI 回复
+    total_tokens = usage_tracker.get("total_tokens", 0)
     assistant_msg = ChatMessageModel(
         user_id=current_user.id,
         conversation_id=conv.id,
@@ -427,6 +423,10 @@ async def chat(
         token=total_tokens,
     )
     db.add(assistant_msg)
+    db.flush()  # 拿到 assistant_msg.id 用于流水关联
+
+    # 计费：按实际 token 扣积分并写流水（ref 关联本条 AI 回复）
+    deduct_credits(db, current_user, total_tokens, ref_id=assistant_msg.id, note=f"AI 对话消耗 {total_tokens} tokens")
 
     # 更新对话标题（未设置时用第一条用户消息）
     if not conv.title or conv.title == "新对话":
@@ -490,8 +490,8 @@ async def chat_stream(
 
                 elif event["type"] == "done":
                     final_reply = event["content"]
-                    # 把本轮累计 token 数一并下发给前端（用于每条消息展示）
-                    yield f"data: {json.dumps({'done': True, 'tokens': total_tokens}, ensure_ascii=False)}\n\n"
+                    # 下发本轮真实 token 与换算后的积分（前端用于展示，credits 为权威值）
+                    yield f"data: {json.dumps({'done': True, 'tokens': total_tokens, 'credits': credits_for_tokens(total_tokens)}, ensure_ascii=False)}\n\n"
                     yield "data: [DONE]\n\n"
 
         except Exception as e:

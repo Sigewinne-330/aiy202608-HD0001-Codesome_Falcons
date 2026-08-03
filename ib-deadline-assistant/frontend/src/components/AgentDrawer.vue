@@ -111,10 +111,10 @@
           <div v-else class="agent-md"
             :key="'md-' + index + '-' + (message.streaming ? 1 : 0)"
             v-html="renderMarkdown(message.content)" />
-          <!-- 每条 AI 回复的 token 统计：流式中实时估算增长，结束后显示 API 真实值 -->
-          <div v-if="message.role === 'assistant' && message.token" class="agent-token-meta">
+          <!-- 每条 AI 回复的积分消耗：流式中实时估算增长，结束后显示后端换算的权威值 -->
+          <div v-if="message.role === 'assistant' && message.credits" class="agent-token-meta">
             <v-icon icon="mdi-lightning-bolt" size="11" />
-            {{ tokenLabel(message) }} tokens
+            {{ creditLabel(message) }} {{ $t('chat.creditsUnit') }}
           </div>
         </div>
       </div>
@@ -242,10 +242,16 @@ function estimateTokens(text) {
   return Math.max(1, Math.round(cjk + other / 4))
 }
 
-/** 渲染 token 标签：流式中显示估算值（≈ 前缀），结束后显示 API 真实值 */
-function tokenLabel(message) {
-  if (!message || !message.token) return ''
-  return (message.tokenIsEstimate ? '≈ ' : '') + message.token.toLocaleString()
+/** token → 积分：1000 token = 1 积分，向上取整、最少 1（与后端 billing.credits_for_tokens 一致） */
+function tokensToCredits(tokens) {
+  if (!tokens || tokens <= 0) return 0
+  return Math.max(1, Math.ceil(tokens / 1000))
+}
+
+/** 渲染积分标签：流式中显示估算值（≈ 前缀），结束后显示后端下发的权威值 */
+function creditLabel(message) {
+  if (!message || !message.credits) return ''
+  return (message.creditsIsEstimate ? '≈ ' : '') + message.credits.toLocaleString()
 }
 
 defineEmits(['close'])
@@ -408,7 +414,13 @@ async function switchConversation(convId) {
     const response = await fetch(`/api/chat/history?conversation_id=${convId}`, { headers: headers() })
     if (response.ok) {
       const data = await response.json()
-      messages.value = (data.messages || []).map((item) => ({ role: item.role, content: item.content, token: item.token || 0, images: item.images || null }))
+      messages.value = (data.messages || []).map((item) => ({
+        role: item.role,
+        content: item.content,
+        credits: tokensToCredits(item.token),
+        creditsIsEstimate: false,
+        images: item.images || null,
+      }))
       await scrollToBottom()
     }
   } catch {
@@ -489,24 +501,24 @@ async function sendMessage() {
         if (!payload || payload === '[DONE]') continue
         try {
           const parsed = JSON.parse(payload)
-          // 流式结束事件：携带本轮实际消耗的 token 数（真实值替换估算值）
+          // 流式结束事件：携带本轮真实 token 与后端换算的积分（权威值替换估算值）
           if (parsed && typeof parsed === 'object' && parsed.done) {
-            if (parsed.tokens) {
-              messages.value[responseIndex].token = parsed.tokens
-              messages.value[responseIndex].tokenIsEstimate = false
+            if (parsed.credits || parsed.tokens) {
+              messages.value[responseIndex].credits = parsed.credits || tokensToCredits(parsed.tokens)
+              messages.value[responseIndex].creditsIsEstimate = false
             }
             continue
           }
           const chunk = typeof parsed === 'string' ? parsed : (parsed.error || '')
           messages.value[responseIndex].content += chunk
-          // 实时估算 token，让数字随生成过程增长（结束时用 API 真实值替换）
-          messages.value[responseIndex].token = estimateTokens(messages.value[responseIndex].content)
-          messages.value[responseIndex].tokenIsEstimate = true
+          // 实时估算积分，让数字随生成过程增长（结束时用后端权威值替换）
+          messages.value[responseIndex].credits = tokensToCredits(estimateTokens(messages.value[responseIndex].content))
+          messages.value[responseIndex].creditsIsEstimate = true
           if (chunk.includes('✓ 操作成功')) taskMutationSucceeded = true
         } catch {
           messages.value[responseIndex].content += payload
-          messages.value[responseIndex].token = estimateTokens(messages.value[responseIndex].content)
-          messages.value[responseIndex].tokenIsEstimate = true
+          messages.value[responseIndex].credits = tokensToCredits(estimateTokens(messages.value[responseIndex].content))
+          messages.value[responseIndex].creditsIsEstimate = true
           if (payload.includes('✓ 操作成功')) taskMutationSucceeded = true
         }
       }

@@ -439,6 +439,7 @@ export default {
     saveFailed: '保存失败，请重试',
     saveFailedBackend: '保存失败，请检查后端是否启动',
     requestFailed: '请求失败',
+    creditsUnit: '积分',
   },
   dashboard: {
     title: '📊 仪表盘',

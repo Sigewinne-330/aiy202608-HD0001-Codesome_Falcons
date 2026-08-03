@@ -110,10 +110,10 @@
                     :key="'md-' + i + '-' + (msg.streaming ? 1 : 0)"
                     v-html="renderMarkdown(msg.content)" />
                 </div>
-                <!-- 每条 AI 回复的 token 统计：流式中实时估算增长，结束后显示 API 真实值 -->
-                <div v-if="msg.role === 'assistant' && msg.token" class="d-flex align-center justify-end pa-2 text-caption text-grey" style="border-top: 1px solid #E0E0E0;">
+                <!-- 每条 AI 回复的积分消耗：流式中实时估算增长，结束后显示后端换算的权威值 -->
+                <div v-if="msg.role === 'assistant' && msg.credits" class="d-flex align-center justify-end pa-2 text-caption text-grey" style="border-top: 1px solid #E0E0E0;">
                   <v-icon size="13" class="mr-1">mdi-lightning-bolt-outline</v-icon>
-                  {{ tokenLabel(msg) }} tokens
+                  {{ creditLabel(msg) }} {{ $t('chat.creditsUnit') }}
                 </div>
                 <!-- 提取到任务 JSON 时显示操作按钮 -->
                 <div v-if="!msg.streaming && msg.taskData" class="d-flex align-center pa-2" style="border-top: 1px solid #E0E0E0;">
@@ -439,10 +439,16 @@ function estimateTokens(text) {
   return Math.max(1, Math.round(cjk + other / 4))
 }
 
-/** 渲染 token 标签：流式中显示估算值（≈ 前缀），结束后显示 API 真实值 */
-function tokenLabel(message) {
-  if (!message || !message.token) return ''
-  return (message.tokenIsEstimate ? '≈ ' : '') + message.token.toLocaleString()
+/** token → 积分：1000 token = 1 积分，向上取整、最少 1（与后端 billing.credits_for_tokens 一致） */
+function tokensToCredits(tokens) {
+  if (!tokens || tokens <= 0) return 0
+  return Math.max(1, Math.ceil(tokens / 1000))
+}
+
+/** 渲染积分标签：流式中显示估算值（≈ 前缀），结束后显示后端下发的权威值 */
+function creditLabel(message) {
+  if (!message || !message.credits) return ''
+  return (message.creditsIsEstimate ? '≈ ' : '') + message.credits.toLocaleString()
 }
 
 // ---- 消息发送 / 流式 ----
@@ -517,10 +523,10 @@ async function sendMessage() {
         try {
           const parsed = JSON.parse(data)
           if (parsed && typeof parsed === 'object' && parsed.done) {
-            // 流式结束事件：API 真实值替换估算值
-            if (parsed.tokens) {
-              messages.value[aiIndex].token = parsed.tokens
-              messages.value[aiIndex].tokenIsEstimate = false
+            // 流式结束事件：用后端下发的权威积分值替换估算值
+            if (parsed.credits || parsed.tokens) {
+              messages.value[aiIndex].credits = parsed.credits || tokensToCredits(parsed.tokens)
+              messages.value[aiIndex].creditsIsEstimate = false
             }
             continue
           }
@@ -530,8 +536,8 @@ async function sendMessage() {
             messages.value[aiIndex].content = t('chat.errorPrefix') + parsed.error
           }
           // 实时估算 token，让数字随生成过程增长（结束时用 API 真实值替换）
-          messages.value[aiIndex].token = estimateTokens(messages.value[aiIndex].content)
-          messages.value[aiIndex].tokenIsEstimate = true
+          messages.value[aiIndex].credits = tokensToCredits(estimateTokens(messages.value[aiIndex].content))
+          messages.value[aiIndex].creditsIsEstimate = true
         } catch {
           // 兼容旧格式：[ERROR] 前缀或裸文本
           if (data.startsWith('[ERROR]')) {
@@ -539,8 +545,8 @@ async function sendMessage() {
           } else {
             messages.value[aiIndex].content += data
           }
-          messages.value[aiIndex].token = estimateTokens(messages.value[aiIndex].content)
-          messages.value[aiIndex].tokenIsEstimate = true
+          messages.value[aiIndex].credits = tokensToCredits(estimateTokens(messages.value[aiIndex].content))
+          messages.value[aiIndex].creditsIsEstimate = true
         }
         scheduleScroll()
       }
@@ -626,7 +632,13 @@ async function loadHistory(convId) {
     const res = await authFetch(`${API_BASE}/chat/history?conversation_id=${convId}`)
     if (!res.ok) return
     const data = await res.json()
-    messages.value = (data.messages || []).map(m => ({ role: m.role, content: m.content, token: m.token || 0, images: m.images || null }))
+    messages.value = (data.messages || []).map(m => ({
+      role: m.role,
+      content: m.content,
+      credits: tokensToCredits(m.token),
+      creditsIsEstimate: false,
+      images: m.images || null,
+    }))
     scrollToBottom()
   } catch {
     // 忽略加载失败

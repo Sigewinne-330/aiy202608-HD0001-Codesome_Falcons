@@ -439,6 +439,7 @@ export default {
     saveFailed: '儲存失敗，請重試',
     saveFailedBackend: '儲存失敗，請檢查後端是否啟動',
     requestFailed: '請求失敗',
+    creditsUnit: '積分',
   },
   dashboard: {
     title: '📊 儀表板',

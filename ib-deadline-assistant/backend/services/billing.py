@@ -14,8 +14,8 @@ INITIAL_CREDITS = 10000          # 新用户注册赠送积分
 TOKENS_PER_CREDIT = 1000         # 1 积分 = 1000 token
 MIN_CREDITS_BALANCE = 0          # 余额阈值（<=0 拒绝服务）
 
-# 黑客松阶段：所有用户无限 tokens（不计费、不拦截）
-# 需要恢复计费时，改回 False 即可，无需改动其他代码
+# 积分计费开关：True = 无限 tokens（黑客松阶段，不计费、不拦截，仅展示积分）
+# 需要真实扣积分时改回 False 即可，无需改动其他代码
 UNLIMITED_TOKENS = True
 
 # 充值档位（模拟支付；真实支付时替换为渠道配置）
