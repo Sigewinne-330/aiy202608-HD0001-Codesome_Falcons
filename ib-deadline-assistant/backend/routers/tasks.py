@@ -185,7 +185,7 @@ def delete_task(
         ).delete(synchronize_session=False)
     db.delete(task)
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "cascaded_children": child_count}
 
 
 @router.post("/breakdown", response_model=List[TaskResponse])

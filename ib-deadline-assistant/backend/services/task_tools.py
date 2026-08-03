@@ -154,7 +154,10 @@ def delete_task(
     task_id: int,
     user_id: int,
 ) -> Dict[str, Any]:
-    """删除任务；流程主任务会同时删除其全部子任务。
+    """删除任务，同时级联删除其所有子任务。
+
+    注意：数据库 ForeignKey 为 ondelete=SET NULL，不会自动级联，
+    因此需要手动先删除所有 child tasks，再删除 parent task。
 
     Args:
         db: 数据库会话
@@ -174,16 +177,26 @@ def delete_task(
         return {"error": "最终节点由流程任务自动维护，不能单独删除"}
 
     deleted_title = task.title
-    if task.parent_id is None and task.task_type == TaskType.process:
-        db.query(Task).filter(
-            Task.parent_id == task.id,
-            Task.user_id == user_id,
-        ).delete(synchronize_session=False)
+
+    # 级联删除所有子任务（parent_id == task_id 且属于同一用户）
+    child_count = (
+        db.query(Task)
+        .filter(Task.parent_id == task_id, Task.user_id == user_id)
+        .delete(synchronize_session="fetch")
+    )
+
+    # 删除父任务自身
     db.delete(task)
     db.commit()
 
-    logger.info(f"Task deleted: id={task_id}, title={deleted_title}")
-    return {"ok": True, "deleted_id": task_id, "deleted_title": deleted_title}
+    logger.info(
+        f"Task deleted: id={task_id}, title={deleted_title}, cascaded_children={child_count}"
+    )
+    return {
+        "ok": True,
+        "deleted_id": task_id,
+        "deleted_title": deleted_title,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════
