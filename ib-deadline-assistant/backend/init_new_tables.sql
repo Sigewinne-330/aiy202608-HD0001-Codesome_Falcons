@@ -66,5 +66,8 @@ CREATE TABLE IF NOT EXISTS chat_message (
     token INT DEFAULT 0 COMMENT 'token 消耗数',
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE,
-    FOREIGN KEY (conversation_id) REFERENCES conversation(id) ON DELETE CASCADE
+    FOREIGN KEY (conversation_id) REFERENCES conversation(id) ON DELETE CASCADE,
+    -- 复合索引：get_history 按 (conversation_id, update_time) 查询+排序，
+    -- 避免含大 extra（图片 base64）的消息触发 filesort 导致 MySQL 1038 排序内存溢出
+    KEY idx_conv_time (conversation_id, update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

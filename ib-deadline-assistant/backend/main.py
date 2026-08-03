@@ -2,9 +2,11 @@ import logging
 import fcntl
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from config import settings
 from routers import auth, tasks, deadlines, chat, calendar, billing
 from database import engine, Base, auto_sync_tables
+from services.image_storage import UPLOAD_DIR
 
 # 配置日志输出到控制台（INFO 级别，用于调试 LLM 返回）
 logging.basicConfig(
@@ -48,6 +50,10 @@ app.include_router(deadlines.router)
 app.include_router(chat.router)
 app.include_router(calendar.router)
 app.include_router(billing.router)
+
+# 静态资源：上传的图片（chat_message.extra 只存 /uploads/... URL，图片文件落盘于此）
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 
 @app.get("/api/health")
