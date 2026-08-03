@@ -30,7 +30,11 @@ from schemas.chat import (
 from services.auth import get_current_user
 from services.ai_service import ai_service, SYSTEM_PROMPT
 from services.task_tools_schema import TASK_TOOLS
+from services.knowledge_base_tools import KNOWLEDGE_BASE_TOOLS, get_subject_guidelines
 from services import task_tools
+
+# 合并所有可用工具（任务 CRUD + 知识库查询）
+ALL_TOOLS = TASK_TOOLS + KNOWLEDGE_BASE_TOOLS
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +51,7 @@ TOOL_DISPATCH: Dict[str, Any] = {
     "create_subtask": task_tools.create_subtask,
     "list_subtasks": task_tools.list_subtasks,
     "delete_subtask": task_tools.delete_subtask,
+    "get_subject_guidelines": get_subject_guidelines,
 }
 
 
@@ -123,7 +128,7 @@ async def _run_tool_loop(
         AI 的最终文本回复
     """
     for _round in range(MAX_TOOL_ROUNDS):
-        choice = await ai_service.chat_with_tools(messages, TASK_TOOLS)
+        choice = await ai_service.chat_with_tools(messages, ALL_TOOLS)
 
         # AI 要求调用工具
         if choice.finish_reason == "tool_calls" and choice.message.tool_calls:
@@ -183,7 +188,7 @@ async def _run_tool_loop_stream(
     for _round in range(MAX_TOOL_ROUNDS):
         tool_calls = None
 
-        async for event in ai_service.chat_stream_with_tools(messages, TASK_TOOLS):
+        async for event in ai_service.chat_stream_with_tools(messages, ALL_TOOLS):
             if event["type"] == "text":
                 full_reply.append(event["content"])
                 yield event  # 直接透传文本
@@ -221,6 +226,7 @@ async def _run_tool_loop_stream(
                 "delete_task": "正在删除任务...",
                 "create_subtask": "正在添加子任务...",
                 "delete_subtask": "正在删除子任务...",
+                "get_subject_guidelines": "正在查阅知识库...",
             }
             status = status_map.get(func_name, f"正在执行 {func_name}...")
             yield {"type": "status", "content": status}
@@ -247,7 +253,11 @@ async def _run_tool_loop_stream(
                 count = len(result)
                 yield {"type": "status", "content": f"✓ 找到 {count} 条记录"}
             elif isinstance(result, dict):
-                if result.get("ok"):
+                if result.get("ok") and result.get("subject"):
+                    # 知识库工具：显示加载了哪个学科
+                    content_len = len(result.get("content", ""))
+                    yield {"type": "status", "content": f"✓ 已加载 {result['subject']} 指南 ({content_len:,} 字符)"}
+                elif result.get("ok"):
                     yield {"type": "status", "content": "✓ 操作成功"}
                 elif result.get("error"):
                     yield {"type": "status", "content": f"✗ {result['error']}"}
@@ -451,7 +461,7 @@ def list_tools(current_user: User = Depends(get_current_user)):
     """列出所有可用工具（供前端调试/展示）"""
     tool_names = [
         {"name": t["function"]["name"], "description": t["function"]["description"]}
-        for t in TASK_TOOLS
+        for t in ALL_TOOLS
     ]
     return {"count": len(tool_names), "tools": tool_names}
 
