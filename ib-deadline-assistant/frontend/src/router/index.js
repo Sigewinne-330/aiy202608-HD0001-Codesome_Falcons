@@ -4,7 +4,7 @@ import { useAuth } from '@/stores/auth'
 const routes = [
   {
     path: '/',
-    redirect: '/plan',
+    redirect: '/calendar',
   },
   // ---- 认证页面（不需要登录） ----
   {
@@ -48,7 +48,25 @@ const routes = [
     path: '/calendar',
     name: 'Calendar',
     component: () => import('../views/CalendarView.vue'),
-    meta: { title: '日历', icon: 'mdi-calendar-month', requiresAuth: true },
+    meta: { title: '日历工作台', icon: 'mdi-calendar-month', requiresAuth: true },
+  },
+  {
+    path: '/urgent',
+    name: 'Urgent',
+    component: () => import('../views/UrgentView.vue'),
+    meta: { title: '紧急待处理项', icon: 'mdi-alert-outline', requiresAuth: true },
+  },
+  {
+    path: '/progress',
+    name: 'Progress',
+    component: () => import('../views/ProgressView.vue'),
+    meta: { title: '进度管理', icon: 'mdi-chart-timeline-variant', requiresAuth: true },
+  },
+  {
+    path: '/progress/:category',
+    name: 'ProgressCategory',
+    component: () => import('../views/ProgressView.vue'),
+    meta: { title: '分类进度', icon: 'mdi-chart-timeline-variant', requiresAuth: true },
   },
   {
     path: '/dashboard',
@@ -74,7 +92,7 @@ router.beforeEach((to, from, next) => {
 
   // 已登录用户访问登录/注册页 → 跳转到首页
   if (to.meta.guest && isAuthenticated.value) {
-    return next({ path: '/plan' })
+    return next({ path: '/calendar' })
   }
 
   next()

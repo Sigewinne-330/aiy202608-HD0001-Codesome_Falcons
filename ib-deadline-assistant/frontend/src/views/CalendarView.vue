@@ -1,615 +1,252 @@
 <template>
-  <div class="calendar-page">
-    <!-- 顶部工具栏 -->
-    <div class="calendar-toolbar">
-      <div class="toolbar-left">
-        <v-btn icon variant="text" @click="prevMonth">
-          <v-icon>mdi-chevron-left</v-icon>
-        </v-btn>
-        <h2 class="text-h5 font-weight-bold mx-3">
-          {{ currentYear }}年{{ currentMonth }}月
-        </h2>
-        <v-btn icon variant="text" @click="nextMonth">
-          <v-icon>mdi-chevron-right</v-icon>
-        </v-btn>
-        <v-btn variant="outlined" size="small" class="ml-3" @click="goToday">
-          今天
-        </v-btn>
+  <section class="calendar-workspace">
+    <header class="calendar-heading">
+      <div>
+        <div class="eyebrow">MY SCHEDULE</div>
+        <h1>日历</h1>
+        <p>集中查看任务、Deadline 与计划中的关键节点。</p>
       </div>
-      <div class="toolbar-right">
-        <v-chip v-if="loading" size="small" color="primary" variant="tonal">
-          <v-icon size="16" class="mr-1">mdi-loading mdi-spin</v-icon>
-          加载中
-        </v-chip>
+      <div class="calendar-heading__stats">
+        <div><strong>{{ monthItemCount }}</strong><span>本月日程</span></div>
+        <div><strong>{{ urgentCount }}</strong><span>高优先级</span></div>
       </div>
-    </div>
+    </header>
 
-    <v-divider />
-
-    <!-- 主内容区：左侧日历 + 右侧任务 -->
-    <div class="calendar-body">
-      <!-- 左侧：日历网格 -->
-      <div class="calendar-main">
-        <!-- 星期标题 -->
-        <div class="weekday-row">
-          <div
-            v-for="day in weekDays"
-            :key="day"
-            class="weekday-cell"
-          >
-            {{ day }}
-          </div>
+    <v-card class="calendar-card" elevation="0" rounded="xl">
+      <div class="calendar-toolbar">
+        <div class="month-navigation">
+          <v-btn icon="mdi-chevron-left" variant="text" size="small" aria-label="上个月" @click="changeMonth(-1)" />
+          <div class="month-title">{{ currentYear }} 年 {{ currentMonth }} 月</div>
+          <v-btn icon="mdi-chevron-right" variant="text" size="small" aria-label="下个月" @click="changeMonth(1)" />
         </div>
-
-        <!-- 日历网格 -->
-        <div class="calendar-grid">
-          <div
-            v-for="(day, index) in calendarDays"
-            :key="index"
-            class="day-cell"
-            :class="{
-              'day-cell--other-month': !day.isCurrentMonth,
-              'day-cell--today': day.isToday,
-              'day-cell--selected': day.isSelected,
-            }"
-            @click="selectDate(day)"
-          >
-            <div class="day-top">
-              <span class="day-number">{{ day.dayOfMonth }}</span>
-            </div>
-            <!-- 任务列表（当天日期格子内） -->
-            <div class="day-items" v-if="day.totalCount > 0 && day.isCurrentMonth">
-              <div
-                v-for="item in day.items.slice(0, 4)"
-                :key="`${item.type}-${item.id}`"
-                class="day-item-mini"
-                :class="`day-item-mini--${item.type}`"
-                :title="item.title"
-              >
-                {{ item.title }}
-              </div>
-              <div v-if="day.totalCount > 4" class="day-more-text">
-                +{{ day.totalCount - 4 }} 项更多...
-              </div>
-            </div>
-          </div>
+        <div class="calendar-legend">
+          <span><i class="legend-task" />任务</span>
+          <span><i class="legend-deadline" />Deadline</span>
+          <v-btn variant="outlined" size="small" prepend-icon="mdi-calendar-today-outline" @click="goToday">今天</v-btn>
         </div>
       </div>
 
-      <!-- 右侧：选中日期的任务详情面板 -->
-      <div class="calendar-sidebar" v-if="selectedDateStr">
-        <div class="sidebar-header">
-          <h3 class="text-h6 font-weight-medium">
-            {{ formatDetailDate(selectedDateStr) }}
-          </h3>
-          <v-chip size="small" variant="tonal" color="primary">
-            {{ selectedDayItems.length }} 项任务
-          </v-chip>
-        </div>
-
-        <v-divider class="mb-3" />
-
-        <div v-if="selectedDayItems.length === 0" class="empty-hint">
-          <v-icon icon="mdi-coffee-outline" size="48" color="grey-lighten-1" class="mb-3" />
-          <p class="text-grey">当天暂无任务或截止日期</p>
-        </div>
-
-        <div class="sidebar-list">
-          <div
-            v-for="item in selectedDayItems"
-            :key="`${item.type}-${item.id}`"
-            class="sidebar-item"
-          >
-            <div class="sidebar-item-left">
-              <v-icon
-                :icon="item.type === 'deadline' ? 'mdi-alert-circle' : 'mdi-checkbox-blank-circle'"
-                :color="item.type === 'deadline' ? 'warning' : 'primary'"
-                size="16"
-              />
-            </div>
-            <div class="sidebar-item-center">
-              <div class="sidebar-item-title">{{ item.title }}</div>
-              <div class="sidebar-item-meta">
-                <v-chip
-                  :color="priorityColor(item.priority)"
-                  size="x-small"
-                  variant="tonal"
-                  label
-                >
-                  {{ priorityLabel(item.priority) }}
-                </v-chip>
-                <span class="text-caption text-grey ml-1">{{ item.type === 'deadline' ? '截止日期' : '任务' }}</span>
-              </div>
-            </div>
-            <div class="sidebar-item-right">
-              <v-chip
-                v-if="item.type === 'task'"
-                :color="statusColor(item.status)"
-                size="x-small"
-                variant="flat"
-                label
-              >
-                {{ statusLabel(item.status) }}
-              </v-chip>
-            </div>
-          </div>
-        </div>
+      <div class="weekday-grid">
+        <div v-for="day in weekDays" :key="day">{{ day }}</div>
       </div>
 
-      <!-- 未选择日期时的提示 -->
-      <div class="calendar-sidebar" v-else>
-        <div class="empty-hint">
-          <v-icon icon="mdi-gesture-tap" size="48" color="grey-lighten-1" class="mb-3" />
-          <p class="text-grey mb-1">点击日历中的日期</p>
-          <p class="text-caption text-grey-lighten-1">查看当天任务和截止日期</p>
-        </div>
-
-        <!-- 即将到期的任务预览 -->
-        <v-divider class="my-4" />
-        <div class="text-body-2 font-weight-medium mb-2">📋 即将到期</div>
-        <div v-if="upcomingItems.length === 0" class="text-caption text-grey">
-          暂无即将到期的任务
-        </div>
-        <div
-          v-for="item in upcomingItems"
-          :key="`up-${item.type}-${item.id}`"
-          class="sidebar-item"
+      <div class="month-grid" :class="{ 'month-grid--loading': loading }">
+        <article
+          v-for="day in calendarDays"
+          :key="day.date"
+          class="calendar-day"
+          :class="{
+            'calendar-day--muted': !day.currentMonth,
+            'calendar-day--today': day.today,
+            'calendar-day--weekend': day.weekend,
+          }"
         >
-          <div class="sidebar-item-left">
-            <v-icon
-              :icon="item.type === 'deadline' ? 'mdi-alert-circle' : 'mdi-checkbox-blank-circle'"
-              :color="item.type === 'deadline' ? 'warning' : 'primary'"
-              size="16"
-            />
+          <div class="calendar-day__top">
+            <span class="calendar-day__number">{{ day.number }}</span>
+            <span v-if="day.today" class="today-label">今天</span>
+            <span v-else-if="day.items.length" class="item-count">{{ day.items.length }}</span>
           </div>
-          <div class="sidebar-item-center">
-            <div class="sidebar-item-title">{{ item.title }}</div>
-            <div class="text-caption text-grey">{{ item.dateStr }}</div>
+
+          <div class="calendar-day__items">
+            <button
+              v-for="item in day.items.slice(0, 3)"
+              :key="`${item.type}-${item.id}`"
+              type="button"
+              class="schedule-pill"
+              :class="[`schedule-pill--${item.type}`, `schedule-pill--${item.priority}`]"
+              :title="item.title"
+              @click="openItem(item)"
+            >
+              <i />
+              <span>{{ item.title }}</span>
+            </button>
+            <button
+              v-if="day.items.length > 3"
+              type="button"
+              class="more-items"
+              @click="openDay(day)"
+            >
+              还有 {{ day.items.length - 3 }} 项
+            </button>
           </div>
+        </article>
+
+        <div v-if="loading" class="calendar-loading">
+          <v-progress-circular indeterminate color="primary" size="38" />
+          <span>同步日程中…</span>
         </div>
       </div>
-    </div>
-  </div>
+    </v-card>
+
+    <v-snackbar v-model="dayNotice" location="bottom" timeout="2400" color="grey-darken-4">
+      {{ selectedDayText }}
+    </v-snackbar>
+  </section>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useAuth } from '@/stores/auth'
 
 const route = useRoute()
-const weekDays = ['一', '二', '三', '四', '五', '六', '日']
+const router = useRouter()
+const { token } = useAuth()
+const now = new Date()
 
-const today = new Date()
-const currentYear = ref(parseInt(route.query.year) || today.getFullYear())
-const currentMonth = ref(parseInt(route.query.month) || today.getMonth() + 1)
-const selectedDate = ref(null)
+const currentYear = ref(Number(route.query.year) || now.getFullYear())
+const currentMonth = ref(Number(route.query.month) || now.getMonth() + 1)
 const monthData = ref({})
 const loading = ref(false)
+const dayNotice = ref(false)
+const selectedDayText = ref('')
+const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
-// 加载日历数据
-async function loadCalendarData() {
+const monthItemCount = computed(() => Object.entries(monthData.value)
+  .filter(([date]) => Number(date.slice(5, 7)) === currentMonth.value)
+  .reduce((total, [, data]) => total + (data.count || 0), 0))
+
+const urgentCount = computed(() => Object.values(monthData.value)
+  .flatMap((data) => [...(data.tasks || []), ...(data.deadlines || [])])
+  .filter((item) => ['urgent', 'high'].includes(item.priority)).length)
+
+const calendarDays = computed(() => {
+  const first = new Date(currentYear.value, currentMonth.value - 1, 1)
+  const firstMondayOffset = (first.getDay() + 6) % 7
+  const start = new Date(currentYear.value, currentMonth.value - 1, 1 - firstMondayOffset)
+  const todayKey = dateKey(now)
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start)
+    date.setDate(start.getDate() + index)
+    const key = dateKey(date)
+    const data = monthData.value[key] || { tasks: [], deadlines: [] }
+    const items = [...(data.tasks || []), ...(data.deadlines || [])]
+      .sort((a, b) => priorityWeight(b.priority) - priorityWeight(a.priority))
+    return {
+      date: key,
+      number: date.getDate(),
+      currentMonth: date.getMonth() + 1 === currentMonth.value,
+      today: key === todayKey,
+      weekend: [0, 6].includes(date.getDay()),
+      items,
+    }
+  })
+})
+
+function dateKey(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function priorityWeight(priority) {
+  return { urgent: 4, high: 3, medium: 2, low: 1 }[priority] || 0
+}
+
+function authHeaders() {
+  return token.value ? { Authorization: `Bearer ${token.value}` } : {}
+}
+
+async function loadCalendar() {
   loading.value = true
   try {
-    const resp = await fetch(`/api/calendar?year=${currentYear.value}&month=${currentMonth.value}`)
-    if (resp.ok) {
-      const data = await resp.json()
-      const dateMap = {}
-      for (const d of data.days) {
-        dateMap[d.date] = d
-      }
-      monthData.value = dateMap
-    }
-  } catch (err) {
-    console.error('加载日历数据失败:', err)
+    const response = await fetch(`/api/calendar?year=${currentYear.value}&month=${currentMonth.value}`, {
+      headers: authHeaders(),
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const data = await response.json()
+    monthData.value = Object.fromEntries((data.days || []).map((day) => [day.date, day]))
+  } catch {
     monthData.value = {}
   } finally {
     loading.value = false
   }
 }
 
-// 构建日历网格
-const calendarDays = computed(() => {
-  const year = currentYear.value
-  const month = currentMonth.value
-  const firstDay = new Date(year, month - 1, 1)
-  const lastDay = new Date(year, month, 0)
-  const totalDays = lastDay.getDate()
-
-  let startDayOfWeek = firstDay.getDay()
-  startDayOfWeek = startDayOfWeek === 0 ? 7 : startDayOfWeek
-
-  const days = []
-  const prevMonthLastDay = new Date(year, month - 1, 0).getDate()
-
-  // 上月填充
-  for (let i = startDayOfWeek - 1; i > 0; i--) {
-    const d = prevMonthLastDay - i + 1
-    days.push(makeDayEntry(year, month - 1, d, false, false))
-  }
-
-  // 当月
-  const todayStr = fmtDate(today.getFullYear(), today.getMonth() + 1, today.getDate())
-  const selectedStr = selectedDate.value
-    ? fmtDate(selectedDate.value.year, selectedDate.value.month, selectedDate.value.day)
-    : null
-
-  for (let d = 1; d <= totalDays; d++) {
-    const dateStr = fmtDate(year, month, d)
-    const entry = makeDayEntry(year, month, d, true, dateStr === todayStr)
-    entry.isSelected = dateStr === selectedStr
-
-    // 附加该日的任务数据
-    const data = monthData.value[dateStr]
-    if (data) {
-      entry.totalCount = data.count
-      const items = []
-      for (const t of (data.tasks || [])) items.push(t)
-      for (const d of (data.deadlines || [])) items.push(d)
-      items.sort((a, b) => prioritySort(b.priority) - prioritySort(a.priority))
-      entry.items = items
-    }
-    days.push(entry)
-  }
-
-  // 下月填充
-  const remaining = (7 - (days.length % 7)) % 7
-  for (let i = 1; i <= remaining; i++) {
-    days.push(makeDayEntry(year, month + 1, i, false, false))
-  }
-
-  return days
-})
-
-function makeDayEntry(year, month, day, isCurrentMonth, isToday) {
-  return {
-    dayOfMonth: day,
-    dateStr: fmtDate(year, month, day),
-    isCurrentMonth,
-    isToday,
-    isSelected: false,
-    totalCount: 0,
-    items: [],
-  }
+async function changeMonth(offset) {
+  const date = new Date(currentYear.value, currentMonth.value - 1 + offset, 1)
+  currentYear.value = date.getFullYear()
+  currentMonth.value = date.getMonth() + 1
+  await syncRouteAndLoad()
 }
 
-function fmtDate(year, month, day) {
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+async function goToday() {
+  currentYear.value = now.getFullYear()
+  currentMonth.value = now.getMonth() + 1
+  await syncRouteAndLoad()
 }
 
-function selectDate(day) {
-  if (day.isCurrentMonth) {
-    const [y, m, d] = day.dateStr.split('-').map(Number)
-    selectedDate.value = { year: y, month: m, day: d }
-  }
+async function syncRouteAndLoad() {
+  await router.replace({ query: { ...route.query, year: currentYear.value, month: currentMonth.value } })
+  await loadCalendar()
 }
 
-// 选中日期的条目
-const selectedDateStr = computed(() => {
-  if (!selectedDate.value) return null
-  return fmtDate(selectedDate.value.year, selectedDate.value.month, selectedDate.value.day)
-})
-
-const selectedDayItems = computed(() => {
-  if (!selectedDateStr.value) return []
-  const dayData = monthData.value[selectedDateStr.value]
-  if (!dayData) return []
-  const items = []
-  for (const t of (dayData.tasks || [])) items.push(t)
-  for (const d of (dayData.deadlines || [])) items.push(d)
-  items.sort((a, b) => prioritySort(b.priority) - prioritySort(a.priority))
-  return items
-})
-
-// 即将到期（未来7天内的所有条目，未选择日期时展示）
-const upcomingItems = computed(() => {
-  const todayStr = fmtDate(today.getFullYear(), today.getMonth() + 1, today.getDate())
-  const endDate = new Date(today)
-  endDate.setDate(endDate.getDate() + 7)
-  const endStr = fmtDate(endDate.getFullYear(), endDate.getMonth() + 1, endDate.getDate())
-
-  const items = []
-  for (const [dateStr, data] of Object.entries(monthData.value)) {
-    if (dateStr < todayStr || dateStr > endStr) continue
-    for (const t of (data.tasks || [])) {
-      items.push({ ...t, dateStr })
-    }
-    for (const d of (data.deadlines || [])) {
-      items.push({ ...d, dateStr })
-    }
-  }
-  items.sort((a, b) => prioritySort(b.priority) - prioritySort(a.priority))
-  return items.slice(0, 10)
-})
-
-function prioritySort(p) {
-  const map = { urgent: 4, high: 3, medium: 2, low: 1 }
-  return map[p] || 0
+function openItem(item) {
+  router.push({ path: item.type === 'deadline' ? '/deadlines' : '/tasks', query: { focus: item.id } })
 }
 
-function prevMonth() {
-  if (currentMonth.value === 1) { currentMonth.value = 12; currentYear.value-- }
-  else { currentMonth.value-- }
-  selectedDate.value = null
-  loadCalendarData()
+function openDay(day) {
+  selectedDayText.value = `${Number(day.date.slice(5, 7))}月${Number(day.date.slice(8, 10))}日共有 ${day.items.length} 项日程，可点击具体项目查看。`
+  dayNotice.value = true
 }
 
-function nextMonth() {
-  if (currentMonth.value === 12) { currentMonth.value = 1; currentYear.value++ }
-  else { currentMonth.value++ }
-  selectedDate.value = null
-  loadCalendarData()
-}
-
-function goToday() {
-  currentYear.value = today.getFullYear()
-  currentMonth.value = today.getMonth() + 1
-  selectedDate.value = { year: today.getFullYear(), month: today.getMonth() + 1, day: today.getDate() }
-  loadCalendarData()
-}
-
-function formatDetailDate(dateStr) {
-  const d = new Date(dateStr)
-  const weekDayNames = ['日', '一', '二', '三', '四', '五', '六']
-  return `${d.getMonth() + 1}月${d.getDate()}日 周${weekDayNames[d.getDay()]}`
-}
-
-function priorityColor(p) {
-  const map = { urgent: '#FF7043', high: '#EF5350', medium: '#FFA726', low: '#66BB6A' }
-  return map[p] || '#9E9E9E'
-}
-
-function priorityLabel(p) {
-  const map = { urgent: '紧急', high: '高', medium: '中', low: '低' }
-  return map[p] || p
-}
-
-function statusColor(s) {
-  const map = { todo: 'grey', in_progress: 'info', done: 'success', overdue: 'error' }
-  return map[s] || 'grey'
-}
-
-function statusLabel(s) {
-  const map = { todo: '待办', in_progress: '进行中', done: '已完成', overdue: '已逾期' }
-  return map[s] || s
-}
-
-onMounted(() => {
-  loadCalendarData()
-})
+onMounted(loadCalendar)
 </script>
 
 <style scoped>
-.calendar-page {
-  height: calc(100vh - 32px);
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-}
-
-/* 顶部工具栏 */
-.calendar-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
-  background: #fff;
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-}
-
-/* 主体：日历 + 侧栏 */
-.calendar-body {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-  border-top: 1px solid #E8E8E8;
-}
-
-/* 左侧日历 */
-.calendar-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 8px;
-  min-width: 0;
-}
-
-.weekday-row {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  text-align: center;
-  padding: 8px 0;
-  border-bottom: 1px solid #E8E8E8;
-}
-
-.weekday-cell {
-  font-size: 13px;
-  color: #888;
-  font-weight: 600;
-}
-
-.calendar-grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  grid-template-rows: repeat(6, 1fr);
-  gap: 3px;
-  padding-top: 3px;
-}
-
-.day-cell {
-  border: 1px solid #EEEEEE;
-  border-radius: 8px;
-  padding: 6px 8px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-height: 0;
-}
-
-.day-cell:hover {
-  background: #F5F8FF;
-  border-color: #90CAF9;
-}
-
-.day-cell--other-month {
-  opacity: 0.3;
-  pointer-events: none;
-}
-
-.day-cell--today {
-  background: #E3F2FD;
-  border: 2px solid #1565C0;
-}
-
-.day-cell--selected {
-  background: #1565C0 !important;
-  border-color: #1565C0 !important;
-}
-
-.day-cell--selected .day-number {
-  color: #fff !important;
-  font-weight: 700;
-}
-
-.day-cell--selected .day-item-mini {
-  color: rgba(255,255,255,0.9);
-  background: rgba(255,255,255,0.2);
-}
-
-.day-top {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 2px;
-}
-
-.day-number {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-  line-height: 1;
-}
-
-/* 日历格子内的任务条目 */
-.day-items {
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.day-item-mini {
-  font-size: 11px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.5;
-  cursor: default;
-}
-
-.day-item-mini--task {
-  background: #E3F2FD;
-  color: #1565C0;
-}
-
-.day-item-mini--deadline {
-  background: #FFF3E0;
-  color: #E65100;
-}
-
-.day-more-text {
-  font-size: 10px;
-  color: #999;
-  padding-left: 5px;
-}
-
-/* 右侧面板 */
-.calendar-sidebar {
-  width: 320px;
-  flex-shrink: 0;
-  border-left: 1px solid #E8E8E8;
-  background: #FAFBFC;
-  padding: 16px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.sidebar-list {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.sidebar-item {
-  display: flex;
-  align-items: flex-start;
-  padding: 10px 12px;
-  border-radius: 8px;
-  margin-bottom: 4px;
-  background: #fff;
-  border: 1px solid #EEEEEE;
-  transition: box-shadow 0.15s;
-  gap: 10px;
-}
-
-.sidebar-item:hover {
-  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-}
-
-.sidebar-item-left {
-  padding-top: 2px;
-  flex-shrink: 0;
-}
-
-.sidebar-item-center {
-  flex: 1;
-  min-width: 0;
-}
-
-.sidebar-item-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-item-meta {
-  display: flex;
-  align-items: center;
-  margin-top: 4px;
-  gap: 4px;
-}
-
-.sidebar-item-right {
-  flex-shrink: 0;
-  padding-top: 2px;
-}
-
-.empty-hint {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: #999;
+.calendar-workspace { min-height: calc(100vh - 64px); padding: 30px clamp(22px, 4vw, 58px) 38px; color: #1d2942; }
+.calendar-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
+.eyebrow { margin-bottom: 4px; color: #496be1; font-size: 10px; font-weight: 800; letter-spacing: .16em; }
+.calendar-heading h1 { font-size: clamp(27px, 3vw, 38px); line-height: 1.1; letter-spacing: -.04em; }
+.calendar-heading p { margin-top: 8px; color: #7e899f; font-size: 13px; }
+.calendar-heading__stats { display: flex; gap: 10px; }
+.calendar-heading__stats > div { min-width: 106px; padding: 12px 16px; border-radius: 15px; background: rgba(255,255,255,.76); border: 1px solid rgba(29,41,66,.07); }
+.calendar-heading__stats strong, .calendar-heading__stats span { display: block; }
+.calendar-heading__stats strong { font-size: 20px; }
+.calendar-heading__stats span { margin-top: 2px; color: #8993a6; font-size: 10px; }
+.calendar-card { overflow: hidden; border: 1px solid rgba(28, 42, 71, .09); background: rgba(255,255,255,.92) !important; box-shadow: 0 18px 55px rgba(35,48,79,.08) !important; }
+.calendar-toolbar { min-height: 70px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 18px; border-bottom: 1px solid #edf0f5; }
+.month-navigation { display: flex; align-items: center; gap: 7px; }
+.month-title { min-width: 150px; text-align: center; font-size: 17px; font-weight: 750; }
+.calendar-legend { display: flex; align-items: center; gap: 16px; }
+.calendar-legend > span { display: inline-flex; align-items: center; gap: 6px; color: #838da0; font-size: 11px; }
+.calendar-legend i { width: 8px; height: 8px; border-radius: 3px; }
+.legend-task { background: #4d70e8; }
+.legend-deadline { background: #ee8b36; }
+.weekday-grid, .month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.weekday-grid { border-bottom: 1px solid #edf0f5; background: #fafbfe; }
+.weekday-grid > div { padding: 11px 12px; color: #929bad; text-align: center; font-size: 10px; font-weight: 750; letter-spacing: .04em; }
+.month-grid { position: relative; }
+.calendar-day { min-height: clamp(112px, 14vh, 148px); padding: 10px; border-right: 1px solid #edf0f5; border-bottom: 1px solid #edf0f5; background: rgba(255,255,255,.72); transition: background .15s; }
+.calendar-day:nth-child(7n) { border-right: 0; }
+.calendar-day:nth-last-child(-n+7) { border-bottom: 0; }
+.calendar-day:hover { background: #fafbff; }
+.calendar-day--muted { background: #fafbfc; opacity: .55; }
+.calendar-day--weekend:not(.calendar-day--muted) { background: #fdfdff; }
+.calendar-day--today { background: #f5f7ff; box-shadow: inset 0 0 0 1.5px #5072e9; }
+.calendar-day__top { height: 25px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.calendar-day__number { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 9px; color: #46516a; font-size: 12px; font-weight: 650; }
+.calendar-day--today .calendar-day__number { color: #fff; background: #4169e8; }
+.today-label { color: #4169e8; font-size: 9px; font-weight: 750; }
+.item-count { min-width: 18px; height: 18px; display: grid; place-items: center; padding: 0 5px; border-radius: 999px; color: #778196; background: #f0f2f7; font-size: 9px; }
+.calendar-day__items { display: flex; flex-direction: column; gap: 4px; }
+.schedule-pill { width: 100%; display: flex; align-items: center; gap: 6px; border: 0; padding: 5px 6px; border-radius: 7px; color: #3b4a67; background: #f0f3ff; cursor: pointer; text-align: left; font-size: 10px; }
+.schedule-pill:hover { filter: brightness(.97); }
+.schedule-pill i { width: 5px; height: 5px; flex: 0 0 5px; border-radius: 50%; background: #4e70e6; }
+.schedule-pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.schedule-pill--deadline { color: #84501e; background: #fff5e9; }
+.schedule-pill--deadline i { background: #ee8b36; }
+.schedule-pill--urgent { color: #a63542; background: #fff0f1; }
+.schedule-pill--urgent i { background: #df4458; }
+.more-items { border: 0; padding: 2px 5px; color: #7b86a0; background: transparent; cursor: pointer; text-align: left; font-size: 9px; font-weight: 650; }
+.month-grid--loading { min-height: 500px; }
+.calendar-loading { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #7e889d; background: rgba(255,255,255,.78); backdrop-filter: blur(3px); font-size: 12px; }
+@media (max-width: 900px) {
+  .calendar-workspace { padding: 22px 16px 100px; overflow-x: auto; }
+  .calendar-heading__stats { display: none; }
+  .calendar-card { min-width: 760px; }
+  .calendar-heading p { max-width: 520px; }
 }
 </style>

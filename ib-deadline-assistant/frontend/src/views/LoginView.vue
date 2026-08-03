@@ -4,7 +4,7 @@
       <!-- 标题 -->
       <div class="text-center mb-6">
         <v-icon size="48" color="primary" class="mb-2">mdi-calendar-edit</v-icon>
-        <h2 class="text-h5 font-weight-bold">登录任务规划师</h2>
+        <h2 class="text-h5 font-weight-bold">IBuddy</h2>
         <p class="text-body-2 text-grey mt-1">欢迎回来，继续管理你的任务</p>
       </div>
 
@@ -107,7 +107,7 @@ async function handleLogin() {
 
   try {
     await login(email.value, password.value)
-    router.push('/plan')
+    router.push('/calendar')
   } catch (e) {
     errorMsg.value = e.message
   } finally {

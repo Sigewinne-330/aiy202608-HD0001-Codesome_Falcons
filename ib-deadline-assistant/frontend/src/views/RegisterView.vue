@@ -148,7 +148,7 @@ async function handleRegister() {
 
   try {
     await register(username.value, email.value, password.value)
-    router.push('/plan')
+    router.push('/calendar')
   } catch (e) {
     errorMsg.value = e.message
   } finally {

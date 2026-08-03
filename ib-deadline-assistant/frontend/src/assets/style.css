@@ -6,11 +6,19 @@
 
 html, body, #app {
   height: 100%;
-  font-family: 'Roboto', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 .v-application {
-  background-color: #F5F7FA !important;
+  background-color: #F7F8FC !important;
+  color: #1E2942;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
 }
 
 .fade-enter-active,

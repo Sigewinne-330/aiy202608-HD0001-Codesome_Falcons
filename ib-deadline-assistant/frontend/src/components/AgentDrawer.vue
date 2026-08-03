@@ -1,0 +1,196 @@
+<template>
+  <div class="agent-panel">
+    <div class="agent-panel__header">
+      <div class="d-flex align-center">
+        <v-avatar color="primary" size="42" class="mr-3 agent-avatar">
+          <v-icon icon="mdi-creation-outline" color="white" />
+        </v-avatar>
+        <div>
+          <div class="text-subtitle-1 font-weight-bold">IBuddy Agent</div>
+          <div class="agent-status"><span /> 随时协助你的任务规划</div>
+        </div>
+      </div>
+      <v-btn icon="mdi-close" variant="text" size="small" aria-label="关闭 Agent" @click="$emit('close')" />
+    </div>
+
+    <div ref="messageContainer" class="agent-panel__messages scroll-container">
+      <div v-if="messages.length === 0" class="agent-welcome">
+        <div class="agent-welcome__icon"><v-icon icon="mdi-message-processing-outline" size="30" /></div>
+        <div class="text-subtitle-1 font-weight-bold mt-4">需要我帮你安排什么？</div>
+        <div class="text-caption text-medium-emphasis text-center mt-1">拆解任务、检查截止日期，或一起规划今天。</div>
+        <button v-for="suggestion in suggestions" :key="suggestion" type="button" @click="useSuggestion(suggestion)">
+          {{ suggestion }}
+        </button>
+      </div>
+
+      <div v-for="(message, index) in messages" :key="index" class="agent-message" :class="`agent-message--${message.role}`">
+        <v-avatar v-if="message.role === 'assistant'" color="primary" size="28">
+          <v-icon icon="mdi-creation-outline" color="white" size="15" />
+        </v-avatar>
+        <div class="agent-bubble">
+          <div v-if="message.streaming && !message.content" class="typing-dots"><i /><i /><i /></div>
+          <span v-else>{{ message.content }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-panel__composer">
+      <v-textarea
+        v-model="input"
+        placeholder="输入问题或任务…"
+        rows="1"
+        auto-grow
+        max-rows="5"
+        variant="solo-filled"
+        flat
+        hide-details
+        :disabled="loading"
+        @keydown.enter.exact.prevent="sendMessage"
+      />
+      <v-btn
+        :icon="loading ? 'mdi-stop' : 'mdi-arrow-up'"
+        :color="loading ? 'grey' : 'primary'"
+        variant="flat"
+        :disabled="!loading && !input.trim()"
+        @click="loading ? stopGeneration() : sendMessage()"
+      />
+    </div>
+    <div class="agent-panel__note">Agent 可能会出错，请核对重要日期与内容。</div>
+  </div>
+</template>
+
+<script setup>
+import { nextTick, onMounted, ref } from 'vue'
+import { useAuth } from '@/stores/auth'
+
+defineEmits(['close'])
+
+const { token } = useAuth()
+const messages = ref([])
+const input = ref('')
+const loading = ref(false)
+const messageContainer = ref(null)
+let controller = null
+
+const suggestions = [
+  '帮我看看本周最紧急的任务',
+  '把我的 IA 拆成今天能做的步骤',
+  '帮我安排一个两小时的专注时段',
+]
+
+function headers(extra = {}) {
+  return {
+    ...extra,
+    ...(token.value ? { Authorization: `Bearer ${token.value}` } : {}),
+  }
+}
+
+async function scrollToBottom() {
+  await nextTick()
+  if (messageContainer.value) messageContainer.value.scrollTop = messageContainer.value.scrollHeight
+}
+
+function useSuggestion(value) {
+  input.value = value
+  sendMessage()
+}
+
+async function sendMessage() {
+  const content = input.value.trim()
+  if (!content || loading.value) return
+
+  messages.value.push({ role: 'user', content })
+  messages.value.push({ role: 'assistant', content: '', streaming: true })
+  const responseIndex = messages.value.length - 1
+  input.value = ''
+  loading.value = true
+  await scrollToBottom()
+
+  try {
+    controller = new AbortController()
+    const response = await fetch('/api/chat/stream', {
+      method: 'POST',
+      headers: headers({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ content }),
+      signal: controller.signal,
+    })
+    if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const payload = line.slice(6)
+        if (!payload || payload === '[DONE]') continue
+        try {
+          const parsed = JSON.parse(payload)
+          messages.value[responseIndex].content += typeof parsed === 'string' ? parsed : (parsed.error || '')
+        } catch {
+          messages.value[responseIndex].content += payload
+        }
+      }
+      await scrollToBottom()
+    }
+  } catch (error) {
+    if (error.name !== 'AbortError') messages.value[responseIndex].content = '暂时无法连接 Agent，请稍后再试。'
+  } finally {
+    messages.value[responseIndex].streaming = false
+    loading.value = false
+    controller = null
+    await scrollToBottom()
+  }
+}
+
+function stopGeneration() {
+  controller?.abort()
+  loading.value = false
+}
+
+async function loadHistory() {
+  try {
+    const response = await fetch('/api/chat/history', { headers: headers() })
+    if (!response.ok) return
+    const data = await response.json()
+    messages.value = (data.messages || []).map((item) => ({ role: item.role, content: item.content }))
+    await scrollToBottom()
+  } catch {
+    messages.value = []
+  }
+}
+
+onMounted(loadHistory)
+</script>
+
+<style scoped>
+.agent-panel { height: 100%; display: flex; flex-direction: column; background: #fff; }
+.agent-panel__header { display: flex; align-items: center; justify-content: space-between; padding: 20px; border-bottom: 1px solid #edf0f6; }
+.agent-avatar { box-shadow: 0 8px 18px rgba(50, 101, 245, .25); }
+.agent-status { display: flex; align-items: center; gap: 5px; margin-top: 2px; color: #8b95a8; font-size: 11px; }
+.agent-status span { width: 6px; height: 6px; border-radius: 50%; background: #2bb978; box-shadow: 0 0 0 3px rgba(43,185,120,.12); }
+.agent-panel__messages { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 18px; background: linear-gradient(180deg, #fafbfe 0, #fff 35%); }
+.agent-welcome { min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.agent-welcome__icon { width: 62px; height: 62px; display: grid; place-items: center; border-radius: 20px; background: #eef2ff; color: #4169e8; }
+.agent-welcome button { width: 100%; margin-top: 10px; padding: 11px 13px; border: 1px solid #e5e9f2; border-radius: 12px; color: #46516a; background: white; text-align: left; cursor: pointer; font-size: 12px; transition: border .15s, background .15s; }
+.agent-welcome button:first-of-type { margin-top: 22px; }
+.agent-welcome button:hover { border-color: #aab9f4; background: #f7f8ff; }
+.agent-message { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 16px; }
+.agent-message--user { justify-content: flex-end; }
+.agent-bubble { max-width: 84%; padding: 11px 13px; border-radius: 5px 15px 15px 15px; background: #f0f2f7; color: #28334b; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.55; }
+.agent-message--user .agent-bubble { border-radius: 15px 15px 5px 15px; color: #fff; background: #315fdf; }
+.agent-panel__composer { display: flex; align-items: flex-end; gap: 10px; margin: 12px 14px 6px; padding: 8px; border: 1px solid #dfe4ee; border-radius: 18px; background: #f8f9fc; }
+.agent-panel__note { padding: 0 20px 12px; color: #a0a7b5; text-align: center; font-size: 10px; }
+.typing-dots { display: flex; gap: 4px; padding: 4px 2px; }
+.typing-dots i { width: 6px; height: 6px; border-radius: 50%; background: #8590a6; animation: dotPulse 1s infinite alternate; }
+.typing-dots i:nth-child(2) { animation-delay: .2s; }
+.typing-dots i:nth-child(3) { animation-delay: .4s; }
+@keyframes dotPulse { to { opacity: .25; transform: translateY(-2px); } }
+</style>
