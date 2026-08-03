@@ -24,7 +24,7 @@
           prepend-icon="mdi-creation-outline"
           variant="tonal"
           color="primary"
-          @click="agentDrawer = true"
+          @click="openGlobalAgent"
         >
           Agent
         </v-btn>
@@ -59,7 +59,7 @@
         :width="agentDrawerWidth"
         class="workspace-drawer agent-drawer"
       >
-        <AgentDrawer @close="agentDrawer = false" />
+        <AgentDrawer :context="agentContext" @close="agentDrawer = false" />
         <div
           class="agent-resizer"
           role="separator"
@@ -163,6 +163,7 @@ import TaskDrawer from '@/components/TaskDrawer.vue'
 import AgentDrawer from '@/components/AgentDrawer.vue'
 import SettingsDialog from '@/components/SettingsDialog.vue'
 import { onTasksChanged } from '@/services/taskSync'
+import { onOpenAgent } from '@/services/agentContext'
 
 const router = useRouter()
 const route = useRoute()
@@ -174,6 +175,7 @@ const isLanding = computed(() => route.name === 'Landing')
 
 const taskDrawer = ref(false)
 const agentDrawer = ref(false)
+const agentContext = ref(null)
 const settingsOpen = ref(false)
 const reminders = ref([])
 const reminderVisible = ref(true)
@@ -291,6 +293,16 @@ function handleLogout() {
   router.push('/')  // 退出后回到介绍页（所有人的第一界面）
 }
 
+function openGlobalAgent() {
+  agentContext.value = null
+  agentDrawer.value = true
+}
+
+function handleOpenAgent(context) {
+  agentContext.value = context
+  agentDrawer.value = true
+}
+
 function closeDrawers() {
   taskDrawer.value = false
   agentDrawer.value = false
@@ -342,8 +354,10 @@ onMounted(async () => {
 })
 
 const stopTaskSync = onTasksChanged(loadUpcoming)
+const stopOpenAgent = onOpenAgent(handleOpenAgent)
 onBeforeUnmount(() => {
   stopTaskSync()
+  stopOpenAgent()
   syncDrawerScrollLock(false)
 })
 </script>

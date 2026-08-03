@@ -25,6 +25,7 @@ def create_task(
     title: str,
     description: str = "",
     subject: str = "",
+    category: str = "",
     deadline: Optional[str] = None,
     priority: str = "medium",
     estimated_hours: float = 0,
@@ -77,6 +78,10 @@ def create_task(
     except ValueError:
         task_status = TaskStatus.todo
 
+    normalized_category = category.upper() if category else None
+    if normalized_category and normalized_category not in {"IA", "EE", "TOK", "CAS"}:
+        return {"error": "category must be IA, EE, TOK, or CAS"}
+
     task = Task(
         user_id=actual_uid,
         id_name=title,
@@ -84,6 +89,7 @@ def create_task(
         title=title,
         description=description,
         subject=subject,
+        category=normalized_category,
         priority=pri,
         deadline=due,
         estimated_hours=estimated_hours,
@@ -102,6 +108,7 @@ def list_tasks(
     db: Session,
     user_id: int,
     status: Optional[str] = None,
+    category: Optional[str] = None,
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
     """查询用户的所有任务，包含全部字段信息。
@@ -123,6 +130,9 @@ def list_tasks(
         except ValueError:
             pass  # 非法 status 值则忽略过滤
 
+    if category:
+        q = q.filter(Task.category == category.upper())
+
     tasks = (
         q.order_by(Task.deadline.asc(), Task.priority.desc())
         .limit(limit)
@@ -130,6 +140,65 @@ def list_tasks(
     )
 
     return [_task_to_dict(t) for t in tasks]
+
+
+def update_task(
+    db: Session,
+    user_id: int,
+    task_id: int,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    subject: Optional[str] = None,
+    category: Optional[str] = None,
+    deadline: Optional[str] = None,
+    priority: Optional[str] = None,
+    estimated_hours: Optional[float] = None,
+    status: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Update a task that belongs to the current user."""
+    actual_uid = _ensure_user_exists(db, user_id)
+    task = db.query(Task).filter(Task.id == task_id, Task.user_id == actual_uid).first()
+    if not task:
+        return {"error": f"Task {task_id} does not exist or is not accessible"}
+
+    if title is not None and title.strip():
+        task.title = title.strip()
+        task.id_name = title.strip()
+    if description is not None:
+        task.description = description
+    if subject is not None:
+        task.subject = subject
+    if category is not None:
+        normalized = category.upper()
+        if normalized not in {"IA", "EE", "TOK", "CAS", ""}:
+            return {"error": "category must be IA, EE, TOK, or CAS"}
+        task.category = normalized or None
+    if deadline is not None:
+        try:
+            task.deadline = date_type.fromisoformat(deadline) if deadline else None
+        except (ValueError, TypeError):
+            return {"error": "deadline must use YYYY-MM-DD"}
+    if priority is not None:
+        if priority not in {"low", "medium", "high", "urgent"}:
+            return {"error": "invalid priority"}
+        task.priority = priority
+    if estimated_hours is not None:
+        task.estimated_hours = max(0, estimated_hours)
+    if status is not None:
+        mapped_status = {
+            "pending": "todo",
+            "todo": "todo",
+            "in_progress": "in_progress",
+            "done": "done",
+            "overdue": "overdue",
+        }.get(status)
+        if not mapped_status:
+            return {"error": "invalid task status"}
+        task.status = mapped_status
+
+    db.commit()
+    db.refresh(task)
+    return {"ok": True, **_task_to_dict(task)}
 
 
 def delete_task(
@@ -324,6 +393,49 @@ def list_subtasks(
     return [_subtask_to_dict(st) for st in subtasks]
 
 
+def update_subtask(
+    db: Session,
+    user_id: int,
+    subtask_id: int,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    notice_time: Optional[str] = None,
+    level: Optional[str] = None,
+    status: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Update a timeline milestone that belongs to the current user."""
+    actual_uid = _ensure_user_exists(db, user_id)
+    subtask = db.query(SubTask).join(Task, SubTask.task_id == Task.id).filter(
+        SubTask.id == subtask_id,
+        Task.user_id == actual_uid,
+    ).first()
+    if not subtask:
+        return {"error": f"Subtask {subtask_id} does not exist or is not accessible"}
+
+    if name is not None and name.strip():
+        subtask.name = name.strip()
+    if description is not None:
+        subtask.description = description
+    if notice_time is not None:
+        try:
+            subtask.notice_time = date_type.fromisoformat(notice_time) if notice_time else None
+        except (ValueError, TypeError):
+            return {"error": "notice_time must use YYYY-MM-DD"}
+    if level is not None:
+        if level not in {"low", "medium", "high", "urgent"}:
+            return {"error": "invalid subtask priority"}
+        subtask.level = level
+    if status is not None:
+        mapped_status = {"todo": "pending", "pending": "pending", "in_progress": "in_progress", "done": "done"}.get(status)
+        if not mapped_status:
+            return {"error": "invalid subtask status"}
+        subtask.status = mapped_status
+
+    db.commit()
+    db.refresh(subtask)
+    return {"ok": True, **_subtask_to_dict(subtask)}
+
+
 def delete_subtask(
     db: Session,
     subtask_id: int,
@@ -369,6 +481,7 @@ def _task_to_dict(t: Task) -> Dict[str, Any]:
         "title": t.title,
         "description": t.description,
         "subject": t.subject,
+        "category": t.category,
         "priority": t.priority or "medium",
         "status": t.status or "todo",
         "deadline": (t.deadline.date().isoformat() if t.deadline else None),

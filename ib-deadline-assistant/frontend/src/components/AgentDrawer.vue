@@ -120,6 +120,11 @@
       </div>
     </div>
 
+    <div v-if="contextLabel" class="agent-context">
+      <v-icon icon="mdi-chart-timeline-variant" size="14" />
+      <span>{{ contextLabel }}</span>
+    </div>
+
     <div
       class="agent-panel__composer"
       :class="{ 'agent-panel__composer--drag': dragActive }"
@@ -186,7 +191,7 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
@@ -254,6 +259,10 @@ function creditLabel(message) {
   return (message.creditsIsEstimate ? '≈ ' : '') + message.credits.toLocaleString()
 }
 
+const props = defineProps({
+  context: { type: Object, default: null },
+})
+
 defineEmits(['close'])
 
 const { t } = useI18n()
@@ -278,6 +287,29 @@ const suggestions = [
   'agent.suggestion2',
   'agent.suggestion3',
 ]
+
+const contextLabel = computed(() => {
+  if (!props.context) return ''
+  return [props.context.category, props.context.subject || props.context.title]
+    .filter(Boolean)
+    .join(' · ')
+})
+
+function contextualize(content) {
+  if (!props.context) return content
+  const context = {
+    category: props.context.category || null,
+    task_id: props.context.taskId || props.context.task_id || null,
+    subject: props.context.subject || null,
+    title: props.context.title || null,
+  }
+  return `[PROGRESS_CONTEXT]${JSON.stringify(context)}[/PROGRESS_CONTEXT]\n` +
+    `Use this exact timeline context. Only manage milestones, dates, priorities, and completion states; do not provide academic-content advice.\n\n${content}`
+}
+
+function stripContext(content) {
+  return String(content || '').replace(/^\[PROGRESS_CONTEXT\][\s\S]*?\[\/PROGRESS_CONTEXT\]\n[^\n]*\n\n/, '')
+}
 
 function headers(extra = {}) {
   return {
@@ -416,7 +448,7 @@ async function switchConversation(convId) {
       const data = await response.json()
       messages.value = (data.messages || []).map((item) => ({
         role: item.role,
-        content: item.content,
+        content: item.role === 'user' ? stripContext(item.content) : item.content,
         credits: tokensToCredits(item.token),
         creditsIsEstimate: false,
         images: item.images || null,
@@ -469,7 +501,7 @@ async function sendMessage() {
       }
     }
     controller = new AbortController()
-    const body = { content, conversation_id: activeConversationId.value }
+    const body = { content: contextualize(content), conversation_id: activeConversationId.value }
     if (images.length) body.images = images
     const response = await fetch('/api/chat/stream', {
       method: 'POST',
@@ -534,7 +566,9 @@ async function sendMessage() {
     messages.value[responseIndex] = { ...old, streaming: false }
     loading.value = false
     controller = null
-    if (taskMutationSucceeded) notifyTasksChanged()
+    // A read-only refresh is cheap and guarantees timeline pages reflect tool mutations,
+    // including update_task/update_subtask status messages from different providers.
+    notifyTasksChanged()
     // 刷新对话列表，让新对话出现在历史里
     await loadConversations()
     await loadBalance()  // 扣费后刷新余额
@@ -588,6 +622,7 @@ onMounted(() => {
 .balance-pill--low { color: #d4552e; background: #fff0ea; }
 .balance-pill--low:hover { background: #ffe6dc; }
 .agent-panel__messages { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 18px; background: linear-gradient(180deg, #fafbfe 0, #fff 35%); }
+.agent-context { display: flex; align-items: center; gap: 7px; margin: 8px 14px 0; padding: 8px 11px; border-radius: 11px; color: #4662bd; background: #eef2ff; font-size: 11px; font-weight: 700; }
 .agent-welcome { min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .agent-welcome__icon { width: 62px; height: 62px; display: grid; place-items: center; border-radius: 20px; background: #eef2ff; color: #4169e8; }
 .agent-welcome button { width: 100%; margin-top: 10px; padding: 11px 13px; border: 1px solid #e5e9f2; border-radius: 12px; color: #46516a; background: white; text-align: left; cursor: pointer; font-size: 12px; transition: border .15s, background .15s; }

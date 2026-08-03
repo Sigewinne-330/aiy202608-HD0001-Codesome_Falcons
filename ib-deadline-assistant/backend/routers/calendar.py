@@ -23,6 +23,8 @@ class CalendarDayItem(BaseModel):
     priority: str
     status: str
     subject: Optional[str] = None
+    category: Optional[str] = None
+    parent_task_id: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -101,6 +103,7 @@ def get_calendar_data(
                 priority=t.priority or "medium",
                 status=t.status or "todo",
                 subject=t.subject,
+                category=t.category,
             )
             day_map[date_key]["tasks"].append(item)
             day_map[date_key]["count"] += 1
@@ -112,14 +115,14 @@ def get_calendar_data(
             title=d.title,
             type="deadline",
             priority=d.priority.value if d.priority else "medium",
-            status=d.status.value if d.status else "pending",
-            subject=d.subject,
+                status=d.status.value if d.status else "pending",
+                subject=d.subject,
         )
         day_map[date_key]["deadlines"].append(item)
         day_map[date_key]["count"] += 1
 
     # 查询 sub_task 表中的子任务（加入 task 表做用户过滤）
-    sub_task_records = db.query(SubTaskModel).join(
+    sub_task_records = db.query(SubTaskModel, TaskModel).join(
         TaskModel, SubTaskModel.task_id == TaskModel.id
     ).filter(
         TaskModel.user_id == current_user.id,
@@ -127,16 +130,18 @@ def get_calendar_data(
         SubTaskModel.notice_time <= end_date,
     ).order_by(SubTaskModel.notice_time.asc()).all()
 
-    for st in sub_task_records:
+    for st, parent_task in sub_task_records:
         if st.notice_time:
             date_key = st.notice_time.isoformat() if isinstance(st.notice_time, date) else st.notice_time
             item = CalendarDayItem(
                 id=st.id,
                 title=st.name,
-                type="task",
+                type="subtask",
                 priority=st.level or "medium",
                 status=st.status or "pending",
-                subject=None,
+                subject=parent_task.subject,
+                category=parent_task.category,
+                parent_task_id=st.task_id,
             )
             day_map[date_key]["tasks"].append(item)
             day_map[date_key]["count"] += 1

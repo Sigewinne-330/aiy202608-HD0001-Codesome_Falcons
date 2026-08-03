@@ -187,7 +187,15 @@ async function syncRouteAndLoad() {
 }
 
 function openItem(item) {
-  router.push({ path: item.type === 'deadline' ? '/deadlines' : '/tasks', query: { focus: item.id } })
+  if (item.type === 'deadline') {
+    router.push({ path: '/deadlines', query: { focus: item.id } })
+    return
+  }
+  if (item.type === 'subtask' && item.parent_task_id && item.category) {
+    router.push({ path: `/progress/${item.category.toLowerCase()}/${item.parent_task_id}`, query: { focus: item.id } })
+    return
+  }
+  router.push({ path: '/tasks', query: { focus: item.id } })
 }
 
 function openDay(day) {

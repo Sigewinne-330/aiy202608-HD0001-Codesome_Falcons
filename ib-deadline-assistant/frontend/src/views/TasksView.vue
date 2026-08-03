@@ -155,6 +155,16 @@
               <v-chip size="x-small" :color="priorityColor(subtask.priority)" variant="tonal">
                 {{ priorityLabel(subtask.priority) }}
               </v-chip>
+              <v-btn
+                class="delete-subtask-btn"
+                icon="mdi-delete-outline"
+                color="error"
+                variant="text"
+                density="comfortable"
+                size="small"
+                :aria-label="$t('tasks.deleteSubtask')"
+                @click="requestDeleteSubtask(subtask)"
+              />
             </div>
           </div>
 
@@ -275,6 +285,20 @@
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="subtaskDeleteDialog" max-width="440">
+      <v-card rounded="xl">
+        <v-card-title class="pt-5 px-6">{{ $t('tasks.deleteSubtaskDialogTitle') }}</v-card-title>
+        <v-card-text class="px-6 pt-3">
+          <p>{{ $t('tasks.deleteSubtaskConfirm', { title: selectedSubtask?.title }) }}</p>
+        </v-card-text>
+        <v-card-actions class="px-6 pb-5">
+          <v-spacer />
+          <v-btn variant="text" :disabled="deletingSubtask" @click="subtaskDeleteDialog = false">{{ $t('common.cancel') }}</v-btn>
+          <v-btn color="error" variant="flat" :loading="deletingSubtask" @click="confirmDeleteSubtask">{{ $t('tasks.confirmDelete') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="errorVisible" color="error" timeout="3500">{{ errorMessage }}</v-snackbar>
   </section>
 </template>
@@ -301,6 +325,9 @@ const selectedParent = ref(null)
 const deleteDialog = ref(false)
 const selectedTask = ref(null)
 const deleting = ref(false)
+const subtaskDeleteDialog = ref(false)
+const selectedSubtask = ref(null)
+const deletingSubtask = ref(false)
 const errorVisible = ref(false)
 const errorMessage = ref('')
 const focusedTaskId = ref(null)  // 从提醒弹窗跳转后要高亮的任务/子任务 id
@@ -417,6 +444,11 @@ function requestDelete(task) {
   deleteDialog.value = true
 }
 
+function requestDeleteSubtask(subtask) {
+  selectedSubtask.value = subtask
+  subtaskDeleteDialog.value = true
+}
+
 async function confirmDelete() {
   if (!selectedTask.value) return
   deleting.value = true
@@ -433,6 +465,25 @@ async function confirmDelete() {
     showError(t('tasks.deleteFail', { msg: error.message }))
   } finally {
     deleting.value = false
+  }
+}
+
+async function confirmDeleteSubtask() {
+  if (!selectedSubtask.value) return
+  deletingSubtask.value = true
+  try {
+    const response = await authFetch(`${API_BASE}/tasks/sub-tasks/${selectedSubtask.value.id}`, { method: 'DELETE' })
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      throw new Error(data.detail || `HTTP ${response.status}`)
+    }
+    subtaskDeleteDialog.value = false
+    selectedSubtask.value = null
+    notifyTasksChanged()
+  } catch (error) {
+    showError(t('tasks.deleteSubtaskFail', { msg: error.message }))
+  } finally {
+    deletingSubtask.value = false
   }
 }
 
@@ -666,6 +717,8 @@ onBeforeUnmount(() => stopTaskSync?.())
 .subtask-copy > div { display: flex; align-items: center; gap: 7px; }
 .subtask-copy strong { overflow-wrap: anywhere; color: #3d3552; font-size: 12px; }
 .subtask-copy small { display: block; margin-top: 3px; color: #939bac; font-size: 9px; }
+.delete-subtask-btn { flex: 0 0 auto; opacity: .72; }
+.delete-subtask-btn:hover, .delete-subtask-btn:focus-visible { opacity: 1; background: rgba(244, 67, 54, .08); }
 .add-first-subtask { width: 100%; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 14px; border: 1px dashed #b9addd; border-radius: 11px; color: #7355c5; background: rgba(255,255,255,.55); cursor: pointer; font-size: 11px; transition: background .2s, border-color .2s; }
 .add-first-subtask:hover { border-color: #8468cd; background: #fff; }
 .task-empty { min-height: 370px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 40px; border: 1px dashed #dce1ec; border-radius: 22px; color: #8d96a8; background: rgba(255,255,255,.66); text-align: center; }

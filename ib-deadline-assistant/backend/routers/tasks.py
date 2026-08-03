@@ -6,11 +6,22 @@ from database import get_db
 from models.app_user import AppUser as User
 from models.task_new import Task as TaskModel, TaskStatus, TaskType
 from models.sub_task import SubTask as SubTaskModel
-from schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskBreakdownRequest, TaskPlanRequest, TaskPlanResponse, TaskPlanPhase
+from schemas.task import (
+    SubTaskCreate,
+    SubTaskUpdate,
+    TaskBreakdownRequest,
+    TaskCreate,
+    TaskPlanPhase,
+    TaskPlanRequest,
+    TaskPlanResponse,
+    TaskResponse,
+    TaskUpdate,
+)
 from services.auth import get_current_user
 from services.ai_service import ai_service
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+VALID_PROGRESS_CATEGORIES = {"IA", "EE", "TOK", "CAS"}
 
 
 def _build_task_tree(tasks: List[TaskModel]) -> List[TaskResponse]:
@@ -21,12 +32,15 @@ def _build_task_tree(tasks: List[TaskModel]) -> List[TaskResponse]:
 @router.get("", response_model=List[TaskResponse])
 def list_tasks(
     status: str = None,
+    category: str = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     query = db.query(TaskModel).filter(TaskModel.user_id == current_user.id)
     if status:
         query = query.filter(TaskModel.status == status)
+    if category:
+        query = query.filter(TaskModel.category == category.upper())
     tasks = query.order_by(TaskModel.deadline.asc(), TaskModel.priority.desc()).all()
 
     # 构建任务树（平铺的顶层任务）
@@ -54,6 +68,7 @@ def list_tasks(
             title=st.name,
             description=st.description or "",
             subject=parent.subject,
+            category=parent.category,
             priority=st.level or "medium",
             status=st.status or "pending",
             deadline=st.notice_time,
@@ -84,6 +99,10 @@ def create_task(
         raise HTTPException(status_code=400, detail="任务类型必须是 todo 或 process")
 
     payload = data.model_dump(exclude={"task_type"})
+    if payload.get("category"):
+        payload["category"] = payload["category"].upper()
+        if payload["category"] not in VALID_PROGRESS_CATEGORIES:
+            raise HTTPException(status_code=400, detail="category must be IA, EE, TOK, or CAS")
     task = TaskModel(
         user_id=current_user.id,
         task_type=TaskType(data.task_type),
@@ -122,6 +141,7 @@ def get_task(
             title=st.name,
             description=st.description or "",
             subject=task.subject,
+            category=task.category,
             priority=st.level or "medium",
             status=st.status or "pending",
             deadline=st.notice_time,
@@ -150,6 +170,10 @@ def update_task(
         raise HTTPException(status_code=404, detail="任务不存在")
 
     update_data = data.model_dump(exclude_unset=True)
+    if update_data.get("category"):
+        update_data["category"] = update_data["category"].upper()
+        if update_data["category"] not in VALID_PROGRESS_CATEGORIES:
+            raise HTTPException(status_code=400, detail="category must be IA, EE, TOK, or CAS")
     for key, value in update_data.items():
         setattr(task, key, value)
 
@@ -213,6 +237,7 @@ async def breakdown_task(
             title=sub.name,
             description=sub.description or "",
             subject=task.subject,
+            category=task.category,
             priority=sub.level or "medium",
             status=sub.status,
             deadline=None,
@@ -295,17 +320,6 @@ async def plan_task(
 
 # ── sub_task 表操作 ────────────────────────────────────────────
 
-from pydantic import BaseModel as PydanticBase
-
-class SubTaskCreate(PydanticBase):
-    task_id: int
-    name: str
-    description: Optional[str] = ""
-    notice_time: Optional[str] = None  # YYYY-MM-DD
-    level: str = "medium"
-    status: str = "pending"
-
-
 @router.post("/sub-tasks")
 def create_sub_task(
     data: SubTaskCreate,
@@ -320,16 +334,11 @@ def create_sub_task(
     if not parent:
         raise HTTPException(status_code=404, detail="父任务不存在")
 
-    try:
-        notice = date.fromisoformat(data.notice_time) if data.notice_time else None
-    except (ValueError, TypeError):
-        notice = None
-
     sub = SubTaskModel(
         task_id=data.task_id,
         name=data.name,
         description=data.description or "",
-        notice_time=notice,
+        notice_time=data.notice_time,
         level=data.level,
         status=data.status,
     )
@@ -351,7 +360,7 @@ def create_sub_task(
 @router.put("/sub-tasks/{subtask_id}")
 def update_sub_task(
     subtask_id: int,
-    data: TaskUpdate,
+    data: SubTaskUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -366,10 +375,54 @@ def update_sub_task(
         raise HTTPException(status_code=404, detail="子任务不存在")
 
     update_data = data.model_dump(exclude_unset=True)
+    valid_levels = {"low", "medium", "high", "urgent"}
+    valid_statuses = {"pending", "todo", "in_progress", "done"}
+
+    if "name" in update_data and update_data["name"]:
+        sub.name = update_data["name"]
+    if "description" in update_data:
+        sub.description = update_data["description"] or ""
+    if "notice_time" in update_data:
+        sub.notice_time = update_data["notice_time"]
+    if "level" in update_data:
+        if update_data["level"] not in valid_levels:
+            raise HTTPException(status_code=400, detail="Invalid subtask priority")
+        sub.level = update_data["level"]
     if "status" in update_data:
-        sub.status = update_data["status"]
-    if "progress" in update_data and hasattr(sub, "progress"):
-        sub.progress = update_data["progress"]
+        if update_data["status"] not in valid_statuses:
+            raise HTTPException(status_code=400, detail="Invalid subtask status")
+        sub.status = "pending" if update_data["status"] == "todo" else update_data["status"]
 
     db.commit()
-    return {"ok": True, "id": subtask_id, "status": sub.status}
+    db.refresh(sub)
+    return {
+        "ok": True,
+        "id": sub.id,
+        "task_id": sub.task_id,
+        "name": sub.name,
+        "description": sub.description or "",
+        "notice_time": sub.notice_time.isoformat() if sub.notice_time else None,
+        "level": sub.level,
+        "status": sub.status,
+    }
+
+
+@router.delete("/sub-tasks/{subtask_id}")
+def delete_sub_task(
+    subtask_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """删除当前用户流程任务中的一个子任务。"""
+    sub = db.query(SubTaskModel).join(
+        TaskModel, SubTaskModel.task_id == TaskModel.id
+    ).filter(
+        SubTaskModel.id == subtask_id,
+        TaskModel.user_id == current_user.id,
+    ).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="子任务不存在")
+
+    db.delete(sub)
+    db.commit()
+    return {"ok": True, "deleted_id": subtask_id}

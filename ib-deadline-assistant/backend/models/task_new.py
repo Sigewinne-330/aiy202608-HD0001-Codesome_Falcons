@@ -35,6 +35,7 @@ class Task(Base):
     deadline = Column(DateTime, default=None)
     description = Column(Text)
     subject = Column(String(100), default=None)
+    category = Column(String(20), default=None, comment="IA | EE | TOK | CAS")
     priority = Column(String(20), default="medium")
     estimated_hours = Column(DECIMAL(5, 1), default=0)
     progress = Column(Integer, default=0)

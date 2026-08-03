@@ -1,7 +1,17 @@
 import logging
+import os
+import tempfile
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
+
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import declarative_base, sessionmaker
+
 from config import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +27,26 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+def _try_acquire_file_lock(file_obj):
+    """Acquire a non-blocking, cross-platform lock on one byte."""
+    if os.name == "nt":
+        file_obj.seek(0, os.SEEK_END)
+        if file_obj.tell() == 0:
+            file_obj.write(b"\0")
+            file_obj.flush()
+        file_obj.seek(0)
+        try:
+            msvcrt.locking(file_obj.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError:
+            return False
+    else:
+        try:
+            fcntl.flock(file_obj, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+    return True
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -26,15 +56,17 @@ def get_db():
 
 
 def _column_type_sql(col):
-    """将 SQLAlchemy Column 类型转为 SQL DDL 片段"""
-    t = col.type
-    type_name = type(t).__name__
+    """Convert a SQLAlchemy column type to a SQL DDL fragment."""
+    column_type = col.type
+    type_name = type(column_type).__name__
     if type_name == "Enum":
-        # ENUM 类型：提取枚举值，生成 ENUM('val1','val2',...)
-        enum_values = [f"'{e.value}'" if hasattr(e, 'value') else f"'{e}'" for e in t.enums]
+        enum_values = [
+            f"'{item.value}'" if hasattr(item, "value") else f"'{item}'"
+            for item in column_type.enums
+        ]
         return f"ENUM({','.join(enum_values)})"
-    if type_name == "VARCHAR" or type_name == "String":
-        return f"VARCHAR({t.length or 255})"
+    if type_name in ("VARCHAR", "String"):
+        return f"VARCHAR({column_type.length or 255})"
     if type_name in ("INTEGER", "Integer"):
         return "INT"
     if type_name in ("TEXT", "Text"):
@@ -47,50 +79,57 @@ def _column_type_sql(col):
         return "JSON"
     if type_name == "FLOAT":
         return "FLOAT"
-    if type_name == "DATE" or type_name == "Date":
+    if type_name in ("DATE", "Date"):
         return "DATE"
-    if type_name == "BOOLEAN" or type_name == "Boolean":
+    if type_name in ("BOOLEAN", "Boolean"):
         return "BOOLEAN"
     return type_name.upper()
 
 
 def auto_sync_tables(engine_obj, base):
-    """对比 ORM 模型和数据库实际结构，自动补齐缺失的列"""
-    inspector = inspect(engine_obj)
-    model_tables = {t.name: t for t in base.metadata.sorted_tables}
+    """Add missing model columns once, guarded by a cross-platform file lock."""
+    lock_file = os.path.join(tempfile.gettempdir(), "ibuddy_auto_sync.lock")
+    with open(lock_file, "a+b") as file_obj:
+        if not _try_acquire_file_lock(file_obj):
+            logger.info("[auto-sync] another worker owns the schema lock; skipping")
+            return
 
-    with engine_obj.connect() as conn:
-        for table_name, table in model_tables.items():
-            if not inspector.has_table(table_name):
-                continue
+        inspector = inspect(engine_obj)
+        model_tables = {table.name: table for table in base.metadata.sorted_tables}
 
-            existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
-            for col in table.columns:
-                if col.name in existing_cols:
+        with engine_obj.connect() as conn:
+            for table_name, table in model_tables.items():
+                if not inspector.has_table(table_name):
                     continue
 
-                col_type = _column_type_sql(col)
-                nullable = "" if col.nullable else "NOT NULL"
-                default_val = ""
-                if col.default and col.default.arg is not None:
-                    arg = col.default.arg
-                    if hasattr(arg, 'value'):
-                        default_val = f" DEFAULT '{arg.value}'"
-                    elif isinstance(arg, str):
-                        default_val = f" DEFAULT '{arg}'"
-                    else:
-                        default_val = f" DEFAULT {arg}"
-                if col.server_default and hasattr(col.server_default, "arg"):
-                    default_val = f" DEFAULT {col.server_default.arg}"
+                existing_cols = {column["name"] for column in inspector.get_columns(table_name)}
+                for column in table.columns:
+                    if column.name in existing_cols:
+                        continue
 
-                comment = ""
-                if col.comment:
-                    comment = f" COMMENT '{col.comment}'"
+                    column_type = _column_type_sql(column)
+                    nullable = "" if column.nullable else "NOT NULL"
+                    default_value = ""
+                    if column.default and column.default.arg is not None:
+                        arg = column.default.arg
+                        if hasattr(arg, "value"):
+                            default_value = f" DEFAULT '{arg.value}'"
+                        elif isinstance(arg, str):
+                            default_value = f" DEFAULT '{arg}'"
+                        else:
+                            default_value = f" DEFAULT {arg}"
+                    if column.server_default and hasattr(column.server_default, "arg"):
+                        default_value = f" DEFAULT {column.server_default.arg}"
 
-                sql = (
-                    f"ALTER TABLE {table_name} "
-                    f"ADD COLUMN {col.name} {col_type} {nullable}{default_val}{comment}"
-                )
-                logger.info(f"[auto-sync] 新增列: {table_name}.{col.name} ({col_type})")
-                conn.execute(text(sql))
-                conn.commit()
+                    comment = ""
+                    if column.comment:
+                        comment = f" COMMENT '{column.comment}'"
+
+                    sql = (
+                        f"ALTER TABLE {table_name} "
+                        f"ADD COLUMN {column.name} {column_type} "
+                        f"{nullable}{default_value}{comment}"
+                    )
+                    logger.info("[auto-sync] adding column %s.%s (%s)", table_name, column.name, column_type)
+                    conn.execute(text(sql))
+                    conn.commit()

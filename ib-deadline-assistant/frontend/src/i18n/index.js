@@ -2,6 +2,7 @@ import { createI18n } from 'vue-i18n'
 import zhCN from '@/locales/zh-CN'
 import zhTW from '@/locales/zh-TW'
 import en from '@/locales/en'
+import { progressMessages } from '@/locales/progress'
 
 export const SUPPORTED_LOCALES = ['zh-CN', 'zh-TW', 'en']
 
@@ -47,9 +48,9 @@ const i18n = createI18n({
   locale: getInitialLocale(),
   fallbackLocale: 'zh-CN',
   messages: {
-    'zh-CN': zhCN,
-    'zh-TW': zhTW,
-    en,
+    'zh-CN': { ...zhCN, common: { ...zhCN.common, edit: '编辑' }, progress: { ...zhCN.progress, ...progressMessages['zh-CN'] } },
+    'zh-TW': { ...zhTW, common: { ...zhTW.common, edit: '編輯' }, progress: { ...zhTW.progress, ...progressMessages['zh-TW'] } },
+    en: { ...en, common: { ...en.common, edit: 'Edit' }, progress: { ...en.progress, ...progressMessages.en } },
   },
 })
 

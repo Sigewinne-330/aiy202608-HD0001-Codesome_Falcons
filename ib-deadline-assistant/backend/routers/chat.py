@@ -49,9 +49,11 @@ MAX_TOOL_ROUNDS = 30
 TOOL_DISPATCH: Dict[str, Any] = {
     "create_task": task_tools.create_task,
     "list_tasks": task_tools.list_tasks,
+    "update_task": task_tools.update_task,
     "delete_task": task_tools.delete_task,
     "create_subtask": task_tools.create_subtask,
     "list_subtasks": task_tools.list_subtasks,
+    "update_subtask": task_tools.update_subtask,
     "delete_subtask": task_tools.delete_subtask,
     "get_subject_guidelines": get_subject_guidelines,
 }

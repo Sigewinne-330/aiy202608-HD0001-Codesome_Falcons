@@ -8,6 +8,7 @@ class TaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
     subject: Optional[str] = None
+    category: Optional[str] = None
     priority: str = "medium"
     deadline: Optional[date] = None
     estimated_hours: Optional[float] = 0
@@ -17,6 +18,7 @@ class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     subject: Optional[str] = None
+    category: Optional[str] = None
     priority: Optional[str] = None
     status: Optional[str] = None
     deadline: Optional[date] = None
@@ -31,6 +33,7 @@ class TaskResponse(BaseModel):
     title: str
     description: Optional[str] = None
     subject: Optional[str] = None
+    category: Optional[str] = None
     priority: str
     status: str
     deadline: Optional[date] = None
@@ -43,6 +46,23 @@ class TaskResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SubTaskCreate(BaseModel):
+    task_id: int
+    name: str
+    description: Optional[str] = ""
+    notice_time: Optional[date] = None
+    level: str = "medium"
+    status: str = "pending"
+
+
+class SubTaskUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    notice_time: Optional[date] = None
+    level: Optional[str] = None
+    status: Optional[str] = None
 
 
 class TaskBreakdownRequest(BaseModel):

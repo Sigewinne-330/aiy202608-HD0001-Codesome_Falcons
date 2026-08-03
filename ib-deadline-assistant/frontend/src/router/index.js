@@ -73,6 +73,12 @@ const routes = [
     meta: { titleKey: 'nav.progressCategory', icon: 'mdi-chart-timeline-variant', requiresAuth: true },
   },
   {
+    path: '/progress/:category/:taskId',
+    name: 'ProgressTimeline',
+    component: () => import('../views/ProgressView.vue'),
+    meta: { titleKey: 'nav.progressCategory', icon: 'mdi-chart-timeline-variant', requiresAuth: true },
+  },
+  {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('../views/DashboardView.vue'),
