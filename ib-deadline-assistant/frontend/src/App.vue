@@ -28,24 +28,17 @@
         >
           Agent
         </v-btn>
-        <v-avatar class="ml-3" color="primary" size="36">
-          <span class="text-white text-body-2 font-weight-bold">{{ userInitial }}</span>
-        </v-avatar>
-        <v-tooltip text="退出登录" location="bottom">
-          <template #activator="{ props }">
-            <v-btn
-              v-bind="props"
-              class="logout-btn ml-2"
-              prepend-icon="mdi-logout"
-              variant="tonal"
-              color="error"
-              aria-label="退出登录"
-              @click="handleLogout"
-            >
-              退出登录
-            </v-btn>
-          </template>
-        </v-tooltip>
+        <button
+          class="account-trigger"
+          type="button"
+          aria-label="打开账号管理设置"
+          title="账号管理"
+          @click="settingsOpen = true"
+        >
+          <v-avatar color="primary" size="36">
+            <span class="text-white text-body-2 font-weight-bold">{{ userInitial }}</span>
+          </v-avatar>
+        </button>
       </v-app-bar>
 
       <v-navigation-drawer
@@ -342,6 +335,25 @@ onBeforeUnmount(() => {
 .brand-copy strong { font-size: 17px; }
 .brand-copy small { margin-top: 4px; color: #8790a5; font-size: 10px; }
 
+.account-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  margin: 0 8px 0 12px;
+  padding: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color .16s ease, transform .16s ease;
+}
+
+.account-trigger:hover { background: rgba(50, 101, 245, .10); }
+.account-trigger:active { transform: scale(.96); }
+.account-trigger:focus-visible { outline: 3px solid rgba(50, 101, 245, .30); outline-offset: 2px; }
+
 .workspace-main {
   background:
     radial-gradient(circle at 12% 5%, rgba(76, 111, 255, 0.10), transparent 28%),
@@ -414,7 +426,6 @@ onBeforeUnmount(() => {
   .brand-copy small { display: none; }
   .workspace-bar { padding: 0 8px; }
   .agent-trigger .v-btn__content { font-size: 0; }
-  .logout-btn .v-btn__content { font-size: 0; }
   .quick-actions { right: 14px; bottom: 16px; }
   .reminder-popover { right: 14px; top: 74px; width: calc(100vw - 28px); }
 }
