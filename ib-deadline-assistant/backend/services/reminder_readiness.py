@@ -8,9 +8,7 @@ from services.registration_readiness import CheckResult, check_smtp_configuratio
 
 REQUIRED_TABLES = {
     "users",
-    "tasks",
     "deadlines",
-    "chat_history",
     "reminder_role_cards",
     "reminder_preferences",
     "reminder_occurrences",

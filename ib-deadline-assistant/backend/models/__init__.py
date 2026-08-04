@@ -1,6 +1,4 @@
-from .task import Task
 from .deadline import Deadline
-from .chat import ChatHistory
 from .email_verification import EmailVerification
 from .reminder import (
     LLMUsageRecord,
@@ -21,7 +19,7 @@ from .token_ledger import TokenLedger
 from .billing_order import BillingOrder
 
 __all__ = [
-    "Task", "Deadline", "ChatHistory", "EmailVerification",
+    "Deadline", "EmailVerification",
     "ReminderRoleCard", "ReminderPreference", "ReminderOccurrence",
     "ReminderDigest", "ReminderDelivery", "LLMUsageRecord",
     "AppUser", "AppTask", "SubTask", "Conversation", "ChatMessage",

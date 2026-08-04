@@ -13,7 +13,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from database import Base  # noqa: E402
 import models  # noqa: E402,F401
-from models.chat import ChatHistory  # noqa: E402
+from models.chat_message_new import ChatMessage  # noqa: E402
 from models.reminder import (  # noqa: E402
     ReminderDelivery,
     ReminderDeliveryStatus,
@@ -22,7 +22,7 @@ from models.reminder import (  # noqa: E402
     ReminderGenerationMode,
     ReminderOccurrence,
 )
-from models.task import Task, TaskStatus  # noqa: E402
+from models.task_new import Task as AppTask  # noqa: E402
 from models.user import User  # noqa: E402
 from services.email_service import EmailDeliveryError  # noqa: E402
 from services.reminder_agent import GeneratedReminderContent  # noqa: E402
@@ -88,11 +88,11 @@ class ReminderOrchestratorTests(unittest.IsolatedAsyncioTestCase):
             db.commit()
             seed_builtin_role_cards(db)
             db.add(
-                Task(
+                AppTask(
                     user_id=1,
                     title="Due soon",
-                    status=TaskStatus.todo,
-                    deadline=date(2026, 8, 5),
+                    status="todo",
+                    deadline=datetime(2026, 8, 5),
                 )
             )
             db.commit()
@@ -111,7 +111,7 @@ class ReminderOrchestratorTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(1, len(transport.messages))
             self.assertEqual(1, db.query(ReminderDigest).count())
             self.assertEqual(1, db.query(ReminderOccurrence).count())
-            self.assertEqual(1, db.query(ChatHistory).count())
+            self.assertEqual(1, db.query(ChatMessage).count())
             self.assertEqual(2, db.query(ReminderDelivery).count())
             self.assertTrue(
                 all(
@@ -138,8 +138,8 @@ class ReminderOrchestratorTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_final_recheck_cancels_item_completed_during_generation(self):
         def complete_task(db):
-            task = db.query(Task).one()
-            task.status = TaskStatus.done
+            task = db.query(AppTask).one()
+            task.status = "done"
             db.commit()
 
         agent = FakeAgent(mutation=complete_task)
@@ -152,7 +152,7 @@ class ReminderOrchestratorTests(unittest.IsolatedAsyncioTestCase):
             digest = db.query(ReminderDigest).one()
             self.assertEqual(ReminderDigestState.cancelled, digest.state)
             self.assertEqual([], transport.messages)
-            self.assertEqual(0, db.query(ChatHistory).count())
+            self.assertEqual(0, db.query(ChatMessage).count())
             self.assertEqual(0, db.query(ReminderDelivery).count())
 
     async def test_due_delivery_retry_runs_without_regeneration(self):

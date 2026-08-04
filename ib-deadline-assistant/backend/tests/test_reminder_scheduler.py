@@ -21,7 +21,7 @@ from models.reminder import (  # noqa: E402
     ReminderOccurrence,
     ReminderOccurrenceState,
 )
-from models.task import Task, TaskStatus, TaskType  # noqa: E402
+from models.task_new import Task as AppTask, TaskType  # noqa: E402
 from models.user import User  # noqa: E402
 from services.reminder_preferences import resolve_preferences  # noqa: E402
 from services.reminder_scheduler import (  # noqa: E402
@@ -63,43 +63,42 @@ class ReminderSchedulerTests(unittest.TestCase):
     def test_candidate_query_includes_three_categories_without_limit(self):
         local_day = date(2026, 8, 3)
         with self.SessionLocal() as db:
-            process = Task(
+            process = AppTask(
                 user_id=1,
                 title="Process container",
                 task_type=TaskType.process,
-                status=TaskStatus.todo,
-                deadline=date(2026, 8, 5),
+                status="todo",
+                deadline=datetime(2026, 8, 5),
             )
             db.add(process)
             db.flush()
             db.add(
-                Task(
+                AppTask(
                     user_id=1,
-                    parent_id=process.id,
                     title="Process child",
-                    status=TaskStatus.in_progress,
-                    deadline=date(2026, 8, 5),
+                    status="in_progress",
+                    deadline=datetime(2026, 8, 5),
                 )
             )
             for index in range(55):
                 db.add(
-                    Task(
+                    AppTask(
                         user_id=1,
                         title=f"Todo {index}",
                         task_type=TaskType.todo,
-                        status=TaskStatus.todo,
-                        deadline=date(2026, 8, 4),
+                        status="todo",
+                        deadline=datetime(2026, 8, 4),
                     )
                 )
             db.add_all(
                 [
-                    Task(
+                    AppTask(
                         user_id=1,
                         title="Done",
-                        status=TaskStatus.done,
-                        deadline=date(2026, 8, 4),
+                        status="done",
+                        deadline=datetime(2026, 8, 4),
                     ),
-                    Task(user_id=1, title="No date", status=TaskStatus.todo),
+                    AppTask(user_id=1, title="No date", status="todo"),
                     Deadline(
                         user_id=1,
                         title="External deadline",
@@ -144,22 +143,22 @@ class ReminderSchedulerTests(unittest.TestCase):
         with self.SessionLocal() as db:
             db.add_all(
                 [
-                    Task(
+                    AppTask(
                         user_id=1,
                         title="Keep",
-                        status=TaskStatus.todo,
+                        status="todo",
                         deadline=date(2026, 8, 5),
                     ),
-                    Task(
+                    AppTask(
                         user_id=1,
                         title="Complete later",
-                        status=TaskStatus.todo,
+                        status="todo",
                         deadline=date(2026, 8, 5),
                     ),
-                    Task(
+                    AppTask(
                         user_id=1,
                         title="Delete later",
-                        status=TaskStatus.todo,
+                        status="todo",
                         deadline=date(2026, 8, 5),
                     ),
                     Deadline(
@@ -179,9 +178,9 @@ class ReminderSchedulerTests(unittest.TestCase):
             self.assertEqual(4, db.query(ReminderOccurrence).count())
             self.assertEqual(1, db.query(ReminderDigest).count())
 
-            complete = db.query(Task).filter(Task.title == "Complete later").one()
-            complete.status = TaskStatus.done
-            deleted = db.query(Task).filter(Task.title == "Delete later").one()
+            complete = db.query(AppTask).filter(AppTask.title == "Complete later").one()
+            complete.status = "done"
+            deleted = db.query(AppTask).filter(AppTask.title == "Delete later").one()
             db.delete(deleted)
             moved = db.query(Deadline).filter(Deadline.title == "Reschedule later").one()
             moved.due_date = date(2026, 8, 10)
@@ -219,10 +218,10 @@ class ReminderSchedulerTests(unittest.TestCase):
         with self.SessionLocal() as db:
             for offset in (2, 1, 0, -1, -2, -3, -7, -8):
                 db.add(
-                    Task(
+                    AppTask(
                         user_id=1,
                         title=f"offset-{offset}",
-                        status=TaskStatus.overdue if offset < 0 else TaskStatus.todo,
+                        status="overdue" if offset < 0 else "todo",
                         deadline=date.fromordinal(local_day.toordinal() + offset),
                     )
                 )
@@ -244,10 +243,10 @@ class ReminderSchedulerTests(unittest.TestCase):
                 db.commit()
                 seed_builtin_role_cards(db)
                 db.add(
-                    Task(
+                    AppTask(
                         user_id=1,
                         title="Race item",
-                        status=TaskStatus.todo,
+                        status="todo",
                         deadline=date(2026, 8, 5),
                     )
                 )

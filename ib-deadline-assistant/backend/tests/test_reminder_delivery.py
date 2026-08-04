@@ -13,7 +13,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from database import Base  # noqa: E402
 import models  # noqa: E402,F401
-from models.chat import ChatHistory  # noqa: E402
+from models.chat_message_new import ChatMessage  # noqa: E402
 from models.reminder import (  # noqa: E402
     ReminderDelivery,
     ReminderDeliveryStatus,
@@ -134,12 +134,12 @@ class ReminderDeliveryTests(unittest.TestCase):
             self.assertEqual(ReminderDeliveryStatus.delivered, first["email"].status)
             self.assertEqual(ReminderDeliveryStatus.delivered, second["chat"].status)
             self.assertEqual(1, len(transport.messages))
-            self.assertEqual(1, db.query(ChatHistory).count())
+            self.assertEqual(1, db.query(ChatMessage).count())
             self.assertEqual(2, db.query(ReminderDelivery).count())
 
-            message = db.query(ChatHistory).one()
-            self.assertEqual("reminder", message.metadata_json["source"])
-            self.assertEqual(digest.id, message.metadata_json["digest_id"])
+            message = db.query(ChatMessage).one()
+            self.assertEqual("reminder", message.extra["source"])
+            self.assertEqual(digest.id, message.extra["digest_id"])
             response = ChatResponse.model_validate(message).model_dump()
             self.assertEqual("reminder", response["metadata"]["source"])
 
@@ -198,7 +198,7 @@ class ReminderDeliveryTests(unittest.TestCase):
             )
             self.assertEqual(3, again.attempt_count)
             self.assertEqual(3, len(transport.messages))
-            self.assertEqual(1, db.query(ChatHistory).count())
+            self.assertEqual(1, db.query(ChatMessage).count())
 
     def test_permanent_failure_and_disabled_channel_do_not_retry(self):
         transport = FakeTransport(
@@ -230,7 +230,7 @@ class ReminderDeliveryTests(unittest.TestCase):
             self.assertEqual("smtp_auth_failed", email.last_error_code)
             self.assertEqual(1, email.attempt_count)
             self.assertEqual(ReminderDeliveryStatus.skipped, chat.status)
-            self.assertEqual(0, db.query(ChatHistory).count())
+            self.assertEqual(0, db.query(ChatMessage).count())
 
     def test_abandoned_smtp_attempt_is_not_resent(self):
         transport = FakeTransport()
@@ -296,7 +296,7 @@ class ReminderDeliveryTests(unittest.TestCase):
                 )
                 self.assertEqual(ReminderDeliveryStatus.attempting, result.status)
             self.assertEqual([], transport.messages)
-            self.assertEqual(0, db.query(ChatHistory).count())
+            self.assertEqual(0, db.query(ChatMessage).count())
 
     def test_channel_failure_is_isolated_and_connector_is_extensible(self):
         transport = FakeTransport()
@@ -336,12 +336,12 @@ class ReminderDeliveryTests(unittest.TestCase):
             deliver_digest_channels(
                 db, digest=digest, user=user, preferences=prefs, registry=registry
             )
-            db.query(ChatHistory).filter(ChatHistory.user_id == user.id).delete()
+            db.query(ChatMessage).filter(ChatMessage.user_id == user.id).delete()
             db.commit()
             deliver_digest_channels(
                 db, digest=digest, user=user, preferences=prefs, registry=registry
             )
-            self.assertEqual(0, db.query(ChatHistory).count())
+            self.assertEqual(0, db.query(ChatMessage).count())
             self.assertEqual(2, db.query(ReminderDelivery).count())
             self.assertEqual(1, len(transport.messages))
 

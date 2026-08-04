@@ -35,23 +35,6 @@ CREATE TABLE IF NOT EXISTS email_verifications (
     INDEX ix_email_verifications_ip_created (request_ip, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS tasks (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    task_type ENUM('todo','process') NOT NULL DEFAULT 'todo',
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    subject VARCHAR(100),
-    priority ENUM('low','medium','high','urgent') DEFAULT 'medium',
-    status ENUM('todo','in_progress','done','overdue') DEFAULT 'todo',
-    deadline DATE,
-    estimated_hours DECIMAL(5,1) DEFAULT 0,
-    progress INT DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 CREATE TABLE IF NOT EXISTS deadlines (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -64,16 +47,6 @@ CREATE TABLE IF NOT EXISTS deadlines (
     status ENUM('pending','done','overdue') DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS chat_history (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    role ENUM('user','assistant','system') NOT NULL,
-    content TEXT NOT NULL,
-    metadata JSON DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

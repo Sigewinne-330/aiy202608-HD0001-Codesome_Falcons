@@ -90,9 +90,7 @@ class ReminderOperationsTests(unittest.IsolatedAsyncioTestCase):
             check_reminder_database(
                 lambda: {
                     "users",
-                    "tasks",
                     "deadlines",
-                    "chat_history",
                     "reminder_role_cards",
                     "reminder_preferences",
                     "reminder_occurrences",

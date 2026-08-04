@@ -1,7 +1,7 @@
 import json
 import sys
 import unittest
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from sqlalchemy import create_engine
@@ -22,7 +22,7 @@ from models.reminder import (  # noqa: E402
     ReminderGenerationMode,
     ReminderRoleCard,
 )
-from models.task import Task  # noqa: E402
+from models.task_new import Task as AppTask  # noqa: E402
 from models.user import User  # noqa: E402
 from services.ai_service import LLMCompletionResult, SYSTEM_PROMPT  # noqa: E402
 from services.llm_usage import LLMQuotaPolicy  # noqa: E402
@@ -185,7 +185,7 @@ class ReminderAgentTests(unittest.IsolatedAsyncioTestCase):
             ]
         )
         with self.SessionLocal() as db:
-            db.add(Task(user_id=1, title="Do not delete", deadline=date(2026, 8, 5)))
+            db.add(AppTask(user_id=1, title="Do not delete", deadline=datetime(2026, 8, 5)))
             db.commit()
             card = db.query(ReminderRoleCard).first()
             result = await ReminderTextAgent(fake).generate(
@@ -197,7 +197,7 @@ class ReminderAgentTests(unittest.IsolatedAsyncioTestCase):
                 item_snapshots=self.snapshots(),
             )
             self.assertEqual(ReminderGenerationMode.llm, result.mode)
-            self.assertEqual(1, db.query(Task).count())
+            self.assertEqual(1, db.query(AppTask).count())
         tool_messages = [m for m in fake.calls[1]["messages"] if m["role"] == "tool"]
         self.assertIn("tool_not_allowed", tool_messages[0]["content"])
 
@@ -277,8 +277,8 @@ class ReminderAgentTests(unittest.IsolatedAsyncioTestCase):
         with self.SessionLocal() as db:
             db.add_all(
                 [
-                    Task(user_id=1, title="Mine", deadline=date(2026, 8, 5)),
-                    Task(user_id=2, title="Other", deadline=date(2026, 8, 5)),
+                    AppTask(user_id=1, title="Mine", deadline=datetime(2026, 8, 5)),
+                    AppTask(user_id=2, title="Other", deadline=datetime(2026, 8, 5)),
                     Deadline(user_id=1, title="Mine D", due_date=date(2026, 8, 5)),
                     Deadline(user_id=2, title="Other D", due_date=date(2026, 8, 5)),
                 ]

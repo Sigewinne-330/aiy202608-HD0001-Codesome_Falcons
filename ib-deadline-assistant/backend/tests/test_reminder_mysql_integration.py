@@ -16,7 +16,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from database import Base, SessionLocal, auto_sync_tables, engine  # noqa: E402
 import models  # noqa: E402,F401
-from models.chat import ChatHistory  # noqa: E402
+from models.chat_message_new import ChatMessage  # noqa: E402
 from models.reminder import (  # noqa: E402
     ReminderDelivery,
     ReminderDeliveryStatus,
@@ -26,7 +26,7 @@ from models.reminder import (  # noqa: E402
     ReminderPreference,
     ReminderRoleCard,
 )
-from models.task import Task, TaskStatus  # noqa: E402
+from models.task_new import Task as AppTask  # noqa: E402
 from models.user import User  # noqa: E402
 from services.reminder_agent import GeneratedReminderContent  # noqa: E402
 from services.reminder_orchestrator import ReminderOrchestrator  # noqa: E402
@@ -94,11 +94,11 @@ class ReminderMySQLIntegrationTests(unittest.TestCase):
             db.flush()
             self.user_id = user.id
             db.add(
-                Task(
+                AppTask(
                     user_id=user.id,
                     title="MySQL concurrency fixture",
-                    status=TaskStatus.todo,
-                    deadline=date(2026, 8, 5),
+                    status="todo",
+                    deadline=datetime(2026, 8, 5),
                 )
             )
             db.commit()
@@ -226,8 +226,8 @@ class ReminderMySQLIntegrationTests(unittest.TestCase):
             )
             self.assertEqual(
                 1,
-                db.query(ChatHistory)
-                .filter(ChatHistory.user_id == self.user_id)
+                db.query(ChatMessage)
+                .filter(ChatMessage.user_id == self.user_id)
                 .count(),
             )
             deliveries = (

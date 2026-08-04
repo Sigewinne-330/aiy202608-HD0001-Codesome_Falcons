@@ -14,7 +14,6 @@ if str(BACKEND_DIR) not in sys.path:
 
 from database import Base  # noqa: E402
 import models  # noqa: E402,F401
-from models.chat import ChatHistory  # noqa: E402
 from models.reminder import (  # noqa: E402
     LLMUsageRecord,
     ReminderDelivery,
@@ -69,7 +68,6 @@ class ReminderFoundationTests(unittest.TestCase):
             LLMUsageRecord.__tablename__,
         }
         self.assertTrue(expected.issubset(Base.metadata.tables))
-        self.assertIn("metadata", ChatHistory.__table__.columns)
         self.assertIn("is_admin", User.__table__.columns)
 
     def test_builtin_cards_seed_exactly_once(self):
