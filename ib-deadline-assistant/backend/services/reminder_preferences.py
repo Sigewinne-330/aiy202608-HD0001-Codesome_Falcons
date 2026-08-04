@@ -40,6 +40,12 @@ class ResolvedReminderPreferences:
     persisted_id: Optional[int] = None
 
 
+@dataclass(frozen=True)
+class ResolvedRoleCardSelection:
+    role_card: Optional[ReminderRoleCard]
+    status: str
+
+
 def normalize_language(value: str) -> str:
     raw = (value or "").strip()
     if not LANGUAGE_RE.fullmatch(raw):
@@ -153,13 +159,46 @@ def get_selectable_role_card(db: Session, card_id: int) -> ReminderRoleCard:
     return card
 
 
+def resolve_role_card_selection(
+    db: Session, user_id: int
+) -> ResolvedRoleCardSelection:
+    """Resolve the shared role card used by reminders and the main agent.
+
+    This is intentionally read-only. Missing preferences do not materialize a
+    row merely because a user opened chat.
+    """
+    row = (
+        db.query(ReminderPreference)
+        .filter(ReminderPreference.user_id == user_id)
+        .first()
+    )
+    if row and row.role_card_id:
+        selected = (
+            db.query(ReminderRoleCard)
+            .filter(
+                ReminderRoleCard.id == row.role_card_id,
+                ReminderRoleCard.is_active.is_(True),
+                ReminderRoleCard.scope == "global",
+                ReminderRoleCard.owner_user_id.is_(None),
+            )
+            .first()
+        )
+        if selected:
+            return ResolvedRoleCardSelection(role_card=selected, status="selected")
+
+    default_card = get_default_role_card(db)
+    if default_card:
+        return ResolvedRoleCardSelection(role_card=default_card, status="default")
+    return ResolvedRoleCardSelection(role_card=None, status="neutral")
+
+
 def resolve_preferences(db: Session, user_id: int) -> ResolvedReminderPreferences:
     row = (
         db.query(ReminderPreference)
         .filter(ReminderPreference.user_id == user_id)
         .first()
     )
-    default_card = get_default_role_card(db)
+    role_selection = resolve_role_card_selection(db, user_id)
     if not row:
         return ResolvedReminderPreferences(
             user_id=user_id,
@@ -171,21 +210,9 @@ def resolve_preferences(db: Session, user_id: int) -> ResolvedReminderPreference
             default_task_reminder_offsets_minutes=DEFAULT_TASK_REMINDER_OFFSETS_MINUTES,
             email_enabled=True,
             chat_enabled=True,
-            role_card=default_card,
+            role_card=role_selection.role_card,
         )
 
-    selected = None
-    if row.role_card_id:
-        selected = (
-            db.query(ReminderRoleCard)
-            .filter(
-                ReminderRoleCard.id == row.role_card_id,
-                ReminderRoleCard.is_active.is_(True),
-                ReminderRoleCard.scope == "global",
-                ReminderRoleCard.owner_user_id.is_(None),
-            )
-            .first()
-        )
     return ResolvedReminderPreferences(
         user_id=user_id,
         enabled=bool(row.enabled),
@@ -201,7 +228,7 @@ def resolve_preferences(db: Session, user_id: int) -> ResolvedReminderPreference
         ),
         email_enabled=bool(row.email_enabled),
         chat_enabled=bool(row.chat_enabled),
-        role_card=selected or default_card,
+        role_card=role_selection.role_card,
         persisted_id=row.id,
     )
 

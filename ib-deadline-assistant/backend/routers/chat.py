@@ -29,6 +29,7 @@ from schemas.chat import (
 )
 from services.auth import get_current_user
 from services.ai_service import ai_service, SYSTEM_PROMPT
+from services.main_agent_role_cards import prepare_main_agent_role_context
 from services.task_tools_schema import TASK_TOOLS
 from services.knowledge_base_tools import KNOWLEDGE_BASE_TOOLS, get_subject_guidelines
 from services import task_tools
@@ -95,6 +96,7 @@ def _build_messages(
     user_message: str,
     history: List[Dict[str, str]],
     images: Optional[List[str]] = None,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> List[Dict[str, Any]]:
     """构建带 system prompt 的完整消息列表。
 
@@ -115,7 +117,7 @@ def _build_messages(
         user_content = _with_date_prefix(user_message)
 
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         *history,
         {"role": "user", "content": user_content},
     ]
@@ -399,8 +401,16 @@ async def chat(
     # 加载该对话窗口最近的历史（作为 AI 上下文）
     history = _load_history(db, conv.id, limit=20)
 
-    # 构建消息并执行工具调用循环
-    messages = _build_messages(data.content, history, images=data.images)
+    # 构建消息并执行工具调用循环。角色卡只影响本次请求的表达风格。
+    role_context = prepare_main_agent_role_context(
+        db, current_user.id, SYSTEM_PROMPT
+    )
+    messages = _build_messages(
+        data.content,
+        history,
+        images=data.images,
+        system_prompt=role_context.system_prompt,
+    )
     usage_tracker: Dict[str, int] = {}
     reply = await _run_tool_loop(messages, db, current_user.id, usage_tracker)
 
@@ -423,6 +433,7 @@ async def chat(
         role="assistant",
         content=reply,
         token=total_tokens,
+        extra=role_context.message_metadata,
     )
     db.add(assistant_msg)
     db.flush()  # 拿到 assistant_msg.id 用于流水关联
@@ -469,9 +480,15 @@ async def chat_stream(
     # 加载该对话窗口历史
     history = _load_history(db, conv.id, limit=20)
 
-    # 构建消息
+    # 构建消息；在流开始前固定角色快照，避免中途切换造成审计漂移。
+    role_context = prepare_main_agent_role_context(db, uid, SYSTEM_PROMPT)
     has_images = bool(data.images)
-    messages = _build_messages(data.content, history, images=data.images)
+    messages = _build_messages(
+        data.content,
+        history,
+        images=data.images,
+        system_prompt=role_context.system_prompt,
+    )
     final_reply = ""  # 最终完整回复（用于保存到 chat_message）
     total_tokens = 0  # 本轮真实 token 用量（用于计费）
 
@@ -515,6 +532,7 @@ async def chat_stream(
                         role="assistant",
                         content=final_reply,
                         token=total_tokens,
+                        extra=role_context.message_metadata,
                     )
                     save_db.add(assistant_msg)
                     save_db.flush()  # 拿到 assistant_msg.id 用于流水关联
