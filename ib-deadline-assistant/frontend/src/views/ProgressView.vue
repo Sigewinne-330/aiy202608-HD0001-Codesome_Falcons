@@ -91,7 +91,6 @@
     <template v-else>
       <header class="page-header">
         <div>
-          <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" class="back-button" @click="router.push('/calendar')">{{ $t('common.backCalendar') }}</v-btn>
           <div class="eyebrow">{{ $t('progress.eyebrow') }}</div>
           <h1>{{ $t('progress.title') }}</h1>
           <p>{{ $t('progress.subtitle') }}</p>
@@ -452,7 +451,7 @@ onBeforeUnmount(() => stopTaskSync?.())
 .progress-page { position: relative; min-height: calc(100vh - 64px); padding: 28px clamp(22px, 5vw, 70px) 110px; color: #1e2942; }
 .page-header, .category-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 .category-header { align-items: center; }.category-header__copy { flex: 1; }.header-actions { display: flex; gap: 9px; }
-.back-button { margin-left: -12px; margin-bottom: 10px; color: #69758d; }.eyebrow { color: #4a6ce2; font-size: 10px; font-weight: 800; letter-spacing: .16em; }
+.eyebrow { color: #4a6ce2; font-size: 10px; font-weight: 800; letter-spacing: .16em; }
 .page-header h1, .category-header h1 { margin-top: 4px; font-size: clamp(28px, 3vw, 39px); letter-spacing: -.04em; }.page-header p, .category-header p { margin-top: 7px; color: #7f899d; font-size: 12px; }
 .overall-card { display: grid; grid-template-columns: 1.2fr auto 1fr; align-items: center; gap: 38px; padding: 28px 32px; border: 1px solid rgba(39,53,83,.09); background: linear-gradient(135deg, rgba(255,255,255,.96), rgba(244,247,255,.96)) !important; box-shadow: 0 18px 50px rgba(31,44,75,.07) !important; }
 .section-tag { display: inline-flex; padding: 4px 9px; border-radius: 999px; color: #4169e8; background: #edf2ff; font-size: 10px; font-weight: 750; }.overall-card__copy h2 { margin-top: 12px; font-size: 22px; }.overall-card__copy p { max-width: 410px; margin-top: 7px; color: #808a9f; font-size: 11px; }.overall-next { display: flex; align-items: center; gap: 6px; margin-top: 13px; color: #5e6c87; font-size: 10px; }

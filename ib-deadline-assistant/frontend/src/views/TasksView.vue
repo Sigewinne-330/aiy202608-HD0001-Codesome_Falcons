@@ -20,7 +20,6 @@
             <div><strong>{{ processCount }}</strong><span>{{ $t('tasks.process') }}</span></div>
           </div>
           <div class="header-actions">
-            <v-btn class="back-calendar-btn" prepend-icon="mdi-calendar-arrow-left" size="large" variant="tonal" @click="router.push('/calendar')">{{ $t('tasks.backCalendar') }}</v-btn>
             <v-btn class="create-task-btn" color="primary" prepend-icon="mdi-plus" size="large" @click="openCreate">{{ $t('tasks.newTask') }}</v-btn>
           </div>
         </div>
@@ -654,7 +653,6 @@ onBeforeUnmount(() => stopTaskSync?.())
 .task-overview strong { color: #2b3853; font-size: 16px; line-height: 1.2; }
 .task-overview span { margin-top: 2px; color: #929bae; font-size: 9px; }
 .task-overview i { width: 1px; height: 24px; background: #e5e8f0; }
-.back-calendar-btn { min-width: 116px; color: #4e61a1 !important; background: #eef2fc !important; }
 .create-task-btn { min-width: 128px; box-shadow: 0 10px 22px rgba(49, 95, 220, .22) !important; }
 .task-filters {
   display: flex;

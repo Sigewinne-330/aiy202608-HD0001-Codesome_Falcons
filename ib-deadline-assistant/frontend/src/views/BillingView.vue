@@ -2,7 +2,6 @@
   <section class="billing-page">
     <header class="page-header">
       <div>
-        <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" class="back-button" @click="router.push('/calendar')">{{ $t('billing.back') }}</v-btn>
         <div class="eyebrow">BALANCE & RECHARGE</div>
         <h1>{{ $t('billing.title') }}</h1>
         <p>{{ $t('billing.subtitle') }}</p>
@@ -123,11 +122,9 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { authFetch } from '@/stores/auth'
 
-const router = useRouter()
 const { t } = useI18n()
 const loading = ref(true)
 const summary = ref({ balance: 0, today_spent: 0, month_spent: 0, estimated_days_left: null })
@@ -219,7 +216,6 @@ onMounted(loadAll)
   radial-gradient(circle at 88% 88%, rgba(102, 75, 230, 0.08), transparent 28%),
   #f7f8fc; }
 .page-header { margin-bottom: 24px; }
-.back-button { margin-left: -12px; margin-bottom: 10px; color: #69758d; }
 .eyebrow { color: #4a6ce2; font-size: 10px; font-weight: 800; letter-spacing: .16em; }
 .page-header h1 { margin-top: 4px; font-size: clamp(28px, 3vw, 39px); letter-spacing: -.04em; }
 .page-header p { margin-top: 8px; color: #7f899d; font-size: 13px; }

@@ -9,6 +9,18 @@
           @click="taskDrawer = true"
         />
 
+        <v-btn
+          v-if="!isCalendarPage"
+          class="calendar-back-button"
+          variant="text"
+          size="small"
+          prepend-icon="mdi-arrow-left"
+          :aria-label="$t('common.backCalendar')"
+          @click="router.push('/calendar')"
+        >
+          {{ $t('common.backCalendar') }}
+        </v-btn>
+
         <button class="brand-button" type="button" @click="router.push('/calendar')">
           <span class="brand-mark">IB</span>
           <span class="brand-copy">
@@ -172,6 +184,7 @@ const { user, token, isAuthenticated, logout, restoreSession } = useAuth()
 
 // Landing 介绍页是所有人的第一界面：即使已登录也走干净布局（无顶栏/侧栏）
 const isLanding = computed(() => route.name === 'Landing')
+const isCalendarPage = computed(() => route.name === 'Calendar')
 
 const taskDrawer = ref(false)
 const agentDrawer = ref(false)
@@ -382,6 +395,12 @@ onBeforeUnmount(() => {
   padding: 4px 8px;
 }
 
+.calendar-back-button {
+  flex: 0 0 auto;
+  margin: 0 6px 0 2px;
+  color: #4e61a1 !important;
+}
+
 .brand-mark {
   display: inline-flex;
   align-items: center;
@@ -532,6 +551,8 @@ onBeforeUnmount(() => {
 @media (max-width: 700px) {
   .brand-copy small { display: none; }
   .workspace-bar { padding: 0 8px; }
+  .calendar-back-button { padding-inline: 7px !important; }
+  .calendar-back-button .v-btn__content { font-size: 0; }
   .agent-trigger .v-btn__content { font-size: 0; }
   .quick-actions { right: 14px; bottom: 16px; }
   .reminder-popover { right: 14px; top: 74px; width: calc(100vw - 28px); }

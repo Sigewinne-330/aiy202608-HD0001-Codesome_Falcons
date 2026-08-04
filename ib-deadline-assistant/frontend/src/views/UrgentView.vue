@@ -2,7 +2,6 @@
   <section class="urgent-page">
     <header class="page-header">
       <div>
-        <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" class="back-button" @click="router.push('/calendar')">{{ $t('common.backCalendar') }}</v-btn>
         <div class="eyebrow">{{ $t('urgent.eyebrow') }}</div>
         <h1>{{ $t('urgent.title') }}</h1>
         <p>{{ $t('urgent.subtitle') }}</p>
@@ -167,7 +166,6 @@ onMounted(loadItems)
 <style scoped>
 .urgent-page { min-height: calc(100vh - 64px); padding: 28px clamp(22px, 5vw, 70px) 110px; color: #1e2942; }
 .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; margin-bottom: 24px; }
-.back-button { margin-left: -12px; margin-bottom: 10px; color: #69758d; }
 .eyebrow { color: #df4458; font-size: 10px; font-weight: 800; letter-spacing: .16em; }
 .page-header h1 { margin-top: 4px; font-size: clamp(28px, 3vw, 39px); letter-spacing: -.04em; }
 .page-header p { margin-top: 8px; color: #7f899d; font-size: 13px; }
