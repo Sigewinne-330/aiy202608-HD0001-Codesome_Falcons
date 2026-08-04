@@ -215,6 +215,7 @@
       :cards="roleCards"
       :selected-id="form.role_card_id"
       @select="onRoleCardSelected"
+      @imported="onRoleCardImported"
       @unauthorized="$emit('unauthorized')"
     />
   </div>
@@ -443,6 +444,18 @@ async function save() {
 
 function onRoleCardSelected(id) {
   form.role_card_id = id
+}
+
+// 导入成功后：刷新卡片列表并选中新卡（仍需点保存才会写入偏好）
+async function onRoleCardImported(newId) {
+  try {
+    const cards = await listRoleCards()
+    roleCards.value = Array.isArray(cards) ? cards : cards?.items || []
+    if (newId != null) form.role_card_id = newId
+    showSaveMessage(t('reminders.importSuccess'), false)
+  } catch (err) {
+    handleAuthError(err)
+  }
 }
 
 function handleAuthError(err) {

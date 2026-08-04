@@ -34,3 +34,11 @@ export function getRoleCard(id) {
 export function getHistory({ limit = 20, offset = 0 } = {}) {
   return api(`/api/reminders/history?limit=${limit}&offset=${offset}`)
 }
+
+/** POST /api/admin/reminder-role-cards —— 导入角色卡（需要管理员权限，403 时由调用方提示） */
+export function createRoleCard(payload) {
+  return api('/api/admin/reminder-role-cards', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}

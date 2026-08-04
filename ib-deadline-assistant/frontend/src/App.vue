@@ -31,6 +31,57 @@
 
         <v-spacer />
 
+        <!-- 交流风格快捷选择：与提醒设置共享 role_card_id -->
+        <v-menu v-model="styleMenuOpen" location="bottom end" :close-on-content-click="false">
+          <template #activator="{ props: menuProps }">
+            <v-btn
+              v-bind="menuProps"
+              class="style-trigger"
+              variant="text"
+              prepend-icon="mdi-account-star-outline"
+              :loading="styleSaving"
+            >
+              <span class="style-trigger__name">{{ currentStyleName }}</span>
+              <template #append>
+                <v-icon icon="mdi-chevron-down" size="16" />
+              </template>
+            </v-btn>
+          </template>
+          <v-card min-width="250" rounded="lg">
+            <v-list density="compact">
+              <v-list-subheader>{{ $t('reminders.roleCard') }}</v-list-subheader>
+              <div v-if="styleLoading" class="d-flex justify-center py-3">
+                <v-progress-circular indeterminate size="20" width="2" color="primary" />
+              </div>
+              <template v-else>
+                <v-list-item :active="styleSelectedId == null" @click="selectStyle(null)">
+                  <template #prepend>
+                    <v-icon icon="mdi-star-circle-outline" size="20" class="mr-1" />
+                  </template>
+                  <v-list-item-title>{{ $t('reminders.roleCardDefault') }}</v-list-item-title>
+                </v-list-item>
+                <v-list-item
+                  v-for="card in styleCards"
+                  :key="card.id"
+                  :active="styleSelectedId === card.id"
+                  @click="selectStyle(card.id)"
+                >
+                  <template #prepend>
+                    <v-icon :icon="styleCardIcon(card.slug)" size="20" class="mr-1" />
+                  </template>
+                  <v-list-item-title>{{ card.name }}</v-list-item-title>
+                </v-list-item>
+              </template>
+            </v-list>
+            <v-divider />
+            <v-list density="compact">
+              <v-list-item prepend-icon="mdi-cog-outline" @click="goStyleSettings">
+                <v-list-item-title>{{ $t('reminders.goSettings') }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-card>
+        </v-menu>
+
         <v-btn
           class="agent-trigger"
           prepend-icon="mdi-creation-outline"
@@ -45,7 +96,7 @@
           type="button"
           :aria-label="$t('app.openAccount')"
           :title="$t('app.account')"
-          @click="settingsOpen = true"
+          @click="openAccountSettings"
         >
           <v-avatar color="primary" size="36">
             <span class="text-white text-body-2 font-weight-bold">{{ userInitial }}</span>
@@ -153,7 +204,7 @@
         </div>
       </transition>
 
-      <SettingsDialog v-model="settingsOpen" @logout="handleLogout" />
+      <SettingsDialog v-model="settingsOpen" :initial-section="settingsSection" @logout="handleLogout" />
     </template>
 
     <v-main v-else>
@@ -176,6 +227,7 @@ import AgentDrawer from '@/components/AgentDrawer.vue'
 import SettingsDialog from '@/components/SettingsDialog.vue'
 import { onTasksChanged } from '@/services/taskSync'
 import { onOpenAgent } from '@/services/agentContext'
+import { getPreferences, updatePreferences, listRoleCards, ApiError } from '@/services/reminders'
 
 const router = useRouter()
 const route = useRoute()
@@ -311,6 +363,79 @@ function openGlobalAgent() {
   agentDrawer.value = true
 }
 
+// ---- 顶栏交流风格选择：懒加载偏好与卡片列表，选择即保存 ----
+const styleMenuOpen = ref(false)
+const styleCards = ref([])
+const styleSelectedId = ref(null)
+const styleDefaultName = ref('')
+const styleLoaded = ref(false)
+const styleLoading = ref(false)
+const styleSaving = ref(false)
+const settingsSection = ref('account')
+
+const currentStyleName = computed(() => {
+  if (styleSelectedId.value != null) {
+    const card = styleCards.value.find((c) => c.id === styleSelectedId.value)
+    if (card) return card.name
+  }
+  return styleDefaultName.value || t('reminders.roleCardDefault')
+})
+
+function styleCardIcon(slug) {
+  const map = {
+    'friendly-warm-guy': 'mdi-account-heart-outline',
+    'tech-geek': 'mdi-laptop',
+    'sweet-high-school-girl': 'mdi-flower-outline',
+  }
+  return map[slug] || 'mdi-account-star-outline'
+}
+
+watch(styleMenuOpen, async (open) => {
+  if (!open || styleLoaded.value) return
+  styleLoading.value = true
+  try {
+    const [prefs, cards] = await Promise.all([getPreferences(), listRoleCards()])
+    styleCards.value = Array.isArray(cards) ? cards : cards?.items || []
+    styleSelectedId.value = prefs?.role_card?.id ?? null
+    styleDefaultName.value = prefs?.role_card?.name || ''
+    styleLoaded.value = true
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) handleLogout()
+  } finally {
+    styleLoading.value = false
+  }
+})
+
+async function selectStyle(id) {
+  if (styleSaving.value) return
+  if (id === styleSelectedId.value) {
+    styleMenuOpen.value = false
+    return
+  }
+  styleSaving.value = true
+  try {
+    const updated = await updatePreferences({ role_card_id: id })
+    styleSelectedId.value = updated?.role_card?.id ?? null
+    styleDefaultName.value = updated?.role_card?.name || styleDefaultName.value
+    styleMenuOpen.value = false
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) handleLogout()
+  } finally {
+    styleSaving.value = false
+  }
+}
+
+function goStyleSettings() {
+  styleMenuOpen.value = false
+  settingsSection.value = 'reminders'
+  settingsOpen.value = true
+}
+
+function openAccountSettings() {
+  settingsSection.value = 'account'
+  settingsOpen.value = true
+}
+
 function handleOpenAgent(context) {
   agentContext.value = context
   agentDrawer.value = true
@@ -442,6 +567,12 @@ onBeforeUnmount(() => {
 .account-trigger:hover { background: rgba(50, 101, 245, .10); }
 .account-trigger:active { transform: scale(.96); }
 .account-trigger:focus-visible { outline: 3px solid rgba(50, 101, 245, .30); outline-offset: 2px; }
+
+.style-trigger { margin-right: 6px; color: #4a5468; text-transform: none; letter-spacing: 0; }
+.style-trigger__name { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+@media (max-width: 720px) {
+  .style-trigger__name { display: none; }
+}
 
 .workspace-main {
   background:

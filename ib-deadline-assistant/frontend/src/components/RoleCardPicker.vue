@@ -4,10 +4,43 @@
       <v-card-title class="d-flex align-center pt-5 px-6">
         <span>{{ $t('reminders.roleCardPickerTitle') }}</span>
         <v-spacer />
+        <v-btn
+          size="small"
+          variant="text"
+          color="primary"
+          prepend-icon="mdi-upload-outline"
+          @click="importOpen = !importOpen"
+        >
+          {{ $t('reminders.importRoleCard') }}
+        </v-btn>
         <v-btn icon="mdi-close" variant="text" size="small" :aria-label="$t('common.close')" @click="close" />
       </v-card-title>
 
       <v-card-text class="px-6 pb-2">
+        <!-- 导入角色卡：粘贴 JSON → POST /api/admin/reminder-role-cards -->
+        <v-expand-transition>
+          <div v-if="importOpen" class="import-box">
+            <div class="import-hint">{{ $t('reminders.importRoleCardHelp') }}</div>
+            <v-textarea
+              v-model="importJson"
+              rows="6"
+              variant="outlined"
+              density="compact"
+              :placeholder="importPlaceholder"
+              :error="Boolean(importError)"
+              :error-messages="importError"
+              class="import-textarea"
+              @input="importError = ''"
+            />
+            <div class="import-actions">
+              <v-btn size="small" variant="text" @click="cancelImport">{{ $t('common.cancel') }}</v-btn>
+              <v-btn size="small" color="primary" :loading="importing" @click="submitImport">
+                {{ $t('reminders.importConfirm') }}
+              </v-btn>
+            </div>
+          </div>
+        </v-expand-transition>
+
         <!-- 恢复默认 -->
         <div
           class="role-card role-card--default"
@@ -89,19 +122,42 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { getRoleCard, ApiError } from '@/services/reminders'
+import { useI18n } from 'vue-i18n'
+import { getRoleCard, createRoleCard, ApiError } from '@/services/reminders'
 
 const props = defineProps({
   modelValue: Boolean,
   cards: { type: Array, default: () => [] },
   selectedId: { type: [Number, String], default: null },
 })
-const emit = defineEmits(['update:modelValue', 'select', 'unauthorized'])
+const emit = defineEmits(['update:modelValue', 'select', 'unauthorized', 'imported'])
+const { t } = useI18n()
 
 const internalSelected = ref(props.selectedId)
 const expandedId = ref(null)
 const detail = ref(null)
 const detailLoadingId = ref(null)
+
+// ---- 导入角色卡 ----
+const importOpen = ref(false)
+const importJson = ref('')
+const importError = ref('')
+const importing = ref(false)
+
+const importPlaceholder = computed(() =>
+  JSON.stringify(
+    {
+      slug: 'my-style',
+      name: t('reminders.importPlaceholderName'),
+      description: '…',
+      personality: '…',
+      speaking_style: '…',
+      example_messages: ['…'],
+    },
+    null,
+    2,
+  ),
+)
 
 watch(
   () => props.modelValue,
@@ -110,9 +166,60 @@ watch(
       internalSelected.value = props.selectedId
       expandedId.value = null
       detail.value = null
+      cancelImport()
     }
   },
 )
+
+function cancelImport() {
+  importOpen.value = false
+  importJson.value = ''
+  importError.value = ''
+  importing.value = false
+}
+
+async function submitImport() {
+  let payload
+  try {
+    payload = JSON.parse(importJson.value)
+  } catch {
+    importError.value = t('reminders.importInvalidJson')
+    return
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    importError.value = t('reminders.importInvalidJson')
+    return
+  }
+  if (
+    typeof payload.slug !== 'string' || payload.slug.trim().length < 2 ||
+    typeof payload.name !== 'string' || !payload.name.trim()
+  ) {
+    importError.value = t('reminders.importMissingFields')
+    return
+  }
+  importing.value = true
+  try {
+    const created = await createRoleCard(payload)
+    const newId = created?.id ?? null
+    if (newId != null) internalSelected.value = newId
+    cancelImport()
+    emit('imported', newId)
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) {
+      emit('unauthorized')
+      return
+    }
+    if (err instanceof ApiError && err.status === 403) {
+      importError.value = t('reminders.importForbidden')
+      return
+    }
+    importError.value = err instanceof ApiError && err.kind === 'http'
+      ? err.message
+      : t('reminders.importFailed')
+  } finally {
+    importing.value = false
+  }
+}
 
 const exampleMessages = computed(() => {
   const msgs = detail.value?.example_messages
@@ -217,5 +324,26 @@ function confirm() {
   background: #ffffff;
   border: 1px solid #e6e9f0;
   white-space: pre-wrap;
+}
+.import-box {
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border: 1px dashed #c9d2e3;
+  border-radius: 12px;
+  background: #f8fafd;
+}
+.import-hint {
+  color: #6b7484;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.import-textarea :deep(textarea) {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px;
+}
+.import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
 }
 </style>

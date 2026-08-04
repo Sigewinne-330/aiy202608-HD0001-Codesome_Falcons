@@ -131,6 +131,11 @@
             </div>
           </template>
 
+          <template v-else-if="activeSection === 'reminders'">
+            <SettingsHeading :title="$t('reminders.tabSettings')" :subtitle="$t('reminders.subtitle')" />
+            <ReminderSettingsPanel @unauthorized="handleReminderUnauthorized" />
+          </template>
+
           <template v-else>
             <SettingsHeading :title="$t('settingsBilling.balanceTitle')" :subtitle="$t('settingsBilling.balanceDesc')" />
             <div class="subscription-card">
@@ -177,10 +182,15 @@ import { useRouter } from 'vue-router'
 import { useAuth } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
 import { setLocale, SUPPORTED_LOCALES, LOCALE_NAMES } from '@/i18n'
+import ReminderSettingsPanel from '@/components/ReminderSettingsPanel.vue'
 
-const props = defineProps({ modelValue: Boolean })
+const props = defineProps({
+  modelValue: Boolean,
+  // 打开时定位到哪个分区（account/connections/time/subscription/reminders）
+  initialSection: { type: String, default: 'account' },
+})
 const emit = defineEmits(['update:modelValue', 'logout'])
-const { user, token } = useAuth()
+const { user, token, logout } = useAuth()
 const { locale } = useI18n()
 const router = useRouter()
 const balance = ref(0)
@@ -209,8 +219,14 @@ function goBilling() {
 }
 
 function goReminderSettings() {
+  // 提醒设置已集成进本对话框，直接切换分区（完整历史页仍在 /reminders）
+  activeSection.value = 'reminders'
+}
+
+function handleReminderUnauthorized() {
   dialogOpen.value = false
-  router.push({ path: '/reminders', query: { tab: 'settings' } })
+  logout()
+  router.push({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
 }
 
 const SettingsHeading = defineComponent({
@@ -280,6 +296,7 @@ const sections = [
   { value: 'account', titleKey: 'settings.account', icon: 'mdi-account-circle-outline' },
   { value: 'connections', titleKey: 'settings.connections', icon: 'mdi-link-variant' },
   { value: 'time', titleKey: 'settings.time', icon: 'mdi-clock-outline' },
+  { value: 'reminders', titleKey: 'reminders.tabSettings', icon: 'mdi-bell-cog-outline' },
   { value: 'subscription', titleKey: 'settingsBilling.balanceTitle', icon: 'mdi-wallet-outline' },
 ]
 
@@ -303,8 +320,11 @@ function saveSettings() {
 }
 
 watch(dialogOpen, (isOpen) => {
-  if (isOpen && !settings.displayName) settings.displayName = user.value?.username || ''
-  if (isOpen) loadBalance()
+  if (isOpen) {
+    activeSection.value = props.initialSection || 'account'
+    if (!settings.displayName) settings.displayName = user.value?.username || ''
+    loadBalance()
+  }
 })
 </script>
 
