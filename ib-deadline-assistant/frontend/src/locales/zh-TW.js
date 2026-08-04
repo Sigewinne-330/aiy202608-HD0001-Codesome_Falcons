@@ -246,7 +246,10 @@ export default {
     nextMonth: '下個月',
     legendTodo: 'Todo 任務',
     legendProcess: 'Process 任務',
+    legendPersonal: '個人截止',
     legendDeadline: 'Deadline',
+    legendUrgent: '緊急',
+    personalDeadline: '個人截止',
     today: '今天',
     todayLabel: '今天',
     weekMon: '週一', weekTue: '週二', weekWed: '週三', weekThu: '週四', weekFri: '週五', weekSat: '週六', weekSun: '週日',
@@ -260,6 +263,7 @@ export default {
     weekPrefix: '週',
     detailCount: '（{n} 項）',
     noItems: '當天暫無任務或截止日期',
+    personalDeadline: '個人截止',
     loadError: '載入行事曆資料失敗:',
   },
   tasks: {

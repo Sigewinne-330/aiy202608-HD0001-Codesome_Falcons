@@ -246,7 +246,10 @@ export default {
     nextMonth: '下个月',
     legendTodo: 'Todo 任务',
     legendProcess: 'Process 任务',
+    legendPersonal: '个人截止',
     legendDeadline: 'Deadline',
+    legendUrgent: '紧急',
+    personalDeadline: '个人截止',
     today: '今天',
     todayLabel: '今天',
     weekMon: '周一', weekTue: '周二', weekWed: '周三', weekThu: '周四', weekFri: '周五', weekSat: '周六', weekSun: '周日',
@@ -260,6 +263,7 @@ export default {
     weekPrefix: '周',
     detailCount: '（{n} 项）',
     noItems: '当天暂无任务或截止日期',
+    personalDeadline: '个人截止',
     loadError: '加载日历数据失败:',
   },
   tasks: {

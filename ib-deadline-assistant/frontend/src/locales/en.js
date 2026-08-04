@@ -246,7 +246,10 @@ export default {
     nextMonth: 'Next month',
     legendTodo: 'Todo task',
     legendProcess: 'Process task',
+    legendPersonal: 'Personal deadline',
     legendDeadline: 'Deadline',
+    legendUrgent: 'Urgent',
+    personalDeadline: 'Personal deadline',
     today: 'Today',
     todayLabel: 'Today',
     weekMon: 'Mon', weekTue: 'Tue', weekWed: 'Wed', weekThu: 'Thu', weekFri: 'Fri', weekSat: 'Sat', weekSun: 'Sun',
@@ -260,6 +263,7 @@ export default {
     weekPrefix: ' ',
     detailCount: '({n} items)',
     noItems: 'No tasks or deadlines on this day',
+    personalDeadline: 'Personal deadline',
     loadError: 'Failed to load calendar data:',
   },
   tasks: {

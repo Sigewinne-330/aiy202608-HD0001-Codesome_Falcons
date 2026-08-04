@@ -88,7 +88,7 @@
 
       <div
         v-for="item in selectedDayItems"
-        :key="`${item.type}-${item.id}`"
+        :key="`${item.type}-${item.id}-${item.deadline_kind || 'main'}`"
         class="day-item"
         :style="{ '--item-dot': itemDotColor(item) }"
       >
@@ -96,7 +96,12 @@
           class="day-item-indicator"
           :class="`day-item-indicator--${pillShape(item)}`"
         />
-        <span class="text-body-2 day-item-title">{{ item.title }}</span>
+        <span class="text-body-2 day-item-title">
+          {{ item.title }}
+          <span v-if="item.deadline_kind === 'personal'" class="personal-tag">
+            {{ $t('calendarPanel.personalDeadline') }}
+          </span>
+        </span>
         <v-chip
           :color="priorityColor(item.priority)"
           size="x-small"
@@ -337,6 +342,9 @@ function itemDotColor(item) {
 function pillShape(item) {
   if (item.type === 'deadline') return 'deadline'
   if (item.type === 'subtask') return 'subtask'
+  if (item.deadline_kind === 'personal') {
+    return item.task_type === 'process' ? 'personal-process' : 'personal-todo'
+  }
   if (item.task_type === 'process') return 'process'
   return 'todo'
 }
@@ -507,6 +515,16 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.personal-tag {
+  font-size: 9px;
+  color: var(--item-dot);
+  border: 1px dashed var(--item-dot);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin-left: 4px;
+  vertical-align: 1px;
+}
+
 /* 条目前图标 */
 .day-item-indicator {
   flex: 0 0 auto;
@@ -514,14 +532,56 @@ onMounted(() => {
   display: inline-block;
 }
 .day-item-indicator--todo {
-  width: 0; height: 14px;
-  border-left: 2.5px solid var(--item-dot);
+  width: 3px; height: 14px;
+  border-radius: 2px;
+  background: var(--item-dot);
 }
 .day-item-indicator--process {
-  width: 7px; height: 7px;
-  border-radius: 1.5px;
-  transform: rotate(45deg);
-  background: var(--item-dot);
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid var(--item-dot);
+  background: transparent;
+  position: relative;
+  transform: none;
+}
+.day-item-indicator--process::after {
+  content: '!';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--item-dot);
+  line-height: 1;
+}
+.day-item-indicator--personal-process {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--item-dot);
+  background: transparent;
+  position: relative;
+  transform: none;
+}
+.day-item-indicator--personal-process::after {
+  content: '!';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--item-dot);
+  line-height: 1;
+}
+.day-item-indicator--personal-todo {
+  width: 3px; height: 14px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--item-dot) 0px,
+    var(--item-dot) 3px,
+    transparent 3px,
+    transparent 6px
+  );
 }
 .day-item-indicator--subtask {
   width: 0; height: 0;

@@ -22,7 +22,9 @@
         <div class="calendar-legend">
           <span><i class="legend-todo" />{{ $t('calendar.legendTodo') }}</span>
           <span><i class="legend-process" />{{ $t('calendar.legendProcess') }}</span>
+          <span><i class="legend-personal" />{{ $t('calendar.legendPersonal') }}</span>
           <span><i class="legend-deadline" />{{ $t('calendar.legendDeadline') }}</span>
+          <span><i class="legend-urgent" />{{ $t('calendar.legendUrgent') }}</span>
           <v-btn variant="outlined" size="small" prepend-icon="mdi-calendar-today-outline" @click="goToday">{{ $t('calendar.today') }}</v-btn>
         </div>
       </div>
@@ -51,12 +53,12 @@
           <div class="calendar-day__items">
             <button
               v-for="item in day.items.slice(0, 3)"
-              :key="`${item.type}-${item.id}`"
+              :key="`${item.type}-${item.id}-${item.deadline_kind || 'main'}`"
               type="button"
               class="schedule-pill"
               :class="[`schedule-pill--${pillShape(item)}`, { 'schedule-pill--urgent': item.priority === 'urgent' }]"
               :style="{ '--pill-bg': pillColor(item).bg, '--pill-dot': pillColor(item).dot, '--pill-text': pillColor(item).text }"
-              :title="item.title"
+              :title="item.deadline_kind === 'personal' ? `${item.title} (${$t('calendar.personalDeadline')})` : item.title"
               @click="openItem(item)"
             >
               <i />
@@ -174,6 +176,9 @@ function pillColor(item) {
 function pillShape(item) {
   if (item.type === 'deadline') return 'deadline'
   if (item.type === 'subtask') return 'subtask'
+  if (item.deadline_kind === 'personal') {
+    return item.task_type === 'process' ? 'personal-process' : 'personal-todo'
+  }
   if (item.task_type === 'process') return 'process'
   return 'todo'
 }
@@ -191,7 +196,10 @@ async function loadCalendar() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const data = await response.json()
     monthData.value = Object.fromEntries((data.days || []).map((day) => [day.date, day]))
-  } catch {
+    const totalCount = Object.values(monthData.value).reduce((sum, d) => sum + (d.count || 0), 0)
+    console.log(`[Calendar] Loaded ${Object.keys(monthData.value).length} days, ${totalCount} items for ${currentYear.value}-${currentMonth.value}`)
+  } catch (err) {
+    console.error('[Calendar] Failed to load calendar data:', err)
     monthData.value = {}
   } finally {
     loading.value = false
@@ -223,6 +231,11 @@ function openItem(item) {
   }
   if (item.type === 'subtask' && item.parent_task_id && item.category) {
     router.push({ path: `/progress/${item.category.toLowerCase()}/${item.parent_task_id}`, query: { focus: item.id } })
+    return
+  }
+  // process 父任务（含官方/个人截止）也跳转到进度页，与子任务保持关联
+  if (item.type === 'task' && item.task_type === 'process' && item.category) {
+    router.push({ path: `/progress/${item.category.toLowerCase()}/${item.id}` })
     return
   }
   router.push({ path: '/tasks', query: { focus: item.id } })
@@ -264,10 +277,29 @@ onBeforeUnmount(() => stopTaskSync?.())
 .month-title { min-width: 150px; text-align: center; font-size: 17px; font-weight: 750; }
 .calendar-legend { display: flex; align-items: center; gap: 16px; }
 .calendar-legend > span { display: inline-flex; align-items: center; gap: 6px; color: #838da0; font-size: 11px; }
-.calendar-legend i { width: 8px; height: 8px; border-radius: 3px; }
+.calendar-legend i { width: 12px; height: 12px; border-radius: 3px; }
 .legend-todo { background: #4e70e6; }
 .legend-process { background: #43a047; }
-.legend-deadline { background: #ee8b36; }
+.legend-personal { background: transparent; border: 1.5px dashed #43a047; }
+.legend-urgent { background: transparent; border: 1.5px solid #df4458; }
+.legend-deadline {
+  width: 21px; height: 21px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.5px solid #ee8b36;
+  position: relative;
+}
+.legend-deadline::after {
+  content: '!';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 13px;
+  font-weight: 800;
+  color: #ee8b36;
+  line-height: 1;
+  font-style: normal;
+}
 .weekday-grid, .month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .weekday-grid { border-bottom: 1px solid #edf0f5; background: #fafbfe; }
 .weekday-grid > div { padding: 11px 12px; color: #929bad; text-align: center; font-size: 10px; font-weight: 750; letter-spacing: .04em; }
@@ -298,18 +330,99 @@ onBeforeUnmount(() => stopTaskSync?.())
 }
 .schedule-pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* todo 任务：无填充，左侧竖线 */
+/* todo 任务：无填充，左侧圆头竖线 */
 .schedule-pill--todo {
   background: transparent; color: #46516a;
-  border-left: 3px solid var(--pill-dot);
-  border-radius: 0;
+  border-left: none;
+  padding: 5px 6px 5px 9px;
+  position: relative;
 }
 .schedule-pill--todo:hover { background: #f8f9fb; }
 .schedule-pill--todo i { display: none; }
+.schedule-pill--todo::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--pill-dot);
+}
 
-/* process 父任务：菱形 */
+/* process 父任务：圆框 + 感叹号 */
 .schedule-pill--process i {
-  border-radius: 1.5px; transform: rotate(45deg); width: 5px; height: 5px;
+  width: 12px; height: 12px; flex: 0 0 12px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.5px solid var(--pill-dot);
+  position: relative;
+  transform: none;
+}
+.schedule-pill--process i::after {
+  content: '!';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 7px;
+  font-weight: 800;
+  color: var(--pill-dot);
+  line-height: 1;
+  font-style: normal;
+}
+
+/* process 个人截止：虚线圆框 + 感叹号，保持同组色 */
+.schedule-pill--personal-process {
+  background: transparent;
+  color: var(--pill-text);
+  border: 1.5px dashed var(--pill-dot);
+  padding: 3.5px 4.5px; /* 补偿 border 高度，与普通 pill 对齐 */
+}
+.schedule-pill--personal-process:hover { background: color-mix(in srgb, var(--pill-dot) 6%, transparent); }
+.schedule-pill--personal-process i {
+  width: 12px; height: 12px; flex: 0 0 12px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.5px dashed var(--pill-dot);
+  position: relative;
+  transform: none;
+}
+.schedule-pill--personal-process i::after {
+  content: '!';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 7px;
+  font-weight: 800;
+  color: var(--pill-dot);
+  line-height: 1;
+  font-style: normal;
+}
+
+/* todo 个人截止：虚线圆头竖线 */
+.schedule-pill--personal-todo {
+  background: transparent; color: #46516a;
+  border-left: none;
+  padding: 5px 6px 5px 9px;
+  position: relative;
+}
+.schedule-pill--personal-todo:hover { background: #f8f9fb; }
+.schedule-pill--personal-todo i { display: none; }
+.schedule-pill--personal-todo::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--pill-dot) 0px,
+    var(--pill-dot) 3px,
+    transparent 3px,
+    transparent 6px
+  );
 }
 
 /* 子任务：小三角箭头 */
@@ -330,10 +443,26 @@ onBeforeUnmount(() => stopTaskSync?.())
   border-radius: 7px;
 }
 /* todo 的 urgent：竖线变红 */
-.schedule-pill--urgent.schedule-pill--todo {
-  border-left-color: #df4458;
+.schedule-pill--urgent.schedule-pill--todo,
+.schedule-pill--urgent.schedule-pill--personal-todo {
   box-shadow: none;
-  border-radius: 0;
+}
+.schedule-pill--urgent.schedule-pill--todo::before {
+  background: #df4458;
+}
+.schedule-pill--urgent.schedule-pill--personal-todo::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    #df4458 0px,
+    #df4458 3px,
+    transparent 3px,
+    transparent 6px
+  );
+}
+/* process 个人截止的 urgent：虚线变红 */
+.schedule-pill--urgent.schedule-pill--personal-process {
+  border-color: #df4458;
+  box-shadow: none;
 }
 .more-items { border: 0; padding: 2px 5px; color: #7b86a0; background: transparent; cursor: pointer; text-align: left; font-size: 9px; font-weight: 650; }
 .month-grid--loading { min-height: 500px; }
