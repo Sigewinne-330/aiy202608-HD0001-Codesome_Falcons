@@ -91,6 +91,35 @@
           <v-icon icon="mdi-creation-outline" color="white" size="15" />
         </v-avatar>
         <div class="agent-bubble" :class="{ 'agent-bubble--md': message.role === 'assistant' }">
+          <!-- 汇总提醒消息标识：metadata.source === 'reminder' -->
+          <div v-if="message.metadata?.source === 'reminder'" class="reminder-banner">
+            <v-icon size="14" color="primary">mdi-bell-ring-outline</v-icon>
+            <v-chip size="x-small" color="primary" variant="tonal">{{ $t('reminders.chatChip') }}</v-chip>
+            <v-spacer />
+            <v-btn
+              size="x-small"
+              variant="text"
+              color="primary"
+              @click="goReminderDetail(message.metadata)"
+            >
+              {{ $t('reminders.viewDetail') }}
+            </v-btn>
+          </div>
+          <!-- 任务级提醒消息标识：metadata.source === 'task_relative_reminder' -->
+          <div v-else-if="message.metadata?.source === 'task_relative_reminder'" class="reminder-banner">
+            <v-icon size="14" color="deep-purple">mdi-bell-outline</v-icon>
+            <v-chip size="x-small" color="deep-purple" variant="tonal">{{ $t('reminders.taskChatChip') }}</v-chip>
+            <v-spacer />
+            <v-btn
+              v-if="message.metadata?.task_id"
+              size="x-small"
+              variant="text"
+              color="deep-purple"
+              @click="goTaskReminderDetail(message.metadata)"
+            >
+              {{ $t('reminders.viewDetail') }}
+            </v-btn>
+          </div>
           <!-- 流式中且无内容：打字动画 -->
           <div v-if="message.streaming && !message.content" class="typing-dots"><i /><i /><i /></div>
           <!-- 用户消息：图片 + 文本 -->
@@ -107,6 +136,8 @@
             </div>
             <div v-if="message.content" class="agent-text">{{ message.content }}</div>
           </div>
+          <!-- 提醒正文：纯文本原样展示（汇总提醒与任务级提醒均已含完整文本） -->
+          <div v-else-if="message.metadata?.source === 'reminder' || message.metadata?.source === 'task_relative_reminder'" class="agent-text reminder-plain-text" v-text="message.content" />
           <!-- AI 消息：Markdown + LaTeX 实时渲染（key 切换强制结束重渲染） -->
           <div v-else class="agent-md"
             :key="'md-' + index + '-' + (message.streaming ? 1 : 0)"
@@ -263,11 +294,25 @@ const props = defineProps({
   context: { type: Object, default: null },
 })
 
-defineEmits(['close'])
+const emit = defineEmits(['close'])
 
 const { t } = useI18n()
 const { token } = useAuth()
 const router = useRouter()
+
+/** 提醒消息 → 跳转提醒中心精确定位并关闭抽屉（只用 digest_id，不读 metadata 内的 URL/任务 ID） */
+function goReminderDetail(metadata) {
+  if (!metadata?.digest_id) return
+  emit('close')
+  router.push({ path: '/reminders', query: { tab: 'history', digest: metadata.digest_id } })
+}
+
+/** 任务级提醒消息（task_relative_reminder）→ 跳转任务页高亮对应任务并关闭抽屉 */
+function goTaskReminderDetail(metadata) {
+  if (!metadata?.task_id) return
+  emit('close')
+  router.push({ path: '/tasks', query: { focus: metadata.task_id } })
+}
 const messages = ref([])
 const input = ref('')
 const loading = ref(false)
@@ -452,6 +497,7 @@ async function switchConversation(convId) {
         credits: tokensToCredits(item.token),
         creditsIsEstimate: false,
         images: item.images || null,
+        metadata: item.metadata || null,
       }))
       await scrollToBottom()
     }
@@ -598,6 +644,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.reminder-banner { display: flex; align-items: center; gap: 6px; padding-bottom: 8px; }
+.reminder-plain-text { white-space: pre-wrap; line-height: 1.7; }
 .agent-panel { height: 100%; display: flex; flex-direction: column; background: #fff; }
 .agent-panel__header { display: flex; align-items: center; justify-content: space-between; padding: 20px; border-bottom: 1px solid #edf0f6; }
 .agent-avatar { box-shadow: 0 8px 18px rgba(50, 101, 245, .25); }

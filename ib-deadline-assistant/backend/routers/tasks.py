@@ -4,7 +4,7 @@ from typing import List, Optional
 from datetime import date, datetime
 from database import get_db
 from models.app_user import AppUser as User
-from models.task_new import Task as TaskModel, TaskStatus, TaskType
+from models.task_new import Task as TaskModel, TaskCategory, TaskStatus, TaskType
 from models.sub_task import SubTask as SubTaskModel
 from schemas.task import (
     SubTaskCreate,
@@ -22,7 +22,15 @@ from services.ai_service import ai_service
 from services.reminder_preferences import normalize_task_reminder_offsets_minutes
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
-VALID_PROGRESS_CATEGORIES = {"IA", "EE", "TOK", "CAS"}
+
+
+def _normalize_category(value):
+    if value is None:
+        return None
+    try:
+        return TaskCategory(value).value
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="category must be IA, EE, TOK, or CAS") from exc
 
 
 def _build_task_tree(tasks: List[TaskModel]) -> List[TaskResponse]:
@@ -33,7 +41,7 @@ def _build_task_tree(tasks: List[TaskModel]) -> List[TaskResponse]:
 @router.get("", response_model=List[TaskResponse])
 def list_tasks(
     status: str = None,
-    category: str = None,
+    category: Optional[TaskCategory] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -41,7 +49,7 @@ def list_tasks(
     if status:
         query = query.filter(TaskModel.status == status)
     if category:
-        query = query.filter(TaskModel.category == category.upper())
+        query = query.filter(TaskModel.category == _normalize_category(category))
     tasks = query.order_by(TaskModel.deadline.asc(), TaskModel.priority.desc()).all()
 
     # 构建任务树（平铺的顶层任务）
@@ -108,9 +116,7 @@ def create_task(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
     if payload.get("category"):
-        payload["category"] = payload["category"].upper()
-        if payload["category"] not in VALID_PROGRESS_CATEGORIES:
-            raise HTTPException(status_code=400, detail="category must be IA, EE, TOK, or CAS")
+        payload["category"] = _normalize_category(payload["category"])
     task = TaskModel(
         user_id=current_user.id,
         task_type=TaskType(data.task_type),
@@ -188,9 +194,7 @@ def update_task(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
     if update_data.get("category"):
-        update_data["category"] = update_data["category"].upper()
-        if update_data["category"] not in VALID_PROGRESS_CATEGORIES:
-            raise HTTPException(status_code=400, detail="category must be IA, EE, TOK, or CAS")
+        update_data["category"] = _normalize_category(update_data["category"])
     for key, value in update_data.items():
         setattr(task, key, value)
 

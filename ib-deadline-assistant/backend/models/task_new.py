@@ -23,6 +23,20 @@ class TaskType(str, enum.Enum):
     process = "process"
 
 
+class TaskCategory(str, enum.Enum):
+    IA = "IA"
+    EE = "EE"
+    TOK = "TOK"
+    CAS = "CAS"
+
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            normalized = value.upper()
+            return cls.__members__.get(normalized)
+        return None
+
+
 class Task(Base):
     """任务表 —— 对应 MySQL 表 `task`（新表体系，已扩展字段）"""
     __tablename__ = "task"
@@ -37,6 +51,8 @@ class Task(Base):
     reminder_offsets_minutes = Column(JSON, nullable=True, default=None)
     description = Column(Text)
     subject = Column(String(100), default=None)
+    # Keep the physical column as VARCHAR for migration compatibility; values
+    # are validated through TaskCategory at the application boundary.
     category = Column(String(20), default=None, comment="IA | EE | TOK | CAS")
     priority = Column(String(20), default="medium")
     estimated_hours = Column(DECIMAL(5, 1), default=0)

@@ -99,12 +99,43 @@
                 <v-icon size="18" color="white">mdi-robot</v-icon>
               </v-avatar>
               <div class="assistant-message-wrapper" style="max-width: 92%;">
+                <!-- 汇总提醒消息标识：metadata.source === 'reminder' -->
+                <div v-if="msg.metadata?.source === 'reminder'" class="reminder-banner">
+                  <v-icon size="15" color="primary">mdi-bell-ring-outline</v-icon>
+                  <v-chip size="x-small" color="primary" variant="tonal">{{ $t('reminders.chatChip') }}</v-chip>
+                  <v-spacer />
+                  <v-btn
+                    size="x-small"
+                    variant="text"
+                    color="primary"
+                    @click="goReminderDetail(msg.metadata)"
+                  >
+                    {{ $t('reminders.viewDetail') }}
+                  </v-btn>
+                </div>
+                <!-- 任务级提醒消息标识：metadata.source === 'task_relative_reminder' -->
+                <div v-else-if="msg.metadata?.source === 'task_relative_reminder'" class="reminder-banner">
+                  <v-icon size="15" color="deep-purple">mdi-bell-outline</v-icon>
+                  <v-chip size="x-small" color="deep-purple" variant="tonal">{{ $t('reminders.taskChatChip') }}</v-chip>
+                  <v-spacer />
+                  <v-btn
+                    v-if="msg.metadata?.task_id"
+                    size="x-small"
+                    variant="text"
+                    color="deep-purple"
+                    @click="goTaskReminderDetail(msg.metadata)"
+                  >
+                    {{ $t('reminders.viewDetail') }}
+                  </v-btn>
+                </div>
                 <div class="assistant-message pa-3">
                   <!-- 流式传输中：空内容 loading -->
                   <div v-if="msg.streaming && !msg.content" class="d-flex align-center">
                     <v-progress-circular indeterminate size="16" width="2" color="primary" />
                     <span class="text-caption text-grey ml-2">{{ $t('chat.thinking') }}</span>
                   </div>
+                  <!-- 提醒正文：纯文本原样展示（汇总提醒与任务级提醒均已含完整文本） -->
+                  <div v-else-if="msg.metadata?.source === 'reminder' || msg.metadata?.source === 'task_relative_reminder'" class="text-body-2 reminder-plain-text" v-text="msg.content" />
                   <!-- 有内容时始终用 Markdown 渲染 -->
                   <div v-else class="text-body-2 message-content"
                     :key="'md-' + i + '-' + (msg.streaming ? 1 : 0)"
@@ -213,6 +244,7 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { compressImageFile } from '@/services/imageCompress'
 import MarkdownIt from 'markdown-it'
 import katex from 'katex'
@@ -220,6 +252,19 @@ import 'katex/dist/katex.min.css'
 import { authFetch } from '@/stores/auth'
 
 const { t } = useI18n()
+const router = useRouter()
+
+/** 提醒消息 → 跳转提醒中心精确定位（只用 digest_id，不读 metadata 内的 URL/任务 ID） */
+function goReminderDetail(metadata) {
+  if (!metadata?.digest_id) return
+  router.push({ path: '/reminders', query: { tab: 'history', digest: metadata.digest_id } })
+}
+
+/** 任务级提醒消息（task_relative_reminder）→ 跳转任务页并高亮对应任务 */
+function goTaskReminderDetail(metadata) {
+  if (!metadata?.task_id) return
+  router.push({ path: '/tasks', query: { focus: metadata.task_id } })
+}
 
 // 开启 html，允许 KaTeX 生成的 HTML 直接嵌入
 const md = new MarkdownIt({ html: true, breaks: true, linkify: true })
@@ -638,6 +683,7 @@ async function loadHistory(convId) {
       credits: tokensToCredits(m.token),
       creditsIsEstimate: false,
       images: m.images || null,
+      metadata: m.metadata || null,
     }))
     scrollToBottom()
   } catch {
@@ -672,6 +718,16 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.reminder-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 6px;
+}
+.reminder-plain-text {
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
 .conversation-drawer {
   background: #FAFBFF;
   border-right: 1px solid #EDF0F6;

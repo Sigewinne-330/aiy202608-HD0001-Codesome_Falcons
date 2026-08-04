@@ -90,6 +90,12 @@ const routes = [
     component: () => import('../views/BillingView.vue'),
     meta: { titleKey: 'billing.title', icon: 'mdi-wallet-outline', requiresAuth: true },
   },
+  {
+    path: '/reminders',
+    name: 'Reminders',
+    component: () => import('../views/RemindersView.vue'),
+    meta: { titleKey: 'reminders.title', icon: 'mdi-bell-outline', requiresAuth: true },
+  },
 ]
 
 const router = createRouter({

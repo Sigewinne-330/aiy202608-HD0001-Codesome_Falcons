@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import or_, cast, Date as SQLDate
 from database import get_db
 from models.app_user import AppUser as User
-from models.task_new import Task as TaskModel, TaskStatus, TaskType
+from models.task_new import Task as TaskModel, TaskCategory, TaskStatus, TaskType
 from models.sub_task import SubTask as SubTaskModel
 from models.deadline import Deadline as DeadlineModel, DeadlineStatus
 from services.auth import get_current_user
@@ -23,7 +23,7 @@ class CalendarDayItem(BaseModel):
     priority: str
     status: str
     subject: Optional[str] = None
-    category: Optional[str] = None
+    category: Optional[TaskCategory] = None
     parent_task_id: Optional[int] = None
     task_type: Optional[str] = None  # "todo" or "process", only for type="task"
     deadline_kind: Optional[str] = None  # "official" or "personal", only for type="task"

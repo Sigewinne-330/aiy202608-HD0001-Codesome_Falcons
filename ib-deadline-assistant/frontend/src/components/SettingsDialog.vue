@@ -115,26 +115,19 @@
             </div>
             <div class="setting-row mt-2">
               <div>
-                <div class="setting-label">{{ $t('settings.reminderLead') }}</div>
-                <div class="setting-help">{{ $t('settings.reminderLeadHelp') }}</div>
-              </div>
-              <v-select
-                v-model="settings.reminderLead"
-                :items="reminderOptions"
-                :item-title="reminderTitle"
-                item-value="value"
-                variant="outlined"
-                density="compact"
-                hide-details
-                class="compact-select"
-              />
-            </div>
-            <div class="setting-row">
-              <div>
                 <div class="setting-label">{{ $t('settings.autoSchedule') }}</div>
                 <div class="setting-help">{{ $t('settings.autoScheduleHelp') }}</div>
               </div>
               <v-switch v-model="settings.autoSchedule" color="primary" hide-details />
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">{{ $t('reminders.managedTitle') }}</div>
+                <div class="setting-help">{{ $t('reminders.managedHelp') }}</div>
+              </div>
+              <v-btn variant="outlined" prepend-icon="mdi-bell-outline" @click="goReminderSettings">
+                {{ $t('reminders.goSettings') }}
+              </v-btn>
             </div>
           </template>
 
@@ -188,7 +181,7 @@ import { setLocale, SUPPORTED_LOCALES, LOCALE_NAMES } from '@/i18n'
 const props = defineProps({ modelValue: Boolean })
 const emit = defineEmits(['update:modelValue', 'logout'])
 const { user, token } = useAuth()
-const { locale, t } = useI18n()
+const { locale } = useI18n()
 const router = useRouter()
 const balance = ref(0)
 const summary = ref({ today_spent: 0, month_spent: 0 })
@@ -213,6 +206,11 @@ async function loadBalance() {
 function goBilling() {
   dialogOpen.value = false
   router.push('/billing')
+}
+
+function goReminderSettings() {
+  dialogOpen.value = false
+  router.push({ path: '/reminders', query: { tab: 'settings' } })
 }
 
 const SettingsHeading = defineComponent({
@@ -242,7 +240,6 @@ const defaultSettings = {
   focusEnd: '20:00',
   quietStart: '23:00',
   quietEnd: '07:00',
-  reminderLead: 30,
   autoSchedule: true,
 }
 
@@ -259,6 +256,8 @@ function normalizeLanguage(value) {
 function loadSettings() {
   try {
     const stored = JSON.parse(localStorage.getItem(storageKey) || '{}')
+    // 显式忽略遗留的假提醒设置，确保后续保存不再写回
+    delete stored.reminderLead
     return {
       ...defaultSettings,
       ...stored,
@@ -294,17 +293,6 @@ const weekDays = [
   { label: '一', value: 1 }, { label: '二', value: 2 }, { label: '三', value: 3 },
   { label: '四', value: 4 }, { label: '五', value: 5 }, { label: '六', value: 6 }, { label: '日', value: 0 },
 ]
-
-const reminderOptions = [
-  { titleKey: 'settings.remind10m', value: 10 },
-  { titleKey: 'settings.remind30m', value: 30 },
-  { titleKey: 'settings.remind1h', value: 60 },
-  { titleKey: 'settings.remind1d', value: 1440 },
-]
-
-function reminderTitle(item) {
-  return item.titleKey ? t(item.titleKey) : item.title
-}
 
 const userInitial = computed(() => (user.value?.username || 'I').charAt(0).toUpperCase())
 

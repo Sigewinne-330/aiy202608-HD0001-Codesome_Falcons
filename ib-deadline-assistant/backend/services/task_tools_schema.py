@@ -1,6 +1,10 @@
 """Function-calling schemas for task and timeline management."""
 
 from typing import Any, Dict, List
+from models.task_new import TaskCategory
+
+
+CATEGORY_VALUES = [item.value for item in TaskCategory]
 
 
 TASK_TOOLS: List[Dict[str, Any]] = [
@@ -15,7 +19,7 @@ TASK_TOOLS: List[Dict[str, Any]] = [
                     "title": {"type": "string", "description": "Task or timeline title."},
                     "description": {"type": "string", "description": "Optional scheduling note; do not store academic content."},
                     "subject": {"type": "string", "description": "IA subject, EE subject, TOK track, or CAS record type."},
-                    "category": {"type": "string", "enum": ["IA", "EE", "TOK", "CAS"], "description": "IB progress category."},
+                    "category": {"type": "string", "enum": CATEGORY_VALUES, "description": "IB progress category."},
                     "deadline": {"type": "string", "description": "Final date in YYYY-MM-DD format."},
                     "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"]},
                     "estimated_hours": {"type": "number", "minimum": 0},
@@ -35,7 +39,7 @@ TASK_TOOLS: List[Dict[str, Any]] = [
                 "type": "object",
                 "properties": {
                     "status": {"type": "string", "description": "Optional task status filter."},
-                    "category": {"type": "string", "enum": ["IA", "EE", "TOK", "CAS"], "description": "Optional IB category filter."},
+                    "category": {"type": "string", "enum": CATEGORY_VALUES, "description": "Optional IB category filter."},
                     "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
                 },
                 "required": [],
@@ -54,7 +58,7 @@ TASK_TOOLS: List[Dict[str, Any]] = [
                     "title": {"type": "string"},
                     "description": {"type": "string"},
                     "subject": {"type": "string"},
-                    "category": {"type": "string", "enum": ["IA", "EE", "TOK", "CAS"]},
+                    "category": {"type": "string", "enum": CATEGORY_VALUES},
                     "deadline": {"type": "string", "description": "YYYY-MM-DD"},
                     "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"]},
                     "estimated_hours": {"type": "number", "minimum": 0},

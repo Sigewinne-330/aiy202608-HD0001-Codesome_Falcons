@@ -235,7 +235,7 @@ function stopAgentResize() {
   } catch { /* ignore */ }
 }
 
-const currentPageTitle = computed(() => route.meta.titleKey ? t(`nav.${route.meta.titleKey}`) : t('app.defaultTitle'))
+const currentPageTitle = computed(() => route.meta.titleKey ? t(route.meta.titleKey) : t('app.defaultTitle'))
 const userInitial = computed(() => (user.value?.username || 'I').charAt(0).toUpperCase())
 const activeReminder = computed(() => reminders.value[0] || null)
 

@@ -8,7 +8,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from datetime import date as date_type
 from sqlalchemy.orm import Session
-from models.task_new import Task, Priority, TaskStatus, TaskType
+from models.task_new import Task, Priority, TaskCategory, TaskStatus, TaskType
 from models.sub_task import SubTask
 from models.app_user import AppUser
 
@@ -78,8 +78,9 @@ def create_task(
     except ValueError:
         task_status = TaskStatus.todo
 
-    normalized_category = category.upper() if category else None
-    if normalized_category and normalized_category not in {"IA", "EE", "TOK", "CAS"}:
+    try:
+        normalized_category = TaskCategory(category).value if category else None
+    except ValueError:
         return {"error": "category must be IA, EE, TOK, or CAS"}
 
     task = Task(
@@ -131,7 +132,10 @@ def list_tasks(
             pass  # 非法 status 值则忽略过滤
 
     if category:
-        q = q.filter(Task.category == category.upper())
+        try:
+            q = q.filter(Task.category == TaskCategory(category).value)
+        except ValueError:
+            pass  # Preserve the existing behavior for invalid filters.
 
     tasks = (
         q.order_by(Task.deadline.asc(), Task.priority.desc())
@@ -169,8 +173,9 @@ def update_task(
     if subject is not None:
         task.subject = subject
     if category is not None:
-        normalized = category.upper()
-        if normalized not in {"IA", "EE", "TOK", "CAS", ""}:
+        try:
+            normalized = TaskCategory(category).value if category else ""
+        except ValueError:
             return {"error": "category must be IA, EE, TOK, or CAS"}
         task.category = normalized or None
     if deadline is not None:

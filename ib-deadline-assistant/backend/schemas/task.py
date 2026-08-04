@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 from datetime import date, datetime
 from typing import Optional, List
+from models.task_new import TaskCategory
 
 
 class TaskCreate(BaseModel):
@@ -8,7 +9,7 @@ class TaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
     subject: Optional[str] = None
-    category: Optional[str] = None
+    category: Optional[TaskCategory] = None
     priority: str = "medium"
     deadline: Optional[datetime] = None
     reminder_offsets_minutes: Optional[List[int]] = Field(default=None, max_length=10)
@@ -19,7 +20,7 @@ class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     subject: Optional[str] = None
-    category: Optional[str] = None
+    category: Optional[TaskCategory] = None
     priority: Optional[str] = None
     status: Optional[str] = None
     deadline: Optional[datetime] = None
@@ -35,7 +36,7 @@ class TaskResponse(BaseModel):
     title: str
     description: Optional[str] = None
     subject: Optional[str] = None
-    category: Optional[str] = None
+    category: Optional[TaskCategory] = None
     priority: str
     status: str
     # Keep the legacy date-only response shape for the current frontend.  The

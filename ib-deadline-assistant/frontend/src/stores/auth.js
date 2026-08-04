@@ -40,7 +40,7 @@ export async function authFetch(path, options = {}) {
   return fetch(path, { ...options, headers })
 }
 
-async function api(path, options = {}) {
+export async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...options.headers }
   let res
   try {

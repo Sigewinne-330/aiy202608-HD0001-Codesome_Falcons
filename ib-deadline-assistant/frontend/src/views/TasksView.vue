@@ -225,6 +225,35 @@
               <v-text-field v-model="form.deadline" :label="$t('tasks.deadline')" type="date" variant="outlined" density="comfortable" />
             </v-col>
           </v-row>
+          <v-row dense>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="form.deadline_time"
+                :label="$t('tasks.deadlineTime')"
+                type="time"
+                variant="outlined"
+                density="comfortable"
+                :disabled="!form.deadline"
+                :hint="$t('tasks.deadlineTimeHint')"
+                persistent-hint
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="form.reminder_mode"
+                :label="$t('tasks.reminderMode')"
+                :items="reminderModeOptions"
+                item-title="title"
+                item-value="value"
+                variant="outlined"
+                density="comfortable"
+                :disabled="!form.deadline"
+              />
+            </v-col>
+          </v-row>
+          <div v-if="form.deadline && form.reminder_mode === 'custom'" class="reminder-offsets-box">
+            <ReminderOffsetsEditor v-model="form.reminder_offsets" />
+          </div>
           <v-text-field v-model="form.estimated_hours" :label="$t('tasks.estimatedHours')" type="number" min="0" variant="outlined" density="comfortable" />
         </v-card-text>
         <v-card-actions class="px-6 pb-5">
@@ -308,6 +337,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { authFetch } from '@/stores/auth'
 import { notifyTasksChanged, onTasksChanged } from '@/services/taskSync'
+import ReminderOffsetsEditor from '@/components/ReminderOffsetsEditor.vue'
 
 const API_BASE = '/api'
 const router = useRouter()
@@ -340,10 +370,18 @@ const priorityOptions = [
 
 const emptyForm = () => ({
   task_type: 'todo', title: '', description: '', subject: '', priority: 'medium', deadline: '', estimated_hours: 0,
+  deadline_time: '', reminder_mode: 'inherit', reminder_offsets: [5, 1440],
 })
 const emptySubtaskForm = () => ({ title: '', description: '', priority: 'medium', deadline: '' })
 const form = ref(emptyForm())
 const subtaskForm = ref(emptySubtaskForm())
+
+// 任务级提醒三态：继承用户默认(null) / 自定义分钟数组 / 关闭([])
+const reminderModeOptions = computed(() => [
+  { title: t('tasks.reminderInherit'), value: 'inherit' },
+  { title: t('tasks.reminderCustom'), value: 'custom' },
+  { title: t('tasks.reminderOff'), value: 'off' },
+])
 
 const filteredTasks = computed(() => tasks.value.filter((task) => {
   const matchesType = typeFilter.value === 'all' || task.task_type === typeFilter.value
@@ -502,7 +540,19 @@ async function postTask(payload) {
 async function createTask() {
   saving.value = true
   try {
-    await postTask(form.value)
+    // 组装 payload：剥掉前端辅助字段；填了时分则拼成 datetime，否则沿用旧行为只传日期
+    const { deadline_time, reminder_mode, reminder_offsets, ...base } = form.value
+    const payload = { ...base }
+    if (payload.deadline && deadline_time) {
+      payload.deadline = `${payload.deadline}T${deadline_time}:00`
+    }
+    if (payload.deadline) {
+      if (reminder_mode === 'off') payload.reminder_offsets_minutes = []
+      else if (reminder_mode === 'custom') {
+        payload.reminder_offsets_minutes = [...reminder_offsets].sort((a, b) => a - b)
+      } else payload.reminder_offsets_minutes = null  // 继承用户默认
+    }
+    await postTask(payload)
     createDialog.value = false
     notifyTasksChanged()
   } catch (error) {
@@ -727,6 +777,7 @@ onBeforeUnmount(() => stopTaskSync?.())
 .type-selector button.active { color: #315fdc; border-color: #6685eb; background: #f2f5ff; box-shadow: inset 0 0 0 1px #6685eb; }
 .type-selector span, .type-selector strong { display: block; }
 .type-selector strong { font-size: 12px; }
+.reminder-offsets-box { margin: 4px 0 16px; padding: 12px; border: 1px dashed #d5dbe7; border-radius: 10px; }
 @media (max-width: 1050px) {
   .tasks-header, .tasks-header__side { align-items: flex-start; }
   .tasks-header { flex-direction: column; }
