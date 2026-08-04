@@ -25,6 +25,16 @@
         {{ errorMsg }}
       </v-alert>
 
+      <v-alert
+        v-if="infoMsg"
+        type="warning"
+        variant="tonal"
+        class="mb-4"
+      >
+        {{ infoMsg }}
+        <router-link to="/login" class="font-weight-bold ml-1">{{ $t('auth.loginNow') }}</router-link>
+      </v-alert>
+
       <v-alert v-if="successMsg" type="success" variant="tonal" class="mb-4">
         {{ successMsg }}
       </v-alert>
@@ -192,6 +202,7 @@ const confirmPassword = ref('')
 const showPwd = ref(false)
 const showConfirmPwd = ref(false)
 const errorMsg = ref('')
+const infoMsg = ref('')
 const successMsg = ref('')
 const sendingCode = ref(false)
 const registering = ref(false)
@@ -254,6 +265,7 @@ function resetVerificationState() {
 
 function resetEmail() {
   errorMsg.value = ''
+  infoMsg.value = ''
   resetVerificationState()
 }
 
@@ -270,10 +282,18 @@ function registrationErrorMessage(error) {
 async function sendCode() {
   sendingCode.value = true
   errorMsg.value = ''
+  infoMsg.value = ''
   successMsg.value = ''
   try {
     const targetEmail = normalizedEmail()
     const data = await requestVerificationCode(targetEmail)
+
+    if (data.already_registered) {
+      // 邮箱已注册：不进入验证码步骤，提示用户直接登录
+      infoMsg.value = data.message
+      return
+    }
+
     verificationToken.value = ''
     verificationEmail.value = targetEmail
     step.value = 'code'
