@@ -90,12 +90,11 @@
         v-for="item in selectedDayItems"
         :key="`${item.type}-${item.id}`"
         class="day-item"
+        :style="{ '--item-dot': itemDotColor(item) }"
       >
-        <v-icon
-          :icon="item.type === 'deadline' ? 'mdi-alert-circle' : 'mdi-checkbox-blank-circle'"
-          :color="item.type === 'deadline' ? 'warning' : 'primary'"
-          size="14"
-          class="mr-1"
+        <span
+          class="day-item-indicator"
+          :class="`day-item-indicator--${pillShape(item)}`"
         />
         <span class="text-body-2 day-item-title">{{ item.title }}</span>
         <v-chip
@@ -215,23 +214,17 @@ const calendarDays = computed(() => {
   return days
 })
 
-// 构建标记点（最多3个，task 蓝色 + deadline 橙色）
+// 构建标记点（最多3个，考虑 task/process/deadline 分组）
 function buildDots(dayData) {
   if (!dayData) return []
   const dots = []
-  if (dayData.tasks && dayData.tasks.length > 0) {
-    dots.push('task')
-  }
-  if (dayData.deadlines && dayData.deadlines.length > 0) {
-    dots.push('deadline')
-  }
-  // 如果某类型超过 1 个，加一个额外标记
-  if (dayData.tasks && dayData.tasks.length >= 3) {
-    dots.push('task')
-  }
-  if (dayData.deadlines && dayData.deadlines.length >= 3) {
-    dots.push('deadline')
-  }
+  const tasks = dayData.tasks || []
+  const deadlines = dayData.deadlines || []
+  const hasTodo = tasks.some(t => t.task_type === 'todo' && t.type === 'task')
+  const hasProcess = tasks.some(t => t.task_type === 'process' || t.type === 'subtask')
+  if (hasTodo) dots.push('todo')
+  if (hasProcess) dots.push('process')
+  if (deadlines.length > 0) dots.push('deadline')
   return dots.slice(0, 3)
 }
 
@@ -319,6 +312,33 @@ function formatDetailDate(dateStr) {
 function priorityColor(p) {
   const map = { urgent: '#FF7043', high: '#EF5350', medium: '#FFA726', low: '#66BB6A' }
   return map[p] || '#9E9E9E'
+}
+
+const PROCESS_PALETTE = [
+  { dot: '#43a047' },
+  { dot: '#8e24aa' },
+  { dot: '#fb8c00' },
+  { dot: '#e91e63' },
+  { dot: '#00897b' },
+  { dot: '#5e35b1' },
+  { dot: '#f9a825' },
+  { dot: '#1565c0' },
+]
+
+function itemDotColor(item) {
+  if (item.type === 'deadline') return '#ee8b36'
+  if (item.type === 'subtask' || item.task_type === 'process') {
+    const groupId = item.type === 'subtask' ? item.parent_task_id : item.id
+    return PROCESS_PALETTE[groupId % PROCESS_PALETTE.length].dot
+  }
+  return '#4e70e6'
+}
+
+function pillShape(item) {
+  if (item.type === 'deadline') return 'deadline'
+  if (item.type === 'subtask') return 'subtask'
+  if (item.task_type === 'process') return 'process'
+  return 'todo'
 }
 
 function priorityLabel(p) {
@@ -438,8 +458,12 @@ onMounted(() => {
   display: inline-block;
 }
 
-.day-dot--task {
-  background: #1565C0;
+.day-dot--todo {
+  background: #4e70e6;
+}
+
+.day-dot--process {
+  background: #43a047;
 }
 
 .day-dot--deadline {
@@ -481,5 +505,33 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 条目前图标 */
+.day-item-indicator {
+  flex: 0 0 auto;
+  margin-right: 8px;
+  display: inline-block;
+}
+.day-item-indicator--todo {
+  width: 0; height: 14px;
+  border-left: 2.5px solid var(--item-dot);
+}
+.day-item-indicator--process {
+  width: 7px; height: 7px;
+  border-radius: 1.5px;
+  transform: rotate(45deg);
+  background: var(--item-dot);
+}
+.day-item-indicator--subtask {
+  width: 0; height: 0;
+  border-left: 5px solid var(--item-dot);
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+}
+.day-item-indicator--deadline {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--item-dot);
 }
 </style>

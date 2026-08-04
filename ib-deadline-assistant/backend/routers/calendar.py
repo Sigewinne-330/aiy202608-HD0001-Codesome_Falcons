@@ -5,7 +5,6 @@ from datetime import date, timedelta
 from calendar import monthrange
 from pydantic import BaseModel
 from database import get_db
-from sqlalchemy import exists, and_
 from models.app_user import AppUser as User
 from models.task_new import Task as TaskModel, TaskStatus, TaskType
 from models.sub_task import SubTask as SubTaskModel
@@ -19,12 +18,13 @@ class CalendarDayItem(BaseModel):
     """日历中某一天的任务/截止日期条目"""
     id: int
     title: str
-    type: str  # "task" or "deadline"
+    type: str  # "task" or "deadline" or "subtask"
     priority: str
     status: str
     subject: Optional[str] = None
     category: Optional[str] = None
     parent_task_id: Optional[int] = None
+    task_type: Optional[str] = None  # "todo" or "process", only for type="task"
 
     class Config:
         from_attributes = True
@@ -69,15 +69,9 @@ def get_calendar_data(
     start_date = first_day - timedelta(days=first_day.weekday())  # 扩展到周日
     end_date = last_day + timedelta(days=(6 - last_day.weekday()))  # 扩展到周六
 
-    # 只有无 sub_task 子任务的顶层任务进入日历；有子任务的主任务由子任务代表。
-    has_sub_task = exists().where(
-        and_(
-            SubTaskModel.task_id == TaskModel.id,
-        )
-    )
+    # 查询该时间段内的所有任务（包括 process 父任务）
     tasks = db.query(TaskModel).filter(
         TaskModel.user_id == current_user.id,
-        ~has_sub_task,
         TaskModel.deadline >= start_date,
         TaskModel.deadline <= end_date,
     ).order_by(TaskModel.deadline.asc(), TaskModel.priority.desc()).all()
@@ -104,6 +98,7 @@ def get_calendar_data(
                 status=t.status or "todo",
                 subject=t.subject,
                 category=t.category,
+                task_type=t.task_type.value if t.task_type else "todo",
             )
             day_map[date_key]["tasks"].append(item)
             day_map[date_key]["count"] += 1

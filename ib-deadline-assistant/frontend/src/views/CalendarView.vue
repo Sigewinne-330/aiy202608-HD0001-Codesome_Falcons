@@ -20,7 +20,8 @@
           <v-btn icon="mdi-chevron-right" variant="text" size="small" :aria-label="$t('calendar.nextMonth')" @click="changeMonth(1)" />
         </div>
         <div class="calendar-legend">
-          <span><i class="legend-task" />{{ $t('calendar.legendTask') }}</span>
+          <span><i class="legend-todo" />{{ $t('calendar.legendTodo') }}</span>
+          <span><i class="legend-process" />{{ $t('calendar.legendProcess') }}</span>
           <span><i class="legend-deadline" />{{ $t('calendar.legendDeadline') }}</span>
           <v-btn variant="outlined" size="small" prepend-icon="mdi-calendar-today-outline" @click="goToday">{{ $t('calendar.today') }}</v-btn>
         </div>
@@ -53,7 +54,8 @@
               :key="`${item.type}-${item.id}`"
               type="button"
               class="schedule-pill"
-              :class="[`schedule-pill--${item.type}`, `schedule-pill--${item.priority}`]"
+              :class="[`schedule-pill--${pillShape(item)}`, { 'schedule-pill--urgent': item.priority === 'urgent' }]"
+              :style="{ '--pill-bg': pillColor(item).bg, '--pill-dot': pillColor(item).dot, '--pill-text': pillColor(item).text }"
               :title="item.title"
               @click="openItem(item)"
             >
@@ -148,6 +150,34 @@ function priorityWeight(priority) {
   return { urgent: 4, high: 3, medium: 2, low: 1 }[priority] || 0
 }
 
+// Process 任务调色板（按 parent_task_id 分组循环）
+const PROCESS_PALETTE = [
+  { bg: '#e8f5e9', dot: '#43a047', text: '#2e5a30' },
+  { bg: '#f3e5f5', dot: '#8e24aa', text: '#5c2d6e' },
+  { bg: '#fff3e0', dot: '#fb8c00', text: '#6b3a00' },
+  { bg: '#fce4ec', dot: '#e91e63', text: '#6e1b3a' },
+  { bg: '#e0f2f1', dot: '#00897b', text: '#004d40' },
+  { bg: '#ede7f6', dot: '#5e35b1', text: '#311b6e' },
+  { bg: '#fff8e1', dot: '#f9a825', text: '#5c4a00' },
+  { bg: '#e3f2fd', dot: '#1565c0', text: '#0d3b66' },
+]
+
+function pillColor(item) {
+  if (item.type === 'deadline') return { bg: '#fff5e9', dot: '#ee8b36', text: '#84501e' }
+  if (item.type === 'subtask' || item.task_type === 'process') {
+    const groupId = item.type === 'subtask' ? item.parent_task_id : item.id
+    return PROCESS_PALETTE[groupId % PROCESS_PALETTE.length]
+  }
+  return { bg: '#f0f3ff', dot: '#4e70e6', text: '#3b4a67' }
+}
+
+function pillShape(item) {
+  if (item.type === 'deadline') return 'deadline'
+  if (item.type === 'subtask') return 'subtask'
+  if (item.task_type === 'process') return 'process'
+  return 'todo'
+}
+
 function authHeaders() {
   return token.value ? { Authorization: `Bearer ${token.value}` } : {}
 }
@@ -235,7 +265,8 @@ onBeforeUnmount(() => stopTaskSync?.())
 .calendar-legend { display: flex; align-items: center; gap: 16px; }
 .calendar-legend > span { display: inline-flex; align-items: center; gap: 6px; color: #838da0; font-size: 11px; }
 .calendar-legend i { width: 8px; height: 8px; border-radius: 3px; }
-.legend-task { background: #4d70e8; }
+.legend-todo { background: #4e70e6; }
+.legend-process { background: #43a047; }
 .legend-deadline { background: #ee8b36; }
 .weekday-grid, .month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .weekday-grid { border-bottom: 1px solid #edf0f5; background: #fafbfe; }
@@ -254,14 +285,56 @@ onBeforeUnmount(() => stopTaskSync?.())
 .today-label { color: #4169e8; font-size: 9px; font-weight: 750; }
 .item-count { min-width: 18px; height: 18px; display: grid; place-items: center; padding: 0 5px; border-radius: 999px; color: #778196; background: #f0f2f7; font-size: 9px; }
 .calendar-day__items { display: flex; flex-direction: column; gap: 4px; }
-.schedule-pill { width: 100%; display: flex; align-items: center; gap: 6px; border: 0; padding: 5px 6px; border-radius: 7px; color: #3b4a67; background: #f0f3ff; cursor: pointer; text-align: left; font-size: 10px; }
+/* --- Schedule pills --- */
+.schedule-pill {
+  width: 100%; display: flex; align-items: center; gap: 6px; border: 0; padding: 5px 6px;
+  border-radius: 7px; cursor: pointer; text-align: left; font-size: 10px;
+  background: var(--pill-bg); color: var(--pill-text);
+}
 .schedule-pill:hover { filter: brightness(.97); }
-.schedule-pill i { width: 5px; height: 5px; flex: 0 0 5px; border-radius: 50%; background: #4e70e6; }
+.schedule-pill i {
+  width: 5px; height: 5px; flex: 0 0 5px; border-radius: 50%;
+  background: var(--pill-dot);
+}
 .schedule-pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.schedule-pill--deadline { color: #84501e; background: #fff5e9; }
-.schedule-pill--deadline i { background: #ee8b36; }
-.schedule-pill--urgent { color: #a63542; background: #fff0f1; }
-.schedule-pill--urgent i { background: #df4458; }
+
+/* todo 任务：无填充，左侧竖线 */
+.schedule-pill--todo {
+  background: transparent; color: #46516a;
+  border-left: 3px solid var(--pill-dot);
+  border-radius: 0;
+}
+.schedule-pill--todo:hover { background: #f8f9fb; }
+.schedule-pill--todo i { display: none; }
+
+/* process 父任务：菱形 */
+.schedule-pill--process i {
+  border-radius: 1.5px; transform: rotate(45deg); width: 5px; height: 5px;
+}
+
+/* 子任务：小三角箭头 */
+.schedule-pill--subtask i {
+  border-radius: 0; width: 0; height: 0;
+  background: transparent !important;
+  border-left: 4px solid var(--pill-dot);
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+}
+
+/* deadline */
+.schedule-pill--deadline i { background: var(--pill-dot); }
+
+/* urgent：保留原色，红色描边 */
+.schedule-pill--urgent {
+  box-shadow: inset 0 0 0 1.5px #df4458;
+  border-radius: 7px;
+}
+/* todo 的 urgent：竖线变红 */
+.schedule-pill--urgent.schedule-pill--todo {
+  border-left-color: #df4458;
+  box-shadow: none;
+  border-radius: 0;
+}
 .more-items { border: 0; padding: 2px 5px; color: #7b86a0; background: transparent; cursor: pointer; text-align: left; font-size: 9px; font-weight: 650; }
 .month-grid--loading { min-height: 500px; }
 .calendar-loading { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #7e889d; background: rgba(255,255,255,.78); backdrop-filter: blur(3px); font-size: 12px; }
