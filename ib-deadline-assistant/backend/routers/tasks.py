@@ -19,6 +19,7 @@ from schemas.task import (
 )
 from services.auth import get_current_user
 from services.ai_service import ai_service
+from services.reminder_preferences import normalize_task_reminder_offsets_minutes
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 VALID_PROGRESS_CATEGORIES = {"IA", "EE", "TOK", "CAS"}
@@ -99,6 +100,13 @@ def create_task(
         raise HTTPException(status_code=400, detail="任务类型必须是 todo 或 process")
 
     payload = data.model_dump(exclude={"task_type"})
+    if "reminder_offsets_minutes" in payload and payload["reminder_offsets_minutes"] is not None:
+        try:
+            payload["reminder_offsets_minutes"] = list(
+                normalize_task_reminder_offsets_minutes(payload["reminder_offsets_minutes"])
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     if payload.get("category"):
         payload["category"] = payload["category"].upper()
         if payload["category"] not in VALID_PROGRESS_CATEGORIES:
@@ -170,6 +178,15 @@ def update_task(
         raise HTTPException(status_code=404, detail="任务不存在")
 
     update_data = data.model_dump(exclude_unset=True)
+    if "reminder_offsets_minutes" in update_data and update_data["reminder_offsets_minutes"] is not None:
+        try:
+            update_data["reminder_offsets_minutes"] = list(
+                normalize_task_reminder_offsets_minutes(
+                    update_data["reminder_offsets_minutes"]
+                )
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     if update_data.get("category"):
         update_data["category"] = update_data["category"].upper()
         if update_data["category"] not in VALID_PROGRESS_CATEGORIES:

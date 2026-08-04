@@ -96,6 +96,12 @@ class ReminderPreference(Base):
     language = Column(String(35), nullable=False, default="zh-CN")
     timezone = Column(String(64), nullable=False, default="Asia/Shanghai")
     cadence_offsets = Column(JSON, nullable=False, default=lambda: [2, 1, 0, -1, -3, -7])
+    daily_dispatch_time = Column(
+        String(5), nullable=False, default="09:00", server_default=text("'09:00'")
+    )
+    default_task_reminder_offsets_minutes = Column(
+        JSON, nullable=True, default=lambda: [5, 1440]
+    )
     email_enabled = Column(Boolean, nullable=False, default=True, server_default=text("1"))
     chat_enabled = Column(Boolean, nullable=False, default=True, server_default=text("1"))
     role_card_id = Column(
@@ -207,6 +213,62 @@ class ReminderDelivery(Base):
     updated_at = Column(
         DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
     )
+
+
+class TaskReminderState(str, enum.Enum):
+    claimed = "claimed"
+    cancelled = "cancelled"
+
+
+class TaskReminderNotification(Base):
+    """Durable identity for one task deadline/offset notification."""
+
+    __tablename__ = "task_reminder_notifications"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "task_id", "deadline_at", "offset_minutes",
+            name="uq_task_reminder_notification_identity",
+        ),
+        Index("ix_task_reminder_notification_scheduled", "state", "scheduled_at"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(Integer, ForeignKey("task.id", ondelete="CASCADE"), nullable=False)
+    deadline_at = Column(DateTime, nullable=False)
+    offset_minutes = Column(Integer, nullable=False)
+    scheduled_at = Column(DateTime, nullable=False)
+    subject = Column(String(255), nullable=False)
+    body_text = Column(Text, nullable=False)
+    state = Column(Enum(TaskReminderState), nullable=False, default=TaskReminderState.claimed)
+    cancellation_reason = Column(String(80), nullable=True)
+    chat_message_id = Column(Integer, ForeignKey("chat_message.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class TaskReminderDelivery(Base):
+    __tablename__ = "task_reminder_deliveries"
+    __table_args__ = (
+        UniqueConstraint("notification_id", "channel", name="uq_task_reminder_delivery_channel"),
+        Index("ix_task_reminder_delivery_retry", "status", "next_attempt_at"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    notification_id = Column(
+        Integer, ForeignKey("task_reminder_notifications.id", ondelete="CASCADE"), nullable=False
+    )
+    channel = Column(String(40), nullable=False)
+    status = Column(Enum(ReminderDeliveryStatus), nullable=False, default=ReminderDeliveryStatus.pending)
+    attempt_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    attempt_token = Column(String(64), nullable=True)
+    attempt_started_at = Column(DateTime, nullable=True)
+    next_attempt_at = Column(DateTime, nullable=True)
+    last_error_code = Column(String(80), nullable=True)
+    provider_message_id = Column(String(255), nullable=True)
+    delivered_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 
 
 class LLMUsageRecord(Base):

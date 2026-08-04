@@ -14,6 +14,8 @@ REQUIRED_TABLES = {
     "reminder_occurrences",
     "reminder_digests",
     "reminder_deliveries",
+    "task_reminder_notifications",
+    "task_reminder_deliveries",
     "llm_usage_records",
 }
 

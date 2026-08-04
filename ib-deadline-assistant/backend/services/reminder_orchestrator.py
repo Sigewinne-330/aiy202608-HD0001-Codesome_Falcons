@@ -11,6 +11,9 @@ from models.reminder import (
     ReminderDigest,
     ReminderDigestState,
     ReminderGenerationMode,
+    TaskReminderDelivery,
+    TaskReminderNotification,
+    TaskReminderState,
 )
 from models.user import User
 from services.email_service import EmailTransport, get_email_transport
@@ -25,14 +28,21 @@ from services.reminder_channels import (
     ChatReminderChannel,
     EmailReminderChannel,
 )
-from services.reminder_delivery import deliver_digest_channels, deliver_one_channel
+from services.reminder_delivery import (
+    deliver_digest_channels,
+    deliver_one_channel,
+    deliver_task_reminder_channels,
+    deliver_task_reminder_one_channel,
+)
 from services.reminder_preferences import resolve_preferences
 from services.reminder_scheduler import (
     claim_daily_digest,
+    claim_due_task_relative_notifications,
     finalize_digest_snapshot,
     list_reminder_candidates,
     local_run_context,
     revalidate_digest_snapshot,
+    revalidate_task_relative_notification,
 )
 
 
@@ -119,10 +129,85 @@ class ReminderOrchestrator:
                 delivered += retried.status == ReminderDeliveryStatus.delivered
                 failed += retried.status == ReminderDeliveryStatus.failed
 
+            relative_retry_rows = (
+                db.query(TaskReminderDelivery)
+                .filter(
+                    TaskReminderDelivery.status.in_(
+                        [ReminderDeliveryStatus.retryable, ReminderDeliveryStatus.attempting]
+                    )
+                )
+                .order_by(TaskReminderDelivery.id.asc())
+                .all()
+            )
+            retry_now = now.astimezone(timezone.utc).replace(tzinfo=None)
+            for delivery_row in relative_retry_rows:
+                notification = (
+                    db.query(TaskReminderNotification)
+                    .filter(TaskReminderNotification.id == delivery_row.notification_id)
+                    .first()
+                )
+                if not notification or not revalidate_task_relative_notification(db, notification):
+                    continue
+                retry_user = db.query(User).filter(User.id == notification.user_id).first()
+                if not retry_user:
+                    continue
+                retry_preferences = resolve_preferences(db, retry_user.id)
+                enabled = (
+                    retry_preferences.chat_enabled
+                    if delivery_row.channel == "chat"
+                    else retry_preferences.email_enabled
+                )
+                retried = deliver_task_reminder_one_channel(
+                    db,
+                    notification=notification,
+                    user=retry_user,
+                    channel_name=delivery_row.channel,
+                    enabled=enabled,
+                    registry=self.registry,
+                    now=retry_now,
+                )
+                delivered += retried.status == ReminderDeliveryStatus.delivered
+                failed += retried.status == ReminderDeliveryStatus.failed
+
         for user in users:
             preferences = resolve_preferences(db, user.id)
-            context = local_run_context(now, preferences.timezone)
-            if not preferences.enabled or not context.due:
+            context = local_run_context(
+                now, preferences.timezone, preferences.daily_dispatch_time
+            )
+            if not preferences.enabled:
+                continue
+
+            if deliver:
+                relative_notifications = claim_due_task_relative_notifications(
+                    db,
+                    user_id=user.id,
+                    preferences=preferences,
+                    now_utc=now,
+                    lookback_seconds=max(
+                        120, settings.REMINDER_WORKER_INTERVAL_SECONDS + 30
+                    ),
+                )
+                for notification in relative_notifications:
+                    if not revalidate_task_relative_notification(db, notification):
+                        continue
+                    outcomes = deliver_task_reminder_channels(
+                        db,
+                        notification=notification,
+                        user=user,
+                        preferences=preferences,
+                        registry=self.registry,
+                        now=now.astimezone(timezone.utc).replace(tzinfo=None),
+                    )
+                    delivered += sum(
+                        row.status == ReminderDeliveryStatus.delivered
+                        for row in outcomes.values()
+                    )
+                    failed += sum(
+                        row.status == ReminderDeliveryStatus.failed
+                        for row in outcomes.values()
+                    )
+
+            if not context.due:
                 continue
             due_users += 1
 

@@ -1,5 +1,5 @@
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -13,13 +13,20 @@ from models.reminder import (
     ReminderDigestState,
     ReminderOccurrence,
     ReminderOccurrenceState,
+    TaskReminderNotification,
+    TaskReminderState,
 )
 from models.sub_task import SubTask
 from models.task_new import Task, TaskType
-from services.reminder_preferences import ResolvedReminderPreferences
+from services.reminder_preferences import (
+    DEFAULT_DAILY_DISPATCH_TIME,
+    ResolvedReminderPreferences,
+    normalize_daily_dispatch_time,
+    normalize_task_reminder_offsets_minutes,
+)
 
 
-REMINDER_LOCAL_TIME = time(hour=9, minute=0)
+REMINDER_LOCAL_TIME = time(hour=9, minute=0)  # legacy-compatible export
 
 
 @dataclass(frozen=True)
@@ -65,15 +72,21 @@ class ClaimedDigest:
     created: bool
 
 
-def local_run_context(now_utc: datetime, timezone_name: str) -> LocalRunContext:
+def local_run_context(
+    now_utc: datetime,
+    timezone_name: str,
+    dispatch_time: str = DEFAULT_DAILY_DISPATCH_TIME,
+) -> LocalRunContext:
     if now_utc.tzinfo is None:
         now_utc = now_utc.replace(tzinfo=timezone.utc)
     local_now = now_utc.astimezone(ZoneInfo(timezone_name))
+    parsed = normalize_daily_dispatch_time(dispatch_time)
+    hour, minute = (int(part) for part in parsed.split(":"))
     return LocalRunContext(
         timezone=timezone_name,
         local_now=local_now,
         local_date=local_now.date(),
-        due=local_now.timetz().replace(tzinfo=None) >= REMINDER_LOCAL_TIME,
+        due=local_now.timetz().replace(tzinfo=None) >= time(hour=hour, minute=minute),
     )
 
 
@@ -223,7 +236,9 @@ def claim_daily_digest(
     now_utc: datetime,
     preferences: ResolvedReminderPreferences,
 ) -> Optional[ClaimedDigest]:
-    context = local_run_context(now_utc, preferences.timezone)
+    context = local_run_context(
+        now_utc, preferences.timezone, preferences.daily_dispatch_time
+    )
     if not preferences.enabled or not context.due:
         return None
 
@@ -400,6 +415,164 @@ def finalize_digest_snapshot(db: Session, claimed: ClaimedDigest) -> list[dict]:
         claimed.digest.state = ReminderDigestState.cancelled
     db.commit()
     return snapshots
+
+
+def _task_relative_content(task: Task, offset_minutes: int, language: str) -> tuple[str, str]:
+    due_text = task.deadline.strftime("%Y-%m-%d %H:%M")
+    if language.lower().startswith("zh"):
+        return (
+            f"任务提醒：{task.title}",
+            f"“{task.title}”将在 {due_text} 截止（提前 {offset_minutes} 分钟提醒）。请打开 AI 聊天查看详情。",
+        )
+    return (
+        f"Task reminder: {task.title}",
+        f'“{task.title}” is due at {due_text} (reminder {offset_minutes} minutes before). Open AI chat for details.',
+    )
+
+
+def claim_due_task_relative_notifications(
+    db: Session,
+    *,
+    user_id: int,
+    preferences: ResolvedReminderPreferences,
+    now_utc: datetime,
+    lookback_seconds: int = 120,
+) -> list[TaskReminderNotification]:
+    """Claim task-relative notifications due in this worker interval.
+
+    Task deadlines are stored as the owner's local wall-clock values.  Their
+    identity includes the exact deadline, so a reschedule creates a distinct
+    future notification while old rows are cancelled during final recheck.
+    """
+    if not preferences.enabled:
+        return []
+    current = now_utc.astimezone(timezone.utc).replace(tzinfo=None)
+    earliest = current - timedelta(seconds=max(1, lookback_seconds))
+    user_zone = ZoneInfo(preferences.timezone)
+    tasks = (
+        db.query(Task)
+        .filter(
+            Task.user_id == user_id,
+            Task.task_type == TaskType.todo,
+            Task.deadline.isnot(None),
+            Task.status != "done",
+        )
+        .order_by(Task.deadline.asc(), Task.id.asc())
+        .all()
+    )
+    claimed: list[TaskReminderNotification] = []
+    for task in tasks:
+        override = task.reminder_offsets_minutes
+        offsets = (
+            preferences.default_task_reminder_offsets_minutes
+            if override is None
+            else normalize_task_reminder_offsets_minutes(override)
+        )
+        if not offsets:
+            continue
+        local_deadline = task.deadline
+        if local_deadline.tzinfo is None:
+            local_deadline = local_deadline.replace(tzinfo=user_zone)
+        deadline_utc = local_deadline.astimezone(timezone.utc).replace(tzinfo=None)
+        for offset in offsets:
+            scheduled_at = deadline_utc - timedelta(minutes=offset)
+            if not earliest <= scheduled_at <= current:
+                continue
+            existing = (
+                db.query(TaskReminderNotification)
+                .filter(
+                    TaskReminderNotification.user_id == user_id,
+                    TaskReminderNotification.task_id == task.id,
+                    TaskReminderNotification.deadline_at == deadline_utc,
+                    TaskReminderNotification.offset_minutes == offset,
+                )
+                .first()
+            )
+            if existing:
+                if existing.state == TaskReminderState.claimed:
+                    claimed.append(existing)
+                continue
+            subject, body = _task_relative_content(task, offset, preferences.language)
+            notification = TaskReminderNotification(
+                user_id=user_id,
+                task_id=task.id,
+                deadline_at=deadline_utc,
+                offset_minutes=offset,
+                scheduled_at=scheduled_at,
+                subject=subject,
+                body_text=body,
+                state=TaskReminderState.claimed,
+            )
+            db.add(notification)
+            try:
+                db.commit()
+                db.refresh(notification)
+                claimed.append(notification)
+            except IntegrityError:
+                db.rollback()
+                winner = (
+                    db.query(TaskReminderNotification)
+                    .filter(
+                        TaskReminderNotification.user_id == user_id,
+                        TaskReminderNotification.task_id == task.id,
+                        TaskReminderNotification.deadline_at == deadline_utc,
+                        TaskReminderNotification.offset_minutes == offset,
+                    )
+                    .one()
+                )
+                if winner.state == TaskReminderState.claimed:
+                    claimed.append(winner)
+    return claimed
+
+
+def revalidate_task_relative_notification(
+    db: Session, notification: TaskReminderNotification
+) -> bool:
+    task = (
+        db.query(Task)
+        .filter(Task.id == notification.task_id, Task.user_id == notification.user_id)
+        .first()
+    )
+    if not task or task.status == "done" or task.task_type != TaskType.todo or not task.deadline:
+        notification.state = TaskReminderState.cancelled
+        notification.cancellation_reason = "missing_completed_or_ineligible"
+        db.commit()
+        return False
+    user_zone = ZoneInfo(
+        resolve_timezone_for_relative_notification(db, notification.user_id)
+    )
+    local_deadline = task.deadline
+    if local_deadline.tzinfo is None:
+        local_deadline = local_deadline.replace(tzinfo=user_zone)
+    current_deadline = local_deadline.astimezone(timezone.utc).replace(tzinfo=None)
+    if current_deadline != notification.deadline_at:
+        notification.state = TaskReminderState.cancelled
+        notification.cancellation_reason = "rescheduled"
+        db.commit()
+        return False
+    override = task.reminder_offsets_minutes
+    preferences = resolve_preferences_for_relative_notification(db, notification.user_id)
+    offsets = preferences if override is None else normalize_task_reminder_offsets_minutes(override)
+    if notification.offset_minutes not in offsets:
+        notification.state = TaskReminderState.cancelled
+        notification.cancellation_reason = "offset_disabled"
+        db.commit()
+        return False
+    return True
+
+
+def resolve_timezone_for_relative_notification(db: Session, user_id: int) -> str:
+    # Kept as a tiny helper so final recheck reads fresh preferences without a
+    # scheduler/database import cycle.
+    from services.reminder_preferences import resolve_preferences
+
+    return resolve_preferences(db, user_id).timezone
+
+
+def resolve_preferences_for_relative_notification(db: Session, user_id: int) -> tuple[int, ...]:
+    from services.reminder_preferences import resolve_preferences
+
+    return resolve_preferences(db, user_id).default_task_reminder_offsets_minutes
 
 
 def revalidate_digest_snapshot(db: Session, digest: ReminderDigest) -> list[dict]:

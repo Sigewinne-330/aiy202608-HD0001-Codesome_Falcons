@@ -97,6 +97,8 @@ class ReminderApiTests(unittest.TestCase):
         default = self.client.get("/api/reminders/preferences")
         self.assertEqual(200, default.status_code, default.text)
         self.assertEqual("Asia/Shanghai", default.json()["timezone"])
+        self.assertEqual("09:00", default.json()["daily_dispatch_time"])
+        self.assertEqual([5, 1440], default.json()["default_task_reminder_offsets_minutes"])
         self.assertEqual("friendly-warm-guy", default.json()["role_card"]["slug"])
 
         cards = self.client.get("/api/reminder-role-cards").json()
@@ -114,6 +116,25 @@ class ReminderApiTests(unittest.TestCase):
         self.assertEqual("en-US", updated.json()["language"])
         self.assertEqual("tech-geek", updated.json()["role_card"]["slug"])
         self.assertFalse(updated.json()["email_enabled"])
+
+        timed = self.client.put(
+            "/api/reminders/preferences",
+            json={
+                "daily_dispatch_time": "18:30",
+                "default_task_reminder_offsets_minutes": [10, 1440],
+            },
+        )
+        self.assertEqual(200, timed.status_code, timed.text)
+        self.assertEqual("18:30", timed.json()["daily_dispatch_time"])
+        self.assertEqual([10, 1440], timed.json()["default_task_reminder_offsets_minutes"])
+        invalid_time = self.client.put(
+            "/api/reminders/preferences", json={"daily_dispatch_time": "9:00"}
+        )
+        self.assertEqual(422, invalid_time.status_code)
+        self.assertEqual(
+            "18:30",
+            self.client.get("/api/reminders/preferences").json()["daily_dispatch_time"],
+        )
 
         invalid = self.client.put(
             "/api/reminders/preferences", json={"timezone": "Moon/Base"}

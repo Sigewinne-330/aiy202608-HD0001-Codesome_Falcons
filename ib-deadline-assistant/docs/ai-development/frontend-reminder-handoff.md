@@ -20,8 +20,9 @@
 
 - 只提醒未完成的顶层 todo、流程子任务和 Deadline。
 - 基础提醒档位固定包含 `D-2、D-1、D0、D+1、D+3、D+7`。用户可在此基础上**追加** `D+2` 至 `D+365` 的整数天数；不可删除或修改基础档位，不支持自定义 D-N（截止日前）档位。
-- 系统以用户时区的本地上午 09:00 为判断窗口；前端只负责保存时区，不自行计算或触发提醒。
+- 系统以用户时区的本地 `daily_dispatch_time` 为判断窗口，默认 `09:00`；前端只负责保存配置，不自行计算或触发提醒。
 - 每位用户每天会将命中事项合并成一份提醒 digest。
+- 普通任务可按具体截止时分收到独立的任务级提醒；用户默认是提前 `5` 分钟和 `1440` 分钟（1 天），任务可覆盖或传空数组关闭。仅有日期的 Deadline 不走任务级分钟提醒。
 - 邮件和站内聊天是独立渠道；关闭邮件不应关闭站内聊天，反之亦然。
 - 文案语言由 `language` 决定；角色卡只影响语气，不影响语言和提醒规则。
 - 后端保存的提醒正文已经包含完整事项列表和 `/chat` 链接；前端应原样展示正文，不自行改写或让 LLM 再生成。
@@ -60,7 +61,9 @@ GET /api/reminder-role-cards
   "enabled": true,
   "language": "zh-CN",
   "timezone": "Asia/Shanghai",
-  "cadence_offsets": [2, 1, 0, -1, -2, -3, -7, -30],
+      "cadence_offsets": [2, 1, 0, -1, -2, -3, -7, -30],
+      "daily_dispatch_time": "09:00",
+      "default_task_reminder_offsets_minutes": [5, 1440],
   "email_enabled": true,
   "chat_enabled": true,
   "role_card": {
@@ -84,7 +87,8 @@ GET /api/reminder-role-cards
 | 总开关 | `v-switch` | `enabled` | 关闭时禁用其他提醒控件，但保留其当前值；保存后 Worker 不再为该用户生成新提醒。|
 | 提醒语言 | `v-select` | `language` | MVP 可提供“简体中文 `zh-CN`、繁體中文 `zh-TW`、English `en`”；允许未来扩展 BCP 47 语言标识。|
 | 时区 | 可搜索 `v-autocomplete` | `timezone` | 传 IANA 名称，如 `Asia/Shanghai`、`America/Los_Angeles`；不得传 GMT 文本或 UTC 偏移字符串。|
-| 提醒时间 | 只读说明 | 无 | 显示“系统将在当地时间上午 09:00 后发送”，不要做时间选择器。|
+| 每日派发时间 | `v-text-field` / `v-time-picker` | `daily_dispatch_time` | 严格传零填充 `HH:MM`（00:00–23:59）；默认 `09:00`，服务端按用户 IANA 时区判断。|
+| 任务级默认提醒 | 数字 chips / 多选 | `default_task_reminder_offsets_minutes` | 默认 `[5, 1440]`；范围 1–10080 分钟，最多 10 个；后端负责最终校验。|
 | 提醒节点 | 基础 chips + 自定义 chips | `cadence_offsets` | 基础 `D-2 / D-1 / 当天 / D+1 / D+3 / D+7` 永远展示且不可删；允许新增、删除自定义的 `D+2` 至 `D+365`。|
 | 邮件提醒 | `v-switch` | `email_enabled` | 只影响邮件；建议说明“需配置邮件服务”。|
 | 站内聊天提醒 | `v-switch` | `chat_enabled` | 只影响聊天消息。|
@@ -131,7 +135,15 @@ Content-Type: application/json
 | `422` | 展示 `detail`：例如时区非法、语言格式非法、未保留基础档位、D+N 超出 2–365 范围或角色卡不可用。|
 | 网络错误 | 展示“无法保存提醒设置，请检查网络后重试”。|
 
-前端可辅助提示，但保存时必须以后端校验为准：请求需传完整集合，且不可移除基础档位。不得把任意文本、`0`、正数或小于 `-365` 的值作为自定义 D+N 发送。
+前端可辅助提示，但保存时必须以后端校验为准。每日时间必须是严格的零填充 `HH:MM`；任务分钟档位必须是 1–10080 的整数。不得把任意文本或超过上限的值发送。
+
+任务创建/更新可以携带：
+
+```json
+{"deadline":"2026-08-05T18:30:00","reminder_offsets_minutes":[5,1440]}
+```
+
+`reminder_offsets_minutes: null` 表示继承用户默认值，`[]` 表示仅关闭该任务的任务级提醒。现有客户端只发送日期时按当天 `00:00` 兼容处理；在前端增加时分控件前不要改动旧日期展示逻辑。
 
 ## 5. 页面二：角色卡选择器
 
@@ -246,7 +258,7 @@ GET /api/reminders/history?limit=20&offset=0
   "conversation_id": 8,
   "role": "assistant",
   "content": "提醒正文……",
-  "metadata": {
+        "metadata": {
     "source": "reminder",
     "digest_id": 42,
     "role_card_id": 1,
@@ -256,6 +268,8 @@ GET /api/reminders/history?limit=20&offset=0
   }
 }
 ```
+
+任务级即时提醒使用 `metadata.source === 'task_relative_reminder'`，同时提供 `task_reminder_notification_id`、`task_id` 和 `offset_minutes`；它与每日 digest 独立，仍然只需原样展示并提供进入聊天的入口。
 
 ### 实现要求
 
@@ -300,6 +314,7 @@ POST  /api/admin/reminders/run
 
 - [ ] 已登录用户可读取默认提醒偏好。
 - [ ] 关闭并重新开启邮件/聊天渠道后刷新页面，状态保持一致。
+- [ ] 修改每日派发时间后刷新页面仍显示零填充 `HH:MM`，并能验证任务默认档位与任务级覆盖/空数组关闭。
 - [ ] 选择任一内置角色卡后刷新，选中状态保持一致。
 - [ ] 非法时区或不可用角色卡能够展示后端 422 错误。
 - [ ] 历史页能显示 digest、事项、邮件和聊天的独立状态。

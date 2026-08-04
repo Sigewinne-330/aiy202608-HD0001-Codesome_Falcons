@@ -46,6 +46,8 @@ class ReminderPreferenceResponse(BaseModel):
     language: str
     timezone: str
     cadence_offsets: list[int]
+    daily_dispatch_time: str
+    default_task_reminder_offsets_minutes: list[int]
     email_enabled: bool
     chat_enabled: bool
     role_card: Optional[RoleCardSummary]
@@ -62,6 +64,10 @@ class ReminderPreferenceUpdate(BaseModel):
             "完整提醒档位集合；必须保留基础档位，且可额外添加 "
             "D+2 至 D+365（用 -2 至 -365 表示）"
         ),
+    )
+    daily_dispatch_time: Optional[str] = Field(default=None, max_length=5)
+    default_task_reminder_offsets_minutes: Optional[list[int]] = Field(
+        default=None, max_length=10
     )
     email_enabled: Optional[bool] = None
     chat_enabled: Optional[bool] = None

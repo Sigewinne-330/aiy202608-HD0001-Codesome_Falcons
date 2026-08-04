@@ -12,6 +12,9 @@ from models.reminder import ReminderPreference, ReminderRoleCard
 DEFAULT_LANGUAGE = "zh-CN"
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_CADENCE_OFFSETS = (2, 1, 0, -1, -3, -7)
+DEFAULT_DAILY_DISPATCH_TIME = "09:00"
+DEFAULT_TASK_REMINDER_OFFSETS_MINUTES = (5, 1440)
+MAX_TASK_REMINDER_OFFSET_MINUTES = 7 * 24 * 60
 DEFAULT_ROLE_CARD_SLUG = "friendly-warm-guy"
 # The baseline cadence remains mandatory.  Users may add overdue D+N points
 # without weakening the pre-deadline coverage that the product guarantees.
@@ -19,6 +22,7 @@ BASE_CADENCE_OFFSETS = frozenset(DEFAULT_CADENCE_OFFSETS)
 MIN_CUSTOM_OVERDUE_DAYS = 2
 MAX_CUSTOM_OVERDUE_DAYS = 365
 LANGUAGE_RE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
+DISPATCH_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 
 @dataclass(frozen=True)
@@ -28,6 +32,8 @@ class ResolvedReminderPreferences:
     language: str
     timezone: str
     cadence_offsets: tuple[int, ...]
+    daily_dispatch_time: str
+    default_task_reminder_offsets_minutes: tuple[int, ...]
     email_enabled: bool
     chat_enabled: bool
     role_card: Optional[ReminderRoleCard]
@@ -52,6 +58,28 @@ def validate_timezone(value: str) -> str:
     except (ZoneInfoNotFoundError, ValueError) as exc:
         raise ValueError("时区必须是有效的 IANA timezone") from exc
     return name
+
+
+def normalize_daily_dispatch_time(value: str) -> str:
+    normalized = (value or "").strip()
+    if not DISPATCH_TIME_RE.fullmatch(normalized):
+        raise ValueError("每日提醒时间必须是 HH:MM（00:00 至 23:59）")
+    return normalized
+
+
+def normalize_task_reminder_offsets_minutes(values: Iterable[int]) -> tuple[int, ...]:
+    try:
+        raw_values = tuple(values)
+        if any(isinstance(value, bool) for value in raw_values):
+            raise ValueError
+        normalized = tuple(dict.fromkeys(int(value) for value in raw_values))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("任务提醒分钟档位格式无效") from exc
+    if len(normalized) > 10 or any(
+        value < 1 or value > MAX_TASK_REMINDER_OFFSET_MINUTES for value in normalized
+    ):
+        raise ValueError("任务提醒分钟档位必须是 1 至 10080 分钟，且最多 10 个")
+    return tuple(sorted(normalized))
 
 
 def normalize_cadence_offsets(values: Iterable[int]) -> tuple[int, ...]:
@@ -139,6 +167,8 @@ def resolve_preferences(db: Session, user_id: int) -> ResolvedReminderPreference
             language=DEFAULT_LANGUAGE,
             timezone=DEFAULT_TIMEZONE,
             cadence_offsets=DEFAULT_CADENCE_OFFSETS,
+            daily_dispatch_time=DEFAULT_DAILY_DISPATCH_TIME,
+            default_task_reminder_offsets_minutes=DEFAULT_TASK_REMINDER_OFFSETS_MINUTES,
             email_enabled=True,
             chat_enabled=True,
             role_card=default_card,
@@ -162,6 +192,13 @@ def resolve_preferences(db: Session, user_id: int) -> ResolvedReminderPreference
         language=normalize_language(row.language),
         timezone=validate_timezone(row.timezone),
         cadence_offsets=normalize_cadence_offsets(row.cadence_offsets),
+        daily_dispatch_time=normalize_daily_dispatch_time(
+            getattr(row, "daily_dispatch_time", None) or DEFAULT_DAILY_DISPATCH_TIME
+        ),
+        default_task_reminder_offsets_minutes=normalize_task_reminder_offsets_minutes(
+            getattr(row, "default_task_reminder_offsets_minutes", None)
+            or DEFAULT_TASK_REMINDER_OFFSETS_MINUTES
+        ),
         email_enabled=bool(row.email_enabled),
         chat_enabled=bool(row.chat_enabled),
         role_card=selected or default_card,
@@ -185,6 +222,8 @@ def ensure_preferences(db: Session, user_id: int) -> ReminderPreference:
         language=DEFAULT_LANGUAGE,
         timezone=DEFAULT_TIMEZONE,
         cadence_offsets=list(DEFAULT_CADENCE_OFFSETS),
+        daily_dispatch_time=DEFAULT_DAILY_DISPATCH_TIME,
+        default_task_reminder_offsets_minutes=list(DEFAULT_TASK_REMINDER_OFFSETS_MINUTES),
         email_enabled=True,
         chat_enabled=True,
         role_card_id=default_card.id if default_card else None,
@@ -216,6 +255,8 @@ def update_preferences(
     language: Optional[str] = None,
     timezone: Optional[str] = None,
     cadence_offsets: Optional[Iterable[int]] = None,
+    daily_dispatch_time: Optional[str] = None,
+    default_task_reminder_offsets_minutes: Optional[Iterable[int]] = None,
     email_enabled: Optional[bool] = None,
     chat_enabled: Optional[bool] = None,
     role_card_id: Optional[int] = None,
@@ -230,6 +271,12 @@ def update_preferences(
         row.timezone = validate_timezone(timezone)
     if cadence_offsets is not None:
         row.cadence_offsets = list(normalize_cadence_offsets(cadence_offsets))
+    if daily_dispatch_time is not None:
+        row.daily_dispatch_time = normalize_daily_dispatch_time(daily_dispatch_time)
+    if default_task_reminder_offsets_minutes is not None:
+        row.default_task_reminder_offsets_minutes = list(
+            normalize_task_reminder_offsets_minutes(default_task_reminder_offsets_minutes)
+        )
     if email_enabled is not None:
         row.email_enabled = email_enabled
     if chat_enabled is not None:

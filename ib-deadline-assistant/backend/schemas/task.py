@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import date, datetime
 from typing import Optional, List
 
@@ -10,7 +10,8 @@ class TaskCreate(BaseModel):
     subject: Optional[str] = None
     category: Optional[str] = None
     priority: str = "medium"
-    deadline: Optional[date] = None
+    deadline: Optional[datetime] = None
+    reminder_offsets_minutes: Optional[List[int]] = Field(default=None, max_length=10)
     estimated_hours: Optional[float] = 0
 
 
@@ -21,7 +22,8 @@ class TaskUpdate(BaseModel):
     category: Optional[str] = None
     priority: Optional[str] = None
     status: Optional[str] = None
-    deadline: Optional[date] = None
+    deadline: Optional[datetime] = None
+    reminder_offsets_minutes: Optional[List[int]] = Field(default=None, max_length=10)
     estimated_hours: Optional[float] = None
     progress: Optional[int] = None
 
@@ -36,7 +38,10 @@ class TaskResponse(BaseModel):
     category: Optional[str] = None
     priority: str
     status: str
+    # Keep the legacy date-only response shape for the current frontend.  The
+    # write schemas accept DateTime so later settings UI can use exact minutes.
     deadline: Optional[date] = None
+    reminder_offsets_minutes: Optional[List[int]] = None
     estimated_hours: float
     progress: int
     created_at: datetime
@@ -46,6 +51,11 @@ class TaskResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @field_validator("deadline", mode="before")
+    @classmethod
+    def keep_legacy_date_shape(cls, value):
+        return value.date() if isinstance(value, datetime) else value
 
 
 class SubTaskCreate(BaseModel):

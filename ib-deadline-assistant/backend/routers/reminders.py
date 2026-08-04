@@ -43,6 +43,10 @@ def _preference_response(db: Session, user_id: int) -> ReminderPreferenceRespons
         language=preferences.language,
         timezone=preferences.timezone,
         cadence_offsets=list(preferences.cadence_offsets),
+        daily_dispatch_time=preferences.daily_dispatch_time,
+        default_task_reminder_offsets_minutes=list(
+            preferences.default_task_reminder_offsets_minutes
+        ),
         email_enabled=preferences.email_enabled,
         chat_enabled=preferences.chat_enabled,
         role_card=(
@@ -76,6 +80,10 @@ def put_preferences(
             language=values.get("language"),
             timezone=values.get("timezone"),
             cadence_offsets=values.get("cadence_offsets"),
+            daily_dispatch_time=values.get("daily_dispatch_time"),
+            default_task_reminder_offsets_minutes=values.get(
+                "default_task_reminder_offsets_minutes"
+            ),
             email_enabled=values.get("email_enabled"),
             chat_enabled=values.get("chat_enabled"),
             role_card_id=values.get("role_card_id"),

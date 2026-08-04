@@ -9,6 +9,8 @@ from models.reminder import (
     ReminderDelivery,
     ReminderDeliveryStatus,
     ReminderDigest,
+    TaskReminderDelivery,
+    TaskReminderNotification,
 )
 from models.user import User
 from services.reminder_channels import ChannelRegistry, ReminderEnvelope
@@ -34,12 +36,35 @@ def build_envelope(digest: ReminderDigest, user: User) -> ReminderEnvelope:
     )
     return ReminderEnvelope(
         digest_id=digest.id,
+        task_notification_id=None,
         user_id=digest.user_id,
         recipient=user.email,
         subject=digest.subject or "Schedule reminder",
         body=digest.body_text or "",
         role_card_id=digest.role_card_id,
         item_references=references,
+    )
+
+
+def build_task_reminder_envelope(
+    notification: TaskReminderNotification, user: User
+) -> ReminderEnvelope:
+    return ReminderEnvelope(
+        digest_id=None,
+        task_notification_id=notification.id,
+        user_id=notification.user_id,
+        recipient=user.email,
+        subject=notification.subject,
+        body=notification.body_text,
+        role_card_id=None,
+        item_references=(
+            {
+                "item_type": "task",
+                "item_id": notification.task_id,
+                "due_at": notification.deadline_at.isoformat(),
+                "offset_minutes": notification.offset_minutes,
+            },
+        ),
     )
 
 
@@ -320,3 +345,144 @@ def deliver_digest_channels(
             now=now,
         )
     return outcomes
+
+
+def get_or_create_task_delivery(
+    db: Session, notification_id: int, channel_name: str
+) -> TaskReminderDelivery:
+    existing = (
+        db.query(TaskReminderDelivery)
+        .filter(
+            TaskReminderDelivery.notification_id == notification_id,
+            TaskReminderDelivery.channel == channel_name,
+        )
+        .first()
+    )
+    if existing:
+        return existing
+    row = TaskReminderDelivery(notification_id=notification_id, channel=channel_name)
+    db.add(row)
+    try:
+        db.commit()
+        db.refresh(row)
+        return row
+    except IntegrityError:
+        db.rollback()
+        return (
+            db.query(TaskReminderDelivery)
+            .filter(
+                TaskReminderDelivery.notification_id == notification_id,
+                TaskReminderDelivery.channel == channel_name,
+            )
+            .one()
+        )
+
+
+def deliver_task_reminder_one_channel(
+    db: Session,
+    *,
+    notification: TaskReminderNotification,
+    user: User,
+    channel_name: str,
+    enabled: bool,
+    registry: ChannelRegistry,
+    now: datetime | None = None,
+) -> TaskReminderDelivery:
+    """Task-relative equivalent of the digest delivery state machine."""
+    current = now or utcnow_naive()
+    delivery = get_or_create_task_delivery(db, notification.id, channel_name)
+    if not enabled:
+        if delivery.status not in {ReminderDeliveryStatus.delivered, ReminderDeliveryStatus.skipped}:
+            delivery.status = ReminderDeliveryStatus.skipped
+            delivery.last_error_code = "channel_disabled"
+            db.commit()
+        return delivery
+    if delivery.status in {ReminderDeliveryStatus.delivered, ReminderDeliveryStatus.skipped, ReminderDeliveryStatus.failed}:
+        return delivery
+    channel = registry.get(channel_name)
+    if delivery.status == ReminderDeliveryStatus.attempting and _fresh_attempt(delivery, current):
+        return delivery
+    if delivery.status == ReminderDeliveryStatus.attempting and channel.ambiguous_external_side_effect:
+        delivery.status = ReminderDeliveryStatus.failed
+        delivery.last_error_code = "delivery_outcome_unknown"
+        db.commit()
+        return delivery
+    if delivery.status == ReminderDeliveryStatus.retryable and delivery.next_attempt_at and delivery.next_attempt_at > current:
+        return delivery
+    if delivery.attempt_count >= MAX_DELIVERY_ATTEMPTS:
+        delivery.status = ReminderDeliveryStatus.failed
+        delivery.last_error_code = delivery.last_error_code or "retry_exhausted"
+        db.commit()
+        return delivery
+
+    token = uuid4().hex
+    claimed = (
+        db.query(TaskReminderDelivery)
+        .filter(
+            TaskReminderDelivery.id == delivery.id,
+            TaskReminderDelivery.attempt_count < MAX_DELIVERY_ATTEMPTS,
+            TaskReminderDelivery.status.in_([
+                ReminderDeliveryStatus.pending,
+                ReminderDeliveryStatus.retryable,
+                ReminderDeliveryStatus.attempting,
+            ]),
+        )
+        .update(
+            {
+                TaskReminderDelivery.attempt_count: TaskReminderDelivery.attempt_count + 1,
+                TaskReminderDelivery.status: ReminderDeliveryStatus.attempting,
+                TaskReminderDelivery.attempt_token: token,
+                TaskReminderDelivery.attempt_started_at: current,
+                TaskReminderDelivery.next_attempt_at: None,
+            },
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+    delivery = db.query(TaskReminderDelivery).filter(TaskReminderDelivery.id == delivery.id).one()
+    if claimed != 1 or delivery.attempt_token != token:
+        return delivery
+    try:
+        result = channel.deliver(db, build_task_reminder_envelope(notification, user))
+    except Exception:
+        db.rollback()
+        result = None
+    delivery = db.query(TaskReminderDelivery).filter(TaskReminderDelivery.id == delivery.id).one()
+    if delivery.attempt_token != token:
+        return delivery
+    delivery.attempt_token = None
+    if result is not None and result.status == "delivered":
+        delivery.status = ReminderDeliveryStatus.delivered
+        delivery.provider_message_id = result.provider_message_id
+        delivery.last_error_code = result.error_code
+        delivery.delivered_at = current
+    elif result is not None and result.status == "retryable" and delivery.attempt_count < MAX_DELIVERY_ATTEMPTS:
+        delivery.status = ReminderDeliveryStatus.retryable
+        delivery.last_error_code = result.error_code
+        delivery.next_attempt_at = current + timedelta(seconds=60 * (2 ** (delivery.attempt_count - 1)))
+    else:
+        delivery.status = ReminderDeliveryStatus.failed if channel.ambiguous_external_side_effect else ReminderDeliveryStatus.retryable
+        delivery.last_error_code = (result.error_code if result else "channel_persistence_failed") or "delivery_failed"
+        if delivery.status == ReminderDeliveryStatus.retryable:
+            delivery.next_attempt_at = current + timedelta(seconds=60 * (2 ** (delivery.attempt_count - 1)))
+    db.commit()
+    db.refresh(delivery)
+    return delivery
+
+
+def deliver_task_reminder_channels(
+    db: Session,
+    *,
+    notification: TaskReminderNotification,
+    user: User,
+    preferences: ResolvedReminderPreferences,
+    registry: ChannelRegistry,
+    now: datetime | None = None,
+) -> dict[str, TaskReminderDelivery]:
+    return {
+        name: deliver_task_reminder_one_channel(
+            db, notification=notification, user=user, channel_name=name,
+            enabled=enabled, registry=registry, now=now,
+        )
+        for name, enabled in (("chat", preferences.chat_enabled), ("email", preferences.email_enabled))
+    }

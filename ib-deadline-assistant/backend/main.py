@@ -14,6 +14,7 @@ from database import (
     auto_sync_tables,
     engine,
     sync_reminder_legacy_foreign_keys,
+    sync_reminder_user_foreign_keys,
 )
 from routers import auth, billing, calendar, chat, deadlines, reminders, tasks
 from services.image_storage import UPLOAD_DIR
@@ -51,6 +52,7 @@ def on_startup():
 
         Base.metadata.create_all(bind=engine)
         auto_sync_tables(engine, Base)
+        sync_reminder_user_foreign_keys(engine)
         sync_reminder_legacy_foreign_keys(engine)
         with SessionLocal() as db:
             seed_builtin_role_cards(db)

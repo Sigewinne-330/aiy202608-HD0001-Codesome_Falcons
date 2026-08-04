@@ -123,7 +123,14 @@ def auto_sync_tables(engine_obj, base):
                     default_value = ""
                     if column.default and column.default.arg is not None:
                         arg = column.default.arg
-                        if hasattr(arg, "value"):
+                        # Python-side factories (for example JSON list
+                        # defaults) cannot be rendered as SQL literals.  The
+                        # service resolves those values on read; leaving the
+                        # additive legacy column nullable keeps MySQL startup
+                        # migration safe.
+                        if callable(arg):
+                            default_value = ""
+                        elif hasattr(arg, "value"):
                             default_value = f" DEFAULT '{arg.value}'"
                         elif isinstance(arg, str):
                             default_value = f" DEFAULT '{arg}'"
@@ -188,3 +195,72 @@ def sync_reminder_legacy_foreign_keys(engine_obj):
             )
         )
     logger.info("[compat] reminder_digests.chat_message_id foreign key migrated")
+
+
+def sync_reminder_user_foreign_keys(engine_obj):
+    """Point reminder user references at the authoritative ``user`` table.
+
+    Older reminder tables were bootstrapped against the legacy ``users``
+    table, while the current authenticated/task/chat models use ``user``.
+    This additive, idempotent migration keeps existing IDs intact and lets
+    newly registered users save preferences without requiring a manual data
+    backfill.
+    """
+    inspector = inspect(engine_obj)
+    target_tables = {
+        "reminder_role_cards",
+        "reminder_preferences",
+        "reminder_occurrences",
+        "reminder_digests",
+        "llm_usage_records",
+    }
+    legacy_fks = []
+    for table_name in target_tables:
+        if not inspector.has_table(table_name):
+            continue
+        for foreign_key in inspector.get_foreign_keys(table_name):
+            constrained = foreign_key.get("constrained_columns") or []
+            desired_ondelete = (
+                "SET NULL" if constrained == ["created_by_user_id"] else "CASCADE"
+            )
+            current_ondelete = (foreign_key.get("options") or {}).get("ondelete")
+            if (
+                len(constrained) == 1
+                and constrained[0].endswith("user_id")
+                and (
+                    foreign_key.get("referred_table") == "users"
+                    or (
+                        foreign_key.get("referred_table") == "user"
+                        and current_ondelete != desired_ondelete
+                    )
+                )
+            ):
+                legacy_fks.append((table_name, constrained[0], foreign_key.get("name")))
+
+    if not legacy_fks:
+        return
+    valid_name = re.compile(r"^[A-Za-z0-9_]+$")
+    with engine_obj.begin() as conn:
+        for table_name, column_name, constraint_name in legacy_fks:
+            if (
+                not valid_name.fullmatch(table_name)
+                or not valid_name.fullmatch(column_name)
+                or not constraint_name
+                or not valid_name.fullmatch(constraint_name)
+            ):
+                raise RuntimeError("无法安全迁移提醒表的旧用户外键")
+            conn.execute(
+                text(f"ALTER TABLE `{table_name}` DROP FOREIGN KEY `{constraint_name}`")
+            )
+            new_name = f"fk_{table_name}_{column_name}_user"
+            on_delete = (
+                "SET NULL" if column_name == "created_by_user_id" else "CASCADE"
+            )
+            conn.execute(
+                text(
+                    f"ALTER TABLE `{table_name}` ADD CONSTRAINT `{new_name}` "
+                    f"FOREIGN KEY (`{column_name}`) REFERENCES `user` (`id`) "
+                    f"ON DELETE {on_delete}"
+                )
+            )
+    logger.info("[compat] reminder user foreign keys migrated: %s", len(legacy_fks))

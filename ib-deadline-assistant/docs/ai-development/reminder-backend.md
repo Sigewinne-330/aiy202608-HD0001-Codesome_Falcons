@@ -4,7 +4,9 @@
 
 - FastAPI serves preferences, role-card discovery, delivery history, and protected administrator operations.
 - `backend/reminder_worker.py` is the production scheduling process. Do not start an APScheduler job inside each Uvicorn worker.
-- The worker evaluates users after local 09:00, creates durable occurrence/digest claims, calls the dedicated Reminder Agent, then fans out the immutable digest to chat and email.
+- The worker evaluates each user after that user's local `daily_dispatch_time` (default `09:00`), creates durable occurrence/digest claims, calls the dedicated Reminder Agent for daily digest text, then fans out the immutable digest to chat and email.
+- Ordinary tasks with a concrete DateTime deadline additionally use `default_task_reminder_offsets_minutes` (default `[5, 1440]`). A task's `reminder_offsets_minutes` of `null` inherits the user setting and `[]` opts out. These immediate notifications have independent identity and delivery tables; date-only Deadline records remain daily-digest-only.
+- `backend/run_timed_reminder_acceptance.py --user-id <id>` is the controlled automatic-worker gate. It uses the production `run_once` tick path, waits for the near-term daily dispatch, then creates the 5-minute and 1-day relative tasks. It restores the selected user's preference and deletes only its synthetic tasks. The command emits sanitized channel statuses and never calls the manual admin-run endpoint.
 - Email and chat retain independent status and retry audit. SMS and software connectors should implement the channel protocol rather than call scheduling or the LLM directly.
 
 ## Future frontend integration
@@ -12,11 +14,11 @@
 No frontend code is part of this change. A later frontend can use:
 
 - `GET /api/reminders/preferences` for resolved defaults.
-- `PUT /api/reminders/preferences` for `enabled`, `language`, `timezone`, the fixed `cadence_offsets`, `email_enabled`, `chat_enabled`, and `role_card_id`.
+  - `PUT /api/reminders/preferences` for `enabled`, `language`, `timezone`, `daily_dispatch_time` (`HH:MM`), `default_task_reminder_offsets_minutes`, the fixed `cadence_offsets`, `email_enabled`, `chat_enabled`, and `role_card_id`.
 - `GET /api/reminder-role-cards` and `GET /api/reminder-role-cards/{id}` for card selection/details.
 - `GET /api/reminders/history?limit=20&offset=0` for digest and sanitized per-channel outcomes.
 
-The backend accepts IANA timezone names and BCP 47 language tags. MVP cadence must contain exactly `[2, 1, 0, -1, -3, -7]`. Current defaults are `Asia/Shanghai`, `zh-CN`, enabled email/chat, and `friendly-warm-guy`.
+The backend accepts IANA timezone names and BCP 47 language tags. `daily_dispatch_time` accepts only zero-padded `00:00` through `23:59`. Current defaults are `Asia/Shanghai`, `zh-CN`, `09:00`, task offsets `[5, 1440]`, enabled email/chat, and `friendly-warm-guy`.
 
 Reminder chat messages are normal `assistant` messages. `/api/chat/history` additionally returns optional `metadata` with:
 
@@ -51,5 +53,7 @@ Built-in global cards are `friendly-warm-guy`, `tech-geek`, and `sweet-high-scho
 3. Actual MySQL schema/idempotency/concurrency gate.
 4. Real LLM role-card and token-accounting smoke gate.
 5. Real QQ Mail SMTP submission and observed inbox-receipt gate.
+
+The real five-minute gate must run only against a configured local environment. A PASS requires persisted email provider submission and chat delivery; SMTP failure is reported separately and is not converted into a PASS.
 
 Reports store only timestamps, non-secret provider/model labels, status, and sanitized errors. Never store account credentials, authorization codes, complete private prompts, full digest bodies, or inbox content in repository evidence.

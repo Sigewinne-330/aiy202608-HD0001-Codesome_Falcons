@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from models.chat_message_new import ChatMessage
 from models.conversation import Conversation
-from models.reminder import ReminderDigest
+from models.reminder import ReminderDigest, TaskReminderNotification
 from services.email_service import (
     EmailDeliveryError,
     EmailTransport,
@@ -15,7 +15,8 @@ from services.email_service import (
 
 @dataclass(frozen=True)
 class ReminderEnvelope:
-    digest_id: int
+    digest_id: Optional[int]
+    task_notification_id: Optional[int]
     user_id: int
     recipient: str
     subject: str
@@ -43,12 +44,30 @@ class ChatReminderChannel:
     ambiguous_external_side_effect = False
 
     def deliver(self, db: Session, envelope: ReminderEnvelope) -> ChannelResult:
-        digest = db.query(ReminderDigest).filter(ReminderDigest.id == envelope.digest_id).one()
-        if digest.chat_message_id:
+        source = "reminder"
+        extra = {"source": source, "digest_id": envelope.digest_id}
+        if envelope.task_notification_id is not None:
+            notification = (
+                db.query(TaskReminderNotification)
+                .filter(TaskReminderNotification.id == envelope.task_notification_id)
+                .one()
+            )
+            existing_id = notification.chat_message_id
+            source = "task_relative_reminder"
+            extra = {
+                "source": source,
+                "task_reminder_notification_id": notification.id,
+                "task_id": notification.task_id,
+                "offset_minutes": notification.offset_minutes,
+            }
+        else:
+            digest = db.query(ReminderDigest).filter(ReminderDigest.id == envelope.digest_id).one()
+            existing_id = digest.chat_message_id
+        if existing_id:
             existing = (
                 db.query(ChatMessage)
                 .filter(
-                    ChatMessage.id == digest.chat_message_id,
+                    ChatMessage.id == existing_id,
                     ChatMessage.user_id == envelope.user_id,
                 )
                 .first()
@@ -76,16 +95,18 @@ class ChatReminderChannel:
             role="assistant",
             content=envelope.body,
             extra={
-                "source": "reminder",
-                "digest_id": envelope.digest_id,
                 "role_card_id": envelope.role_card_id,
                 "items": list(envelope.item_references),
+                **extra,
             },
         )
         db.add(message)
         db.flush()
         conversation.update_time = message.update_time
-        digest.chat_message_id = message.id
+        if envelope.task_notification_id is not None:
+            notification.chat_message_id = message.id
+        else:
+            digest.chat_message_id = message.id
         return ChannelResult(status="delivered", provider_message_id=str(message.id))
 
 

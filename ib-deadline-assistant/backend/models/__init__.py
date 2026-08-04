@@ -7,6 +7,8 @@ from .reminder import (
     ReminderOccurrence,
     ReminderPreference,
     ReminderRoleCard,
+    TaskReminderDelivery,
+    TaskReminderNotification,
 )
 
 # 新模型
@@ -21,7 +23,7 @@ from .billing_order import BillingOrder
 __all__ = [
     "Deadline", "EmailVerification",
     "ReminderRoleCard", "ReminderPreference", "ReminderOccurrence",
-    "ReminderDigest", "ReminderDelivery", "LLMUsageRecord",
+    "ReminderDigest", "ReminderDelivery", "TaskReminderNotification", "TaskReminderDelivery", "LLMUsageRecord",
     "AppUser", "AppTask", "SubTask", "Conversation", "ChatMessage",
     "TokenLedger", "BillingOrder",
 ]

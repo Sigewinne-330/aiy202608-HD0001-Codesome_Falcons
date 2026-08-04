@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, TIMESTAMP, ForeignKey, DECIMAL, Boolean, Enum
+from sqlalchemy import Column, Integer, String, Text, DateTime, TIMESTAMP, ForeignKey, DECIMAL, Boolean, Enum, JSON
 from sqlalchemy.sql import func
 from database import Base
 import enum
@@ -33,6 +33,8 @@ class Task(Base):
     task_type = Column(Enum(TaskType), default=TaskType.todo, nullable=False)
     title = Column(String(255), nullable=False)
     deadline = Column(DateTime, default=None)
+    # NULL inherits the user's defaults; [] explicitly disables relative reminders.
+    reminder_offsets_minutes = Column(JSON, nullable=True, default=None)
     description = Column(Text)
     subject = Column(String(100), default=None)
     category = Column(String(20), default=None, comment="IA | EE | TOK | CAS")
