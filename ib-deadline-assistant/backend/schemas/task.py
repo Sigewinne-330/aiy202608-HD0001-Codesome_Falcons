@@ -14,6 +14,12 @@ class TaskCreate(BaseModel):
     deadline: Optional[datetime] = None
     reminder_offsets_minutes: Optional[List[int]] = Field(default=None, max_length=10)
     estimated_hours: Optional[float] = 0
+    earliest_start_date: Optional[date] = None
+    hard_deadline_date: Optional[date] = None
+    energy_intensity: float = Field(default=1.0, ge=0.5, le=2.0)
+    effort_source: str = "user"
+    is_schedule_locked: bool = False
+    schedule_kind: Optional[str] = None
 
 
 class TaskUpdate(BaseModel):
@@ -27,6 +33,12 @@ class TaskUpdate(BaseModel):
     reminder_offsets_minutes: Optional[List[int]] = Field(default=None, max_length=10)
     estimated_hours: Optional[float] = None
     progress: Optional[int] = None
+    earliest_start_date: Optional[date] = None
+    hard_deadline_date: Optional[date] = None
+    energy_intensity: Optional[float] = Field(default=None, ge=0.5, le=2.0)
+    effort_source: Optional[str] = None
+    is_schedule_locked: Optional[bool] = None
+    schedule_kind: Optional[str] = None
 
 
 class TaskResponse(BaseModel):
@@ -49,6 +61,13 @@ class TaskResponse(BaseModel):
     update_time: Optional[datetime] = None
     subtasks: List["TaskResponse"] = Field(default_factory=list)
     sub_task_source: bool = False  # True 表示该记录来自 sub_task 表
+    earliest_start_date: Optional[date] = None
+    hard_deadline_date: Optional[date] = None
+    energy_intensity: float = 1.0
+    effort_source: str = "default"
+    is_schedule_locked: bool = False
+    schedule_version: int = 1
+    schedule_kind: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -66,6 +85,13 @@ class SubTaskCreate(BaseModel):
     notice_time: Optional[date] = None
     level: str = "medium"
     status: str = "pending"
+    estimated_hours: float = Field(default=0, ge=0, le=24)
+    earliest_start_date: Optional[date] = None
+    hard_deadline_date: Optional[date] = None
+    energy_intensity: float = Field(default=1.0, ge=0.5, le=2.0)
+    effort_source: str = "user"
+    is_schedule_locked: bool = False
+    schedule_kind: Optional[str] = None
 
 
 class SubTaskUpdate(BaseModel):
@@ -74,6 +100,13 @@ class SubTaskUpdate(BaseModel):
     notice_time: Optional[date] = None
     level: Optional[str] = None
     status: Optional[str] = None
+    estimated_hours: Optional[float] = Field(default=None, ge=0, le=24)
+    earliest_start_date: Optional[date] = None
+    hard_deadline_date: Optional[date] = None
+    energy_intensity: Optional[float] = Field(default=None, ge=0.5, le=2.0)
+    effort_source: Optional[str] = None
+    is_schedule_locked: Optional[bool] = None
+    schedule_kind: Optional[str] = None
 
 
 class TaskBreakdownRequest(BaseModel):

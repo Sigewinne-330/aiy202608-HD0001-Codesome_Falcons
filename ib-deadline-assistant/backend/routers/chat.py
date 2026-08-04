@@ -33,11 +33,14 @@ from services.main_agent_role_cards import prepare_main_agent_role_context
 from services.task_tools_schema import TASK_TOOLS
 from services.knowledge_base_tools import KNOWLEDGE_BASE_TOOLS, get_subject_guidelines
 from services import task_tools
+from services import scheduling_tools
+from services.schedule_policy import scheduling_enabled
+from services.scheduling_tools_schema import SCHEDULING_TOOLS
 from services.billing import ensure_balance, deduct_credits, credits_for_tokens
 from services.image_storage import save_images
 
 # 合并所有可用工具（任务 CRUD + 知识库查询）
-ALL_TOOLS = TASK_TOOLS + KNOWLEDGE_BASE_TOOLS
+ALL_TOOLS = TASK_TOOLS + (SCHEDULING_TOOLS if scheduling_enabled() else []) + KNOWLEDGE_BASE_TOOLS
 
 logger = logging.getLogger(__name__)
 
@@ -48,16 +51,28 @@ MAX_TOOL_ROUNDS = 30
 
 # 工具名 → 执行函数的映射
 TOOL_DISPATCH: Dict[str, Any] = {
-    "create_task": task_tools.create_task,
+    "create_task": scheduling_tools.create_task_with_preflight,
     "list_tasks": task_tools.list_tasks,
     "update_task": task_tools.update_task,
     "delete_task": task_tools.delete_task,
-    "create_subtask": task_tools.create_subtask,
+    "create_subtask": scheduling_tools.create_subtask_with_preflight,
     "list_subtasks": task_tools.list_subtasks,
     "update_subtask": task_tools.update_subtask,
     "delete_subtask": task_tools.delete_subtask,
     "get_subject_guidelines": get_subject_guidelines,
 }
+
+if scheduling_enabled():
+    TOOL_DISPATCH.update({
+        "preflight_create_calendar_item": scheduling_tools.preflight_create_calendar_item,
+        "resolve_overload_intervention": scheduling_tools.resolve_overload_intervention,
+        "analyze_schedule": scheduling_tools.analyze_schedule,
+        "create_schedule_plan": scheduling_tools.create_schedule_plan,
+        "apply_schedule_plan": scheduling_tools.apply_schedule_plan,
+        "undo_schedule_plan": scheduling_tools.undo_schedule_plan,
+        "replan_schedule": scheduling_tools.replan_schedule,
+        "get_schedule_log": scheduling_tools.get_schedule_log,
+    })
 
 
 def _get_or_create_conversation(
@@ -281,6 +296,10 @@ async def _run_tool_loop_stream(
                 "delete_task": "正在删除任务...",
                 "create_subtask": "正在添加子任务...",
                 "delete_subtask": "正在删除子任务...",
+                "preflight_create_calendar_item": "正在检查当天工作量...",
+                "resolve_overload_intervention": "正在确认日程安排...",
+                "analyze_schedule": "正在分析日历负载...",
+                "create_schedule_plan": "正在生成日程预览...",
                 "get_subject_guidelines": "正在查阅知识库...",
             }
             status = status_map.get(func_name, f"正在执行 {func_name}...")

@@ -1,15 +1,16 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from calendar import monthrange
 from pydantic import BaseModel
-from sqlalchemy import or_, cast, Date as SQLDate
+from sqlalchemy import and_, or_
 from database import get_db
 from models.app_user import AppUser as User
 from models.task_new import Task as TaskModel, TaskCategory, TaskStatus, TaskType
 from models.sub_task import SubTask as SubTaskModel
 from models.deadline import Deadline as DeadlineModel, DeadlineStatus
+from models.scheduling import ScheduleAllocation
 from services.auth import get_current_user
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
@@ -71,14 +72,18 @@ def get_calendar_data(
     start_date = first_day - timedelta(days=first_day.weekday())  # 扩展到周日
     end_date = last_day + timedelta(days=(6 - last_day.weekday()))  # 扩展到周六
 
-    # 查询该时间段内的所有任务（deadline 或 personal_deadline 任一在范围内）
-    # 使用 cast(DateTime, Date) 确保 date-to-date 对比，避免 DateTime 与 date
-    # 比较时 end_date 当天非零时的条目被漏掉
+    # 查询该时间段内的所有任务（deadline 或 personal_deadline 任一在范围内）。
+    # 使用半开 DateTime 区间兼容 MySQL/SQLite，并包含 end_date 全天。
+    range_start = datetime.combine(start_date, time.min)
+    range_end = datetime.combine(end_date + timedelta(days=1), time.min)
     tasks = db.query(TaskModel).filter(
         TaskModel.user_id == current_user.id,
         or_(
-            cast(TaskModel.deadline, SQLDate).between(start_date, end_date),
-            cast(TaskModel.personal_deadline, SQLDate).between(start_date, end_date),
+            and_(TaskModel.deadline >= range_start, TaskModel.deadline < range_end),
+            and_(
+                TaskModel.personal_deadline >= range_start,
+                TaskModel.personal_deadline < range_end,
+            ),
         ),
     ).order_by(TaskModel.deadline.asc(), TaskModel.priority.desc()).all()
 
@@ -93,9 +98,38 @@ def get_calendar_data(
     from collections import defaultdict
     day_map: dict[str, dict] = defaultdict(lambda: {"tasks": [], "deadlines": [], "count": 0})
 
+    allocated_sources = {
+        (source_type, source_id)
+        for source_type, source_id in db.query(
+            ScheduleAllocation.source_type,
+            ScheduleAllocation.source_id,
+        ).filter(
+            ScheduleAllocation.user_id == current_user.id,
+            ScheduleAllocation.state == "active",
+        ).distinct().all()
+    }
+    allocation_rows = db.query(ScheduleAllocation).filter(
+        ScheduleAllocation.user_id == current_user.id,
+        ScheduleAllocation.local_date >= start_date,
+        ScheduleAllocation.local_date <= end_date,
+        ScheduleAllocation.state == "active",
+    ).order_by(
+        ScheduleAllocation.local_date.asc(),
+        ScheduleAllocation.source_type.asc(),
+        ScheduleAllocation.source_id.asc(),
+        ScheduleAllocation.id.asc(),
+    ).all()
+
     for t in tasks:
         task_type_value = t.task_type.value if t.task_type else "todo"
-        if t.deadline and start_date <= t.deadline.date() <= end_date:
+        has_planned_allocations = ("task", t.id) in allocated_sources
+        # Active allocations replace only the task's ordinary planned date.
+        # A distinct personal deadline remains a visible hard-date marker.
+        if (
+            not has_planned_allocations
+            and t.deadline
+            and start_date <= t.deadline.date() <= end_date
+        ):
             date_key = t.deadline.date().isoformat()
             item = CalendarDayItem(
                 id=t.id,
@@ -127,6 +161,8 @@ def get_calendar_data(
             day_map[date_key]["count"] += 1
 
     for d in deadlines:
+        if ("deadline", d.id) in allocated_sources:
+            continue
         date_key = d.due_date.isoformat()
         item = CalendarDayItem(
             id=d.id,
@@ -149,6 +185,8 @@ def get_calendar_data(
     ).order_by(SubTaskModel.notice_time.asc()).all()
 
     for st, parent_task in sub_task_records:
+        if ("subtask", st.id) in allocated_sources:
+            continue
         if st.notice_time:
             date_key = st.notice_time.isoformat() if isinstance(st.notice_time, date) else st.notice_time
             item = CalendarDayItem(
@@ -163,6 +201,66 @@ def get_calendar_data(
             )
             day_map[date_key]["tasks"].append(item)
             day_map[date_key]["count"] += 1
+
+    # Planned split allocations replace their source item in the calendar so
+    # the frontend sees one visible work packet instead of a duplicate.
+    task_sources = {
+        row.id: row
+        for row in db.query(TaskModel).filter(
+            TaskModel.user_id == current_user.id,
+            TaskModel.id.in_([a.source_id for a in allocation_rows if a.source_type == "task"] or [-1]),
+        ).all()
+    }
+    sub_sources = {
+        row.id: (row, parent)
+        for row, parent in db.query(SubTaskModel, TaskModel).join(
+            TaskModel, SubTaskModel.task_id == TaskModel.id
+        ).filter(
+            TaskModel.user_id == current_user.id,
+            SubTaskModel.id.in_([a.source_id for a in allocation_rows if a.source_type == "subtask"] or [-1]),
+        ).all()
+    }
+    deadline_sources = {
+        row.id: row
+        for row in db.query(DeadlineModel).filter(
+            DeadlineModel.user_id == current_user.id,
+            DeadlineModel.id.in_([a.source_id for a in allocation_rows if a.source_type == "deadline"] or [-1]),
+        ).all()
+    }
+    grouped_allocations = {}
+    for allocation in allocation_rows:
+        key = (allocation.source_type, allocation.source_id, allocation.local_date)
+        if key not in grouped_allocations:
+            grouped_allocations[key] = allocation
+
+    for allocation in grouped_allocations.values():
+        source_type = allocation.source_type
+        source = task_sources.get(allocation.source_id)
+        parent_task = None
+        if source_type == "subtask":
+            pair = sub_sources.get(allocation.source_id)
+            source, parent_task = pair if pair else (None, None)
+        elif source_type == "deadline":
+            source = deadline_sources.get(allocation.source_id)
+        if source is None:
+            continue
+        date_key = allocation.local_date.isoformat()
+        item = CalendarDayItem(
+            id=allocation.id,
+            title=getattr(source, "title", None) or getattr(source, "name", "计划任务"),
+            type="allocation",
+            priority=getattr(
+                getattr(source, "priority", None) or getattr(source, "level", None) or "medium",
+                "value",
+                getattr(source, "priority", None) or getattr(source, "level", None) or "medium",
+            ),
+            status="planned",
+            subject=getattr(source, "subject", None) or (parent_task.subject if parent_task else None),
+            category=getattr(source, "category", None) or (parent_task.category if parent_task else None),
+            parent_task_id=parent_task.id if parent_task else None,
+        )
+        day_map[date_key]["tasks"].append(item)
+        day_map[date_key]["count"] += 1
 
     # 构建响应（按日期排序）
     days = []

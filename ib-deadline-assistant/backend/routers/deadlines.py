@@ -34,6 +34,8 @@ def create_deadline(
     db.add(deadline)
     db.commit()
     db.refresh(deadline)
+    from services.schedule_triggers import analyze_after_mutation
+    analyze_after_mutation(db, current_user.id, "deadline_create")
     return DeadlineResponse.model_validate(deadline)
 
 
@@ -53,8 +55,15 @@ def update_deadline(
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(deadline, key, value)
+    deadline.schedule_version = int(deadline.schedule_version or 1) + 1
     db.commit()
     db.refresh(deadline)
+    normalized_status = str(getattr(deadline.status, "value", deadline.status) or "").lower()
+    if normalized_status in {"done", "complete", "completed"}:
+        from services.schedule_lifecycle import record_schedule_outcome
+        record_schedule_outcome(db, current_user.id, "deadline", deadline.id, normalized_status)
+    from services.schedule_triggers import analyze_after_mutation
+    analyze_after_mutation(db, current_user.id, "deadline_update")
     return DeadlineResponse.model_validate(deadline)
 
 
@@ -71,6 +80,8 @@ def delete_deadline(
         raise HTTPException(status_code=404, detail="Deadline 不存在")
     db.delete(deadline)
     db.commit()
+    from services.schedule_triggers import analyze_after_mutation
+    analyze_after_mutation(db, current_user.id, "deadline_delete")
     return {"ok": True}
 
 

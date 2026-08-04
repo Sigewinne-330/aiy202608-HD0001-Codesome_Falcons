@@ -11,9 +11,11 @@ import models  # noqa: F401 - register authoritative metadata
 from config import settings
 from database import SessionLocal
 from services.reminder_orchestrator import ReminderOrchestrator, ReminderRunSummary
+from services.schedule_policy import scheduling_enabled
 
 
 logger = logging.getLogger(__name__)
+_last_schedule_analysis_date = None
 
 
 async def run_once(
@@ -32,6 +34,7 @@ async def run_once(
 
 
 def _run_job() -> None:
+    global _last_schedule_analysis_date
     try:
         summary = asyncio.run(run_once())
         logger.info(
@@ -43,6 +46,18 @@ def _run_job() -> None:
             summary.delivered_channels,
             summary.failed_channels,
         )
+        # The existing worker is already the project's scheduled background
+        # process.  Run the read-only schedule signal once per worker-local
+        # day when the feature flag is enabled; auto-apply remains off by
+        # policy and uses a separate transactional path.
+        local_day = datetime.now(timezone.utc).date()
+        if scheduling_enabled() and _last_schedule_analysis_date != local_day:
+            from services.schedule_triggers import run_daily_schedule_analysis
+            from database import SessionLocal
+            with SessionLocal() as db:
+                schedule_summary = run_daily_schedule_analysis(db)
+            _last_schedule_analysis_date = local_day
+            logger.info("Schedule analysis daily signal: %s", schedule_summary)
     except Exception:
         logger.exception("Reminder worker tick failed")
 

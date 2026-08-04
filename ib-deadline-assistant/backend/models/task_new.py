@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, TIMESTAMP, ForeignKey, DECIMAL, Boolean, Enum, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, TIMESTAMP, ForeignKey, DECIMAL, Boolean, Enum, JSON, Date
 from sqlalchemy.sql import func
 from database import Base
 import enum
@@ -61,3 +61,14 @@ class Task(Base):
     status = Column(String(50), default="todo", comment="任务状态")
     personal_deadline = Column(DateTime, default=None)
     update_time = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+
+    # Scheduling metadata is additive and optional.  Existing clients keep
+    # using ``deadline``; the scheduler normalizes it to a local date.
+    earliest_start_date = Column(Date, nullable=True)
+    hard_deadline_date = Column(Date, nullable=True)
+    energy_intensity = Column(DECIMAL(3, 2), nullable=False, default=1.0)
+    effort_source = Column(String(20), nullable=False, default="default")
+    is_schedule_locked = Column(Boolean, nullable=False, default=False)
+    schedule_version = Column(Integer, nullable=False, default=1)
+    deferral_count = Column(Integer, nullable=False, default=0)
+    schedule_kind = Column(String(50), nullable=True)

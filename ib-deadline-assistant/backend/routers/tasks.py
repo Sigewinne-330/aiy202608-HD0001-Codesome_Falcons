@@ -125,6 +125,8 @@ def create_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    from services.schedule_triggers import analyze_after_mutation
+    analyze_after_mutation(db, current_user.id, "task_create")
     return TaskResponse.model_validate(task)
 
 
@@ -197,9 +199,16 @@ def update_task(
         update_data["category"] = _normalize_category(update_data["category"])
     for key, value in update_data.items():
         setattr(task, key, value)
+    task.schedule_version = int(task.schedule_version or 1) + 1
 
     db.commit()
     db.refresh(task)
+    normalized_status = str(getattr(task.status, "value", task.status) or "").lower()
+    if normalized_status in {"done", "complete", "completed"}:
+        from services.schedule_lifecycle import record_schedule_outcome
+        record_schedule_outcome(db, current_user.id, "task", task.id, normalized_status)
+    from services.schedule_triggers import analyze_after_mutation
+    analyze_after_mutation(db, current_user.id, "task_update")
     return TaskResponse.model_validate(task)
 
 
@@ -218,6 +227,8 @@ def delete_task(
     # sub_task 表 FK 设置了 ON DELETE CASCADE，数据库自动级联删除
     db.delete(task)
     db.commit()
+    from services.schedule_triggers import analyze_after_mutation
+    analyze_after_mutation(db, current_user.id, "task_delete")
     return {"ok": True}
 
 
@@ -362,10 +373,19 @@ def create_sub_task(
         notice_time=data.notice_time,
         level=data.level,
         status=data.status,
+        estimated_hours=data.estimated_hours,
+        earliest_start_date=data.earliest_start_date,
+        hard_deadline_date=data.hard_deadline_date,
+        energy_intensity=data.energy_intensity,
+        effort_source=data.effort_source,
+        is_schedule_locked=data.is_schedule_locked,
+        schedule_kind=data.schedule_kind,
     )
     db.add(sub)
     db.commit()
     db.refresh(sub)
+    from services.schedule_triggers import analyze_after_mutation
+    analyze_after_mutation(db, current_user.id, "subtask_create")
 
     return {
         "ok": True,
@@ -414,8 +434,21 @@ def update_sub_task(
             raise HTTPException(status_code=400, detail="Invalid subtask status")
         sub.status = "pending" if update_data["status"] == "todo" else update_data["status"]
 
+    for key in (
+        "estimated_hours", "earliest_start_date", "hard_deadline_date",
+        "energy_intensity", "effort_source", "is_schedule_locked", "schedule_kind",
+    ):
+        if key in update_data:
+            setattr(sub, key, update_data[key])
+    sub.schedule_version = int(sub.schedule_version or 1) + 1
+
     db.commit()
     db.refresh(sub)
+    if str(sub.status or "").lower() in {"done", "complete", "completed"}:
+        from services.schedule_lifecycle import record_schedule_outcome
+        record_schedule_outcome(db, current_user.id, "subtask", sub.id, str(sub.status).lower())
+    from services.schedule_triggers import analyze_after_mutation
+    analyze_after_mutation(db, current_user.id, "subtask_update")
     return {
         "ok": True,
         "id": sub.id,
@@ -446,4 +479,6 @@ def delete_sub_task(
 
     db.delete(sub)
     db.commit()
+    from services.schedule_triggers import analyze_after_mutation
+    analyze_after_mutation(db, current_user.id, "subtask_delete")
     return {"ok": True, "deleted_id": subtask_id}

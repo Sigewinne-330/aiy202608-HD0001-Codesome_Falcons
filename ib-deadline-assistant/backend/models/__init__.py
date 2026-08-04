@@ -19,6 +19,16 @@ from .conversation import Conversation
 from .chat_message_new import ChatMessage
 from .token_ledger import TokenLedger
 from .billing_order import BillingOrder
+from .scheduling import (
+    SchedulingPreference,
+    ScheduleCapacityOverride,
+    ScheduleItemDependency,
+    ScheduleAllocation,
+    ScheduleIntervention,
+    SchedulePlan,
+    SchedulePlanItem,
+    ScheduleAuditEvent,
+)
 
 __all__ = [
     "Deadline", "EmailVerification",
@@ -26,4 +36,7 @@ __all__ = [
     "ReminderDigest", "ReminderDelivery", "TaskReminderNotification", "TaskReminderDelivery", "LLMUsageRecord",
     "AppUser", "AppTask", "SubTask", "Conversation", "ChatMessage",
     "TokenLedger", "BillingOrder",
+    "SchedulingPreference", "ScheduleCapacityOverride", "ScheduleItemDependency",
+    "ScheduleAllocation", "ScheduleIntervention", "SchedulePlan", "SchedulePlanItem",
+    "ScheduleAuditEvent",
 ]

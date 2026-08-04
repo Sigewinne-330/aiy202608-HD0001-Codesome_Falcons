@@ -15,6 +15,16 @@ from models.app_user import AppUser
 logger = logging.getLogger(__name__)
 
 
+def _schedule_after_mutation(db: Session, user_id: int, trigger: str) -> None:
+    """Run the optional scheduler without making legacy CRUD depend on it."""
+    try:
+        from services.schedule_triggers import analyze_after_mutation
+        analyze_after_mutation(db, user_id, trigger)
+    except Exception:
+        db.rollback()
+        logger.exception("Schedule analysis failed after %s", trigger)
+
+
 # ═══════════════════════════════════════════════════════════════
 # tasks 表操作（3 个函数）
 # ═══════════════════════════════════════════════════════════════
@@ -60,6 +70,11 @@ def create_task(
         due = None
 
     try:
+        personal_due = date_type.fromisoformat(personal_deadline) if personal_deadline else None
+    except (ValueError, TypeError):
+        personal_due = None
+
+    try:
         pri = Priority(priority)
     except ValueError:
         pri = Priority.medium
@@ -93,6 +108,7 @@ def create_task(
         category=normalized_category,
         priority=pri,
         deadline=due,
+        personal_deadline=personal_due,
         estimated_hours=estimated_hours,
         status=task_status,
     )
@@ -100,6 +116,8 @@ def create_task(
 
     db.commit()
     db.refresh(task)
+
+    _schedule_after_mutation(db, actual_uid, "agent_task_create")
 
     logger.info(f"Task created: id={task.id}, title={task.title}")
     return _task_to_dict(task)
@@ -201,8 +219,18 @@ def update_task(
             return {"error": "invalid task status"}
         task.status = mapped_status
 
+    task.schedule_version = int(task.schedule_version or 1) + 1
+
     db.commit()
     db.refresh(task)
+    if str(getattr(task.status, "value", task.status) or "").lower() == "done":
+        try:
+            from services.schedule_lifecycle import record_schedule_outcome
+            record_schedule_outcome(db, actual_uid, "task", task.id, "done")
+        except Exception:
+            db.rollback()
+            logger.exception("Schedule outcome logging failed for task %s", task.id)
+    _schedule_after_mutation(db, actual_uid, "agent_task_update")
     return {"ok": True, **_task_to_dict(task)}
 
 
@@ -237,6 +265,8 @@ def delete_task(
 
     db.delete(task)
     db.commit()
+
+    _schedule_after_mutation(db, user_id, "agent_task_delete")
 
     logger.info(f"Task deleted: id={task_id}, title={deleted_title}")
     return {"ok": True, "deleted_id": task_id, "deleted_title": deleted_title}
@@ -354,6 +384,8 @@ def create_subtask(
     db.commit()
     db.refresh(subtask)
 
+    _schedule_after_mutation(db, actual_uid, "agent_subtask_create")
+
     logger.info(f"SubTask created: id={subtask.id}, name={subtask.name}, task_id={task_id}")
     return _subtask_to_dict(subtask)
 
@@ -436,8 +468,18 @@ def update_subtask(
             return {"error": "invalid subtask status"}
         subtask.status = mapped_status
 
+    subtask.schedule_version = int(subtask.schedule_version or 1) + 1
+
     db.commit()
     db.refresh(subtask)
+    if str(subtask.status or "").lower() == "done":
+        try:
+            from services.schedule_lifecycle import record_schedule_outcome
+            record_schedule_outcome(db, actual_uid, "subtask", subtask.id, "done")
+        except Exception:
+            db.rollback()
+            logger.exception("Schedule outcome logging failed for subtask %s", subtask.id)
+    _schedule_after_mutation(db, actual_uid, "agent_subtask_update")
     return {"ok": True, **_subtask_to_dict(subtask)}
 
 
@@ -469,6 +511,8 @@ def delete_subtask(
     db.delete(subtask)
     db.commit()
 
+    _schedule_after_mutation(db, actual_uid, "agent_subtask_delete")
+
     logger.info(f"SubTask deleted: id={subtask_id}, name={deleted_name}")
     return {"ok": True, "deleted_id": subtask_id, "deleted_name": deleted_name}
 
@@ -492,6 +536,14 @@ def _task_to_dict(t: Task) -> Dict[str, Any]:
         "deadline": (t.deadline.date().isoformat() if t.deadline else None),
         "estimated_hours": float(t.estimated_hours) if t.estimated_hours else 0,
         "progress": t.progress,
+        "earliest_start_date": t.earliest_start_date.isoformat() if t.earliest_start_date else None,
+        "hard_deadline_date": t.hard_deadline_date.isoformat() if t.hard_deadline_date else None,
+        "energy_intensity": float(t.energy_intensity) if t.energy_intensity is not None else 1.0,
+        "effort_source": t.effort_source or "default",
+        "is_schedule_locked": bool(t.is_schedule_locked),
+        "schedule_version": t.schedule_version or 1,
+        "deferral_count": t.deferral_count or 0,
+        "schedule_kind": t.schedule_kind,
         "created_at": t.created_at.isoformat() if t.created_at else None,
         "update_time": t.update_time.isoformat() if t.update_time else None,
     }
@@ -508,6 +560,15 @@ def _subtask_to_dict(st: SubTask) -> Dict[str, Any]:
         "level": st.level or "medium",
         "status": st.status or "pending",
         "notice_method": st.notice_method,
+        "estimated_hours": float(st.estimated_hours) if st.estimated_hours is not None else 0,
+        "earliest_start_date": st.earliest_start_date.isoformat() if st.earliest_start_date else None,
+        "hard_deadline_date": st.hard_deadline_date.isoformat() if st.hard_deadline_date else None,
+        "energy_intensity": float(st.energy_intensity) if st.energy_intensity is not None else 1.0,
+        "effort_source": st.effort_source or "default",
+        "is_schedule_locked": bool(st.is_schedule_locked),
+        "schedule_version": st.schedule_version or 1,
+        "deferral_count": st.deferral_count or 0,
+        "schedule_kind": st.schedule_kind,
         "created_at": st.created_at.isoformat() if st.created_at else None,
         "updated_at": st.updated_at.isoformat() if st.updated_at else None,
     }
