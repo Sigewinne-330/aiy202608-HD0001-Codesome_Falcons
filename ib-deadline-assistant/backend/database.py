@@ -8,7 +8,7 @@ if os.name == "nt":
 else:
     import fcntl
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from config import settings
@@ -23,6 +23,16 @@ engine = create_engine(
     pool_pre_ping=True,
     echo=False,
 )
+
+
+@event.listens_for(engine, "connect")
+def _set_mysql_timezone(dbapi_connection, connection_record):
+    """确保 MySQL 会话时区为 UTC，与 Python utcnow() 保持一致。"""
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("SET time_zone = '+00:00'")
+    finally:
+        cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

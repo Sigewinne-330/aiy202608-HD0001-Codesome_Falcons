@@ -50,6 +50,7 @@ class VerificationCodeSubmit(VerificationCodeRequest):
 class VerificationCodeAccepted(BaseModel):
     message: str
     retry_after_seconds: int
+    already_registered: bool = False
 
 
 class VerificationProofResponse(BaseModel):

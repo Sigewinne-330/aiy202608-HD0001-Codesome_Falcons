@@ -91,7 +91,10 @@ def create_verification_request(
     )
     if last_request and last_request.created_at:
         elapsed = (now - last_request.created_at).total_seconds()
-        if elapsed < policy.resend_cooldown_seconds:
+        # 防御：如果 elapsed < 0（时区不一致等异常情况），视为冷却已过期
+        if elapsed < 0:
+            pass
+        elif elapsed < policy.resend_cooldown_seconds:
             raise VerificationRateLimitError(
                 math.ceil(policy.resend_cooldown_seconds - elapsed)
             )

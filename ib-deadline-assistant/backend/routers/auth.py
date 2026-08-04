@@ -64,20 +64,27 @@ def request_verification_code(
             headers={"Retry-After": str(exc.retry_after_seconds)},
         ) from exc
 
-    if code is not None:
-        try:
-            sender.send_verification_code(
-                record.email,
-                code,
-                max(1, math.ceil(policy.code_ttl_seconds / 60)),
-            )
-        except (EmailDeliveryError, TimeoutError) as exc:
-            mark_delivery_failed(db, record)
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="验证码暂时无法发送，请稍后重试",
-            ) from exc
-        mark_delivery_succeeded(db, record)
+    if code is None:
+        # 邮箱已注册：不发送验证码，返回明确提示
+        return VerificationCodeAccepted(
+            message="该邮箱已注册，请直接登录",
+            retry_after_seconds=0,
+            already_registered=True,
+        )
+
+    try:
+        sender.send_verification_code(
+            record.email,
+            code,
+            max(1, math.ceil(policy.code_ttl_seconds / 60)),
+        )
+    except (EmailDeliveryError, TimeoutError) as exc:
+        mark_delivery_failed(db, record)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="验证码暂时无法发送，请稍后重试",
+        ) from exc
+    mark_delivery_succeeded(db, record)
 
     return VerificationCodeAccepted(
         message=GENERIC_ACCEPTED_MESSAGE,
