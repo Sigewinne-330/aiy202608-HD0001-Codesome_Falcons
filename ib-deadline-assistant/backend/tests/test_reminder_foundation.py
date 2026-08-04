@@ -55,7 +55,7 @@ class ReminderFoundationTests(unittest.TestCase):
         Base.metadata.drop_all(self.engine)
         Base.metadata.create_all(self.engine)
         with self.SessionLocal() as db:
-            db.add(User(username="student", email="student@example.com", password_hash="x"))
+            db.add(User(username="student", email="student@example.com", password="x"))
             db.commit()
 
     def test_all_reminder_models_are_in_authoritative_metadata(self):
@@ -118,6 +118,11 @@ class ReminderFoundationTests(unittest.TestCase):
                 role_card_supplied=True,
             )
             self.assertEqual("en-US", row.language)
+            self.assertEqual((2, 1, 0, -1, -3, -7), tuple(row.cadence_offsets))
+            self.assertEqual(
+                (2, 1, 0, -1, -2, -3, -7, -14),
+                normalize_cadence_offsets([2, 1, 0, -1, -2, -3, -7, -14]),
+            )
             cards[1].is_active = False
             db.commit()
             self.assertEqual("friendly-warm-guy", resolve_preferences(db, 1).role_card.slug)
@@ -130,6 +135,8 @@ class ReminderFoundationTests(unittest.TestCase):
                     normalize_language(invalid)
             with self.assertRaises(ValueError):
                 normalize_cadence_offsets([2, 1])
+            with self.assertRaises(ValueError):
+                normalize_cadence_offsets([2, 1, 0, -1, -3, -7, -366])
 
     def test_admin_status_is_server_controlled(self):
         with self.SessionLocal() as db:

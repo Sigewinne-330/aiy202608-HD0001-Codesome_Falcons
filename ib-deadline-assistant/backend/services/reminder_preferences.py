@@ -13,7 +13,11 @@ DEFAULT_LANGUAGE = "zh-CN"
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_CADENCE_OFFSETS = (2, 1, 0, -1, -3, -7)
 DEFAULT_ROLE_CARD_SLUG = "friendly-warm-guy"
-SUPPORTED_CADENCE_OFFSETS = frozenset(DEFAULT_CADENCE_OFFSETS)
+# The baseline cadence remains mandatory.  Users may add overdue D+N points
+# without weakening the pre-deadline coverage that the product guarantees.
+BASE_CADENCE_OFFSETS = frozenset(DEFAULT_CADENCE_OFFSETS)
+MIN_CUSTOM_OVERDUE_DAYS = 2
+MAX_CUSTOM_OVERDUE_DAYS = 365
 LANGUAGE_RE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
 
 
@@ -52,12 +56,32 @@ def validate_timezone(value: str) -> str:
 
 def normalize_cadence_offsets(values: Iterable[int]) -> tuple[int, ...]:
     try:
-        normalized = tuple(dict.fromkeys(int(value) for value in values))
+        raw_values = tuple(values)
+        if any(isinstance(value, bool) for value in raw_values):
+            raise ValueError
+        normalized = tuple(dict.fromkeys(int(value) for value in raw_values))
     except (TypeError, ValueError) as exc:
         raise ValueError("提醒档位格式无效") from exc
-    if not normalized or set(normalized) != SUPPORTED_CADENCE_OFFSETS:
-        raise ValueError("当前版本仅支持 D-2、D-1、D0、D+1、D+3、D+7")
-    return tuple(offset for offset in DEFAULT_CADENCE_OFFSETS if offset in normalized)
+    if not BASE_CADENCE_OFFSETS.issubset(normalized):
+        raise ValueError("提醒档位必须保留 D-2、D-1、D0、D+1、D+3、D+7 基础节点")
+
+    custom_offsets = set(normalized) - BASE_CADENCE_OFFSETS
+    invalid = [
+        offset
+        for offset in custom_offsets
+        if not (-MAX_CUSTOM_OVERDUE_DAYS <= offset <= -MIN_CUSTOM_OVERDUE_DAYS)
+    ]
+    if invalid:
+        raise ValueError(
+            f"自定义提醒仅支持 D+{MIN_CUSTOM_OVERDUE_DAYS} 至 "
+            f"D+{MAX_CUSTOM_OVERDUE_DAYS} 的整数天数"
+        )
+
+    # Stable, chronological order makes the API response predictable for the
+    # future settings UI: pre-deadline -> D0 -> overdue days.
+    before_due = tuple(offset for offset in DEFAULT_CADENCE_OFFSETS if offset >= 0)
+    overdue = tuple(sorted((offset for offset in normalized if offset < 0), reverse=True))
+    return before_due + overdue
 
 
 def get_default_role_card(db: Session) -> Optional[ReminderRoleCard]:

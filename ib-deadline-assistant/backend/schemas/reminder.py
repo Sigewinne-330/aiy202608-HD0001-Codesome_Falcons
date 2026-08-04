@@ -55,7 +55,14 @@ class ReminderPreferenceUpdate(BaseModel):
     enabled: Optional[bool] = None
     language: Optional[str] = Field(default=None, min_length=2, max_length=35)
     timezone: Optional[str] = Field(default=None, min_length=1, max_length=64)
-    cadence_offsets: Optional[list[int]] = None
+    cadence_offsets: Optional[list[int]] = Field(
+        default=None,
+        max_length=371,
+        description=(
+            "完整提醒档位集合；必须保留基础档位，且可额外添加 "
+            "D+2 至 D+365（用 -2 至 -365 表示）"
+        ),
+    )
     email_enabled: Optional[bool] = None
     chat_enabled: Optional[bool] = None
     role_card_id: Optional[int] = None

@@ -2,7 +2,7 @@ import enum
 from sqlalchemy import Column, Integer, String, Text, Date, ForeignKey, Enum, TIMESTAMP
 from sqlalchemy.sql import func
 from database import Base
-from .task import Priority
+from .task_new import Priority
 
 
 class DeadlineStatus(str, enum.Enum):

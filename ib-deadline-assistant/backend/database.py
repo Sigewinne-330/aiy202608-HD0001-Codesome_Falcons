@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import tempfile
 
 if os.name == "nt":
@@ -133,3 +134,47 @@ def auto_sync_tables(engine_obj, base):
                     logger.info("[auto-sync] adding column %s.%s (%s)", table_name, column.name, column_type)
                     conn.execute(text(sql))
                     conn.commit()
+
+
+def sync_reminder_legacy_foreign_keys(engine_obj):
+    """Repair the one reminder FK that older schemas pointed at chat_history.
+
+    Earlier deployments created ``reminder_digests.chat_message_id`` against the
+    legacy ``chat_history`` table.  Current reminder delivery writes to
+    ``chat_message``.  ``create_all`` deliberately does not alter existing FKs,
+    so perform this small, idempotent compatibility migration at startup.
+    """
+    inspector = inspect(engine_obj)
+    table_name = "reminder_digests"
+    if not inspector.has_table(table_name) or not inspector.has_table("chat_message"):
+        return
+
+    mismatched = [
+        foreign_key
+        for foreign_key in inspector.get_foreign_keys(table_name)
+        if foreign_key.get("constrained_columns") == ["chat_message_id"]
+        and foreign_key.get("referred_table") != "chat_message"
+    ]
+    if not mismatched:
+        return
+
+    # Constraint names originate from database metadata, but reject anything
+    # unexpected before interpolating it into MySQL DDL.
+    valid_name = re.compile(r"^[A-Za-z0-9_]+$")
+    with engine_obj.begin() as conn:
+        for foreign_key in mismatched:
+            name = foreign_key.get("name")
+            if not name or not valid_name.fullmatch(name):
+                raise RuntimeError("无法安全迁移 reminder_digests 的旧外键")
+            conn.execute(
+                text(f"ALTER TABLE `{table_name}` DROP FOREIGN KEY `{name}`")
+            )
+        conn.execute(
+            text(
+                "ALTER TABLE `reminder_digests` "
+                "ADD CONSTRAINT `fk_reminder_digests_chat_message` "
+                "FOREIGN KEY (`chat_message_id`) REFERENCES `chat_message` (`id`) "
+                "ON DELETE SET NULL"
+            )
+        )
+    logger.info("[compat] reminder_digests.chat_message_id foreign key migrated")

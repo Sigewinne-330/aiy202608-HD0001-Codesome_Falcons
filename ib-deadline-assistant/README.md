@@ -312,7 +312,7 @@ cd backend
 
 从早期提醒开发表升级时，依次执行 `backend/migrate_reminder_delivery_status.sql`（SMTP 崩溃保护与投递租约）和 `backend/migrate_reminder_role_card_scope.sql`（角色卡全局/私有边界）；全新数据库的 `init_db.sql` 已包含这些字段。
 
-提醒覆盖未完成的顶层 todo、流程子任务和 Deadline，并在 D-2、D-1、D0、D+1、D+3、D+7 合并为每天每用户一份 digest。LLM 只生成标题和 1–2 句开场，后端确定性附加完整项目列表；同一内容独立写入聊天和邮件。
+提醒覆盖未完成的顶层 todo、流程子任务和 Deadline，并在 D-2、D-1、D0、D+1、D+3、D+7 合并为每天每用户一份 digest。用户还可通过 `PUT /api/reminders/preferences` 在保留全部基础节点的前提下追加 D+2 至 D+365 的逾期提醒。LLM 只生成标题和 1–2 句开场，后端确定性附加完整项目列表；同一内容独立写入聊天和邮件。
 
 QQ Mail 可使用 `smtp.qq.com` 及服务商当前支持的 TLS 端口/模式。常见配置为 465 + SSL：
 

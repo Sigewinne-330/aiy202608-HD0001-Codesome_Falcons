@@ -88,7 +88,7 @@ class ReminderMySQLIntegrationTests(unittest.TestCase):
             user = User(
                 username=self.username,
                 email=self.email,
-                password_hash="integration-only",
+                password="integration-only",
             )
             db.add(user)
             db.flush()

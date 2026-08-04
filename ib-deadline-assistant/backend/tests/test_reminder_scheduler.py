@@ -53,8 +53,8 @@ class ReminderSchedulerTests(unittest.TestCase):
         with self.SessionLocal() as db:
             db.add_all(
                 [
-                    User(username="one", email="one@example.com", password_hash="x"),
-                    User(username="two", email="two@example.com", password_hash="x"),
+                    User(username="one", email="one@example.com", password="x"),
+                    User(username="two", email="two@example.com", password="x"),
                 ]
             )
             db.commit()
@@ -239,7 +239,7 @@ class ReminderSchedulerTests(unittest.TestCase):
             sessions = sessionmaker(bind=engine, autoflush=False)
             Base.metadata.create_all(engine)
             with sessions() as db:
-                db.add(User(username="race", email="race@example.com", password_hash="x"))
+                db.add(User(username="race", email="race@example.com", password="x"))
                 db.commit()
                 seed_builtin_role_cards(db)
                 db.add(

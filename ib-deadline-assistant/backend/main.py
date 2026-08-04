@@ -7,7 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from config import settings
-from database import Base, SessionLocal, _try_acquire_file_lock, auto_sync_tables, engine
+from database import (
+    Base,
+    SessionLocal,
+    _try_acquire_file_lock,
+    auto_sync_tables,
+    engine,
+    sync_reminder_legacy_foreign_keys,
+)
 from routers import auth, billing, calendar, chat, deadlines, reminders, tasks
 from services.image_storage import UPLOAD_DIR
 from services.reminder_seeds import seed_builtin_role_cards
@@ -44,9 +51,9 @@ def on_startup():
 
         Base.metadata.create_all(bind=engine)
         auto_sync_tables(engine, Base)
+        sync_reminder_legacy_foreign_keys(engine)
         with SessionLocal() as db:
             seed_builtin_role_cards(db)
-
 
 app.include_router(auth.router)
 app.include_router(tasks.router)

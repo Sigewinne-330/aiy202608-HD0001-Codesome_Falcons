@@ -84,7 +84,7 @@ class ReminderOrchestratorTests(unittest.IsolatedAsyncioTestCase):
         Base.metadata.drop_all(self.engine)
         Base.metadata.create_all(self.engine)
         with self.SessionLocal() as db:
-            db.add(User(username="owner", email="owner@example.com", password_hash="x"))
+            db.add(User(username="owner", email="owner@example.com", password="x"))
             db.commit()
             seed_builtin_role_cards(db)
             db.add(

@@ -53,14 +53,14 @@ class ReminderApiTests(unittest.TestCase):
         with self.SessionLocal() as db:
             db.add_all(
                 [
-                    User(username="owner", email="owner@example.com", password_hash="x"),
+                    User(username="owner", email="owner@example.com", password="x"),
                     User(
                         username="admin",
                         email="admin@example.com",
-                        password_hash="x",
+                        password="x",
                         is_admin=True,
                     ),
-                    User(username="other", email="other@example.com", password_hash="x"),
+                    User(username="other", email="other@example.com", password="x"),
                 ]
             )
             db.commit()
@@ -121,6 +121,19 @@ class ReminderApiTests(unittest.TestCase):
         self.assertEqual(422, invalid.status_code)
         invalid = self.client.put(
             "/api/reminders/preferences", json={"cadence_offsets": [2, 1]}
+        )
+        self.assertEqual(422, invalid.status_code)
+        custom = self.client.put(
+            "/api/reminders/preferences",
+            json={"cadence_offsets": [2, 1, 0, -1, -2, -3, -7, -30]},
+        )
+        self.assertEqual(200, custom.status_code, custom.text)
+        self.assertEqual(
+            [2, 1, 0, -1, -2, -3, -7, -30], custom.json()["cadence_offsets"]
+        )
+        invalid = self.client.put(
+            "/api/reminders/preferences",
+            json={"cadence_offsets": [2, 1, 0, -1, -3, -7, -366]},
         )
         self.assertEqual(422, invalid.status_code)
         invalid = self.client.put(

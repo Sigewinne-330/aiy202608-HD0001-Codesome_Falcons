@@ -86,7 +86,7 @@ class ReminderDeliveryTests(unittest.TestCase):
         Base.metadata.drop_all(self.engine)
         Base.metadata.create_all(self.engine)
         with self.SessionLocal() as db:
-            user = User(username="owner", email="owner@example.com", password_hash="x")
+            user = User(username="owner", email="owner@example.com", password="x")
             db.add(user)
             db.commit()
             cards = seed_builtin_role_cards(db)
