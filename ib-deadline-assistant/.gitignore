@@ -28,3 +28,7 @@ Thumbs.db
 *.log
 *.db
 *.sqlite
+
+# Local Codex/OpenSpec planning artifacts (keep local; never publish)
+/openspec/
+/.codex/skills/openspec-*/
