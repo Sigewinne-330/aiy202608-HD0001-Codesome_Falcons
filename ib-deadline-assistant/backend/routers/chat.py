@@ -153,6 +153,7 @@ async def _run_tool_loop(
     Returns:
         AI 的最终文本回复
     """
+    kb_call_ids: List[str] = []  # 追踪 KB 调用，去重用
     for _round in range(MAX_TOOL_ROUNDS):
         choice = await ai_service.chat_with_tools(messages, ALL_TOOLS)
 
@@ -185,12 +186,21 @@ async def _run_tool_loop(
                 else:
                     result = {"error": f"未知工具: {func_name}"}
 
+                # 知识库去重：第二次查 KB 时删除旧的 KB 结果
+                if func_name == "get_subject_guidelines" and "error" not in result and kb_call_ids:
+                    messages[:] = [m for m in messages if m.get("tool_call_id") not in kb_call_ids]
+                    logger.info(f"Stripped {len(kb_call_ids)} old KB result(s): {kb_call_ids}")
+                    kb_call_ids.clear()
+
                 # 把工具结果追加到对话
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc.id,
                     "content": json.dumps(result, ensure_ascii=False),
                 })
+
+                if func_name == "get_subject_guidelines":
+                    kb_call_ids.append(tc.id)
 
             continue  # 继续下一轮，让 AI 基于工具结果生成回复
 
@@ -219,6 +229,7 @@ async def _run_tool_loop_stream(
     """
     full_reply: List[str] = []  # 跨轮累积完整回复
     use_vision = has_images
+    kb_call_ids: List[str] = []  # 追踪 KB 调用，去重用
 
     for _round in range(MAX_TOOL_ROUNDS):
         tool_calls = None
@@ -286,11 +297,20 @@ async def _run_tool_loop_stream(
             else:
                 result = {"error": f"未知工具: {func_name}"}
 
+            # 知识库去重：第二次查 KB 时删除旧的 KB 结果
+            if func_name == "get_subject_guidelines" and "error" not in result and kb_call_ids:
+                messages[:] = [m for m in messages if m.get("tool_call_id") not in kb_call_ids]
+                logger.info(f"Stripped {len(kb_call_ids)} old KB result(s): {kb_call_ids}")
+                kb_call_ids.clear()
+
             messages.append({
                 "role": "tool",
                 "tool_call_id": tc["id"],
                 "content": json.dumps(result, ensure_ascii=False),
             })
+
+            if func_name == "get_subject_guidelines":
+                kb_call_ids.append(tc["id"])
 
             # 工具执行完毕后推送结果状态
             if isinstance(result, list):
