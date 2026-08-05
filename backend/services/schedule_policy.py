@@ -94,8 +94,8 @@ def profile_snapshot(profile: PolicyProfile) -> dict:
 
 
 def scheduling_enabled() -> bool:
-    """Read the rollout flag without requiring the ignored local config file."""
-    return os.getenv("SCHEDULING_BALANCER_ENABLED", "false").strip().lower() in {
+    """Keep scheduling available by default; allow an explicit emergency opt-out."""
+    return os.getenv("SCHEDULING_BALANCER_ENABLED", "true").strip().lower() in {
         "1", "true", "yes", "on",
     }
 

@@ -20,6 +20,7 @@ from routers import auth, billing, calendar, chat, deadlines, reminders, schedul
 import models  # noqa: F401 - register every ORM model before startup create_all
 from services.image_storage import UPLOAD_DIR
 from services.reminder_seeds import seed_builtin_role_cards
+from services.schedule_policy import scheduling_enabled
 
 
 logging.basicConfig(
@@ -57,6 +58,11 @@ def on_startup():
         sync_reminder_legacy_foreign_keys(engine)
         with SessionLocal() as db:
             seed_builtin_role_cards(db)
+    logging.getLogger(__name__).info(
+        "Scheduling balancer runtime: enabled=%s agent_tools=%s",
+        scheduling_enabled(),
+        _scheduling_agent_tools_registered(),
+    )
 
 app.include_router(auth.router)
 app.include_router(tasks.router)
@@ -73,4 +79,27 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "app": settings.APP_NAME, "version": settings.APP_VERSION}
+    return {
+        "status": "ok",
+        "app": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "capabilities": {
+            "scheduling_balancer": scheduling_enabled(),
+            "scheduling_agent_tools": _scheduling_agent_tools_registered(),
+            "automatic_scheduling_default": False,
+        },
+    }
+
+
+def _scheduling_agent_tools_registered() -> bool:
+    required = {
+        "preflight_create_calendar_item",
+        "resolve_overload_intervention",
+        "analyze_schedule",
+        "create_schedule_plan",
+        "apply_schedule_plan",
+        "undo_schedule_plan",
+        "replan_schedule",
+        "get_schedule_log",
+    }
+    return required.issubset(chat.TOOL_DISPATCH)

@@ -51,6 +51,8 @@
 - A role card can change wording only. It cannot bypass preflight, change weights, force a date, relax hard deadlines/locks/dependencies, or alter user ownership.
 - If the result asks for effort clarification, ask one focused question and leave the item uncreated until the user confirms.
 - A threshold warning is advisory: after explicit confirmation, the user may keep the original date and the override is recorded.
+- When the user asks to "负载均衡", "任务规避", smooth a hell week, rebalance, reschedule, or find overloaded dates, call `analyze_schedule` first. For a requested multi-item rearrangement, call `create_schedule_plan` and present the side-effect-free preview; do not claim balancing happened merely because ordinary tasks were listed.
+- Never call `apply_schedule_plan` until the user explicitly accepts a specific preview/profile. After confirmation, pass that preview's exact plan ID and input revision with a fresh idempotency key. Automatic scheduling being off does not disable analysis, dated-create preflight, or manual preview/apply.
 
 ## 时间线模型
 

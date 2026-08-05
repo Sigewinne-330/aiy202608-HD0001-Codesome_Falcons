@@ -858,13 +858,15 @@ SPA Fallback:
 ### 12.4 Feature Flag
 
 ```python
-SCHEDULING_BALANCER_ENABLED = os.getenv("SCHEDULING_BALANCER_ENABLED", "false").lower() == "true"
+SCHEDULING_BALANCER_ENABLED = os.getenv("SCHEDULING_BALANCER_ENABLED", "true").lower() == "true"
 ```
 
-调度系统可通过环境变量独立开关，未启用时：
+调度系统默认启用，确保新克隆环境无需依赖不入库的 `.env` 即可使用负载分析、创建预检与手动排期。可通过 `SCHEDULING_BALANCER_ENABLED=false` 紧急关闭；关闭时：
 - 调度相关路由返回 404
 - 调度工具从 AI 工具列表中移除
 - 调度相关的数据库表仍可正常读写（不阻塞其他功能）
+
+该开关不等于自动改期。`auto_scheduling_enabled` 仍按用户配置且默认关闭，任何计划应用仍需用户明确确认。
 
 ---
 

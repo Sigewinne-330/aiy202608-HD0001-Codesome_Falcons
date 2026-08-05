@@ -228,6 +228,7 @@ import SettingsDialog from '@/components/SettingsDialog.vue'
 import { onTasksChanged } from '@/services/taskSync'
 import { onOpenAgent } from '@/services/agentContext'
 import { getPreferences, updatePreferences, listRoleCards, ApiError } from '@/services/reminders'
+import { notifyRoleCardChanged } from '@/services/roleCardVisuals'
 
 const router = useRouter()
 const route = useRoute()
@@ -398,6 +399,7 @@ watch(styleMenuOpen, async (open) => {
     styleCards.value = Array.isArray(cards) ? cards : cards?.items || []
     styleSelectedId.value = prefs?.role_card?.id ?? null
     styleDefaultName.value = prefs?.role_card?.name || ''
+    notifyRoleCardChanged(prefs?.role_card || null)
     styleLoaded.value = true
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) handleLogout()
@@ -417,6 +419,7 @@ async function selectStyle(id) {
     const updated = await updatePreferences({ role_card_id: id })
     styleSelectedId.value = updated?.role_card?.id ?? null
     styleDefaultName.value = updated?.role_card?.name || styleDefaultName.value
+    notifyRoleCardChanged(updated?.role_card || null)
     styleMenuOpen.value = false
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) handleLogout()

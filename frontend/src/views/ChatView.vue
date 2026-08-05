@@ -95,9 +95,13 @@
             </div>
             <!-- AI 消息 -->
             <div v-else class="d-flex align-start gap-2">
-              <v-avatar size="32" color="primary" class="mt-1">
-                <v-icon size="18" color="white">mdi-robot</v-icon>
-              </v-avatar>
+              <RoleCardAvatar
+                :slug="messageRoleCardSlug(msg, activeRoleCard?.slug)"
+                :size="32"
+                :icon-size="18"
+                icon="mdi-robot"
+                class="mt-1"
+              />
               <div class="assistant-message-wrapper" style="max-width: 92%;">
                 <!-- 汇总提醒消息标识：metadata.source === 'reminder' -->
                 <div v-if="msg.metadata?.source === 'reminder'" class="reminder-banner">
@@ -242,7 +246,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onBeforeUnmount, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { compressImageFile } from '@/services/imageCompress'
@@ -250,6 +254,12 @@ import MarkdownIt from 'markdown-it'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { authFetch } from '@/stores/auth'
+import { getPreferences } from '@/services/reminders'
+import {
+  messageRoleCardSlug,
+  onRoleCardChanged,
+} from '@/services/roleCardVisuals'
+import RoleCardAvatar from '@/components/RoleCardAvatar.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -314,7 +324,18 @@ const previewOpen = ref(false)
 const selectedImages = ref([])  // [{ dataUrl, file }]
 const imageInput = ref(null)
 const dragActive = ref(false)   // 拖拽高亮状态
+const activeRoleCard = ref(null)
 let abortController = null
+let stopRoleCardListener = null
+
+async function loadActiveRoleCard() {
+  try {
+    const preferences = await getPreferences()
+    activeRoleCard.value = preferences?.role_card || null
+  } catch {
+    activeRoleCard.value = null
+  }
+}
 
 /** 点击历史消息里的图片 → 大图预览 */
 function previewImage(url) {
@@ -509,7 +530,14 @@ async function sendMessage() {
   loading.value = true
 
   // 插入一个空的 AI 消息占位，标记正在流式
-  messages.value.push({ role: 'assistant', content: '', streaming: true })
+  messages.value.push({
+    role: 'assistant',
+    content: '',
+    streaming: true,
+    metadata: activeRoleCard.value?.slug
+      ? { source: 'main_agent', role_card: { slug: activeRoleCard.value.slug } }
+      : null,
+  })
   const aiIndex = messages.value.length - 1
 
   scrollToBottom()
@@ -708,6 +736,10 @@ async function scrollToBottom() {
 }
 
 onMounted(async () => {
+  stopRoleCardListener = onRoleCardChanged((roleCard) => {
+    activeRoleCard.value = roleCard
+  })
+  await loadActiveRoleCard()
   await loadConversations()
   // 默认选中最近一个对话；没有对话则保持空（发消息时自动新建）
   if (conversations.value.length > 0) {
@@ -715,6 +747,8 @@ onMounted(async () => {
     await loadHistory(activeConversationId.value)
   }
 })
+
+onBeforeUnmount(() => stopRoleCardListener?.())
 </script>
 
 <style scoped>

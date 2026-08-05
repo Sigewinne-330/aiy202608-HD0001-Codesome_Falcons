@@ -227,6 +227,7 @@ import { useI18n } from 'vue-i18n'
 import { getPreferences, updatePreferences, listRoleCards, ApiError } from '@/services/reminders'
 import RoleCardPicker from '@/components/RoleCardPicker.vue'
 import ReminderOffsetsEditor from '@/components/ReminderOffsetsEditor.vue'
+import { notifyRoleCardChanged } from '@/services/roleCardVisuals'
 
 const emit = defineEmits(['unauthorized'])
 const { t } = useI18n()
@@ -433,6 +434,7 @@ async function save() {
   try {
     const updated = await updatePreferences(patch)
     applyPreferences(updated)
+    notifyRoleCardChanged(updated?.role_card || null)
     showSaveMessage(t('reminders.saved'), false)
   } catch (err) {
     if (handleAuthError(err)) return

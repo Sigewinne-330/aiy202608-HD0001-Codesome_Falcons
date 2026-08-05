@@ -21,6 +21,7 @@ from models.app_user import AppUser  # noqa: E402
 from models.task_new import Task, TaskType  # noqa: E402
 from models.scheduling import ScheduleAllocation  # noqa: E402
 from services.auth import get_current_user  # noqa: E402
+from services.schedule_policy import scheduling_enabled  # noqa: E402
 
 
 class ScheduleApiTests(unittest.TestCase):
@@ -62,6 +63,8 @@ class ScheduleApiTests(unittest.TestCase):
             db.commit()
 
     def test_flag_and_preferences_and_capacity_routes(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertTrue(scheduling_enabled())
         with patch.dict(os.environ, {"SCHEDULING_BALANCER_ENABLED": "false"}):
             self.assertEqual(404, self.client.get("/api/scheduling/preferences").status_code)
         with patch.dict(os.environ, {"SCHEDULING_BALANCER_ENABLED": "true"}):
@@ -78,6 +81,14 @@ class ScheduleApiTests(unittest.TestCase):
             )
             self.assertEqual(200, response.status_code, response.text)
             self.assertEqual(0.0, response.json()["capacity_hours"])
+
+    def test_health_exposes_effective_scheduling_runtime_and_registry(self):
+        response = self.client.get("/api/health")
+        self.assertEqual(200, response.status_code, response.text)
+        capabilities = response.json()["capabilities"]
+        self.assertEqual(scheduling_enabled(), capabilities["scheduling_balancer"])
+        self.assertIsInstance(capabilities["scheduling_agent_tools"], bool)
+        self.assertFalse(capabilities["automatic_scheduling_default"])
 
     def test_preflight_route_is_complete_day_and_side_effect_free(self):
         target = date.today() + timedelta(days=3)

@@ -2,9 +2,13 @@
   <div class="agent-panel">
     <div class="agent-panel__header">
       <div class="d-flex align-center">
-        <v-avatar color="primary" size="42" class="mr-3 agent-avatar">
-          <v-icon icon="mdi-creation-outline" color="white" />
-        </v-avatar>
+        <RoleCardAvatar
+          :slug="activeRoleCard?.slug"
+          :title="activeRoleCard?.name"
+          :size="42"
+          :icon-size="21"
+          class="mr-3 agent-avatar"
+        />
         <div>
           <div class="text-subtitle-1 font-weight-bold">{{ $t('agent.title') }}</div>
           <div class="agent-status-line">
@@ -87,9 +91,12 @@
       </div>
 
       <div v-for="(message, index) in messages" :key="index" class="agent-message" :class="`agent-message--${message.role}`">
-        <v-avatar v-if="message.role === 'assistant'" color="primary" size="28">
-          <v-icon icon="mdi-creation-outline" color="white" size="15" />
-        </v-avatar>
+        <RoleCardAvatar
+          v-if="message.role === 'assistant'"
+          :slug="messageRoleCardSlug(message, activeRoleCard?.slug)"
+          :size="28"
+          :icon-size="15"
+        />
         <div class="agent-bubble" :class="{ 'agent-bubble--md': message.role === 'assistant' }">
           <!-- 汇总提醒消息标识：metadata.source === 'reminder' -->
           <div v-if="message.metadata?.source === 'reminder'" class="reminder-banner">
@@ -222,12 +229,18 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
 import { notifyTasksChanged } from '@/services/taskSync'
 import { compressImageFile } from '@/services/imageCompress'
+import { getPreferences } from '@/services/reminders'
+import {
+  messageRoleCardSlug,
+  onRoleCardChanged,
+} from '@/services/roleCardVisuals'
+import RoleCardAvatar from '@/components/RoleCardAvatar.vue'
 import MarkdownIt from 'markdown-it'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
@@ -328,7 +341,18 @@ const dragActive = ref(false)   // 拖拽高亮状态
 const balance = ref(0)
 const previewUrl = ref('')   // 图片大图预览
 const previewOpen = ref(false)
+const activeRoleCard = ref(null)
 let controller = null
+let stopRoleCardListener = null
+
+async function loadActiveRoleCard() {
+  try {
+    const preferences = await getPreferences()
+    activeRoleCard.value = preferences?.role_card || null
+  } catch {
+    activeRoleCard.value = null
+  }
+}
 
 const suggestions = [
   'agent.suggestion1',
@@ -529,7 +553,14 @@ async function sendMessage() {
   // 先取出待发送图片（挂到用户消息上，气泡里永久显示）
   const images = selectedImages.value.map(img => img.dataUrl)
   messages.value.push({ role: 'user', content, images: images.length ? [...images] : null })
-  messages.value.push({ role: 'assistant', content: '', streaming: true })
+  messages.value.push({
+    role: 'assistant',
+    content: '',
+    streaming: true,
+    metadata: activeRoleCard.value?.slug
+      ? { source: 'main_agent', role_card: { slug: activeRoleCard.value.slug } }
+      : null,
+  })
   const responseIndex = messages.value.length - 1
   input.value = ''
   selectedImages.value = []
@@ -641,9 +672,15 @@ async function loadHistory() {
 }
 
 onMounted(() => {
+  stopRoleCardListener = onRoleCardChanged((roleCard) => {
+    activeRoleCard.value = roleCard
+  })
+  loadActiveRoleCard()
   loadHistory()
   loadBalance()
 })
+
+onBeforeUnmount(() => stopRoleCardListener?.())
 </script>
 
 <style scoped>
