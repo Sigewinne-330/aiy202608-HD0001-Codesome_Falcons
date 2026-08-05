@@ -259,8 +259,11 @@ function renderMath(text) {
 /** Markdown + LaTeX 渲染（剥离末尾 JSON 任务块） */
 function renderMarkdown(text) {
   try {
-    const clean = text.replace(/```json[\s\S]*?```\s*$/, '').trim()
-    return md.render(renderMath(clean || text))
+    let clean = text.replace(/```json[\s\S]*?```\s*$/, '').trim()
+    // 修复：LLM 经常在有序列表标记 "1." / "1)" 后换行，
+    // 配合 markdown-it 的 breaks:true 会变成 <br>，导致数字单独一行。
+    clean = clean.replace(/^(\s*\d+[.)])\s*\n/gm, '$1 ')
+    return md.render(renderMath(clean))
   } catch {
     return text
   }
