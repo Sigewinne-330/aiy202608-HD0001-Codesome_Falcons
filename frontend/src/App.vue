@@ -204,6 +204,24 @@
         </div>
       </transition>
 
+      <!-- 左下角：提醒中心入口（与右下角 quick-actions 对称） -->
+      <transition name="quick-actions-fade">
+        <div v-show="!agentDrawer" class="reminder-entry">
+          <v-tooltip :text="$t('reminders.title')" location="right">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                icon="mdi-bell-outline"
+                color="warning"
+                elevation="8"
+                :aria-label="$t('reminders.title')"
+                @click="router.push('/reminders')"
+              />
+            </template>
+          </v-tooltip>
+        </div>
+      </transition>
+
       <SettingsDialog v-model="settingsOpen" :initial-section="settingsSection" @logout="handleLogout" />
     </template>
 
@@ -671,6 +689,15 @@ onBeforeUnmount(() => {
 
 .quick-actions .v-btn { width: 48px; height: 48px; }
 
+/* 左下角提醒中心入口：与 quick-actions 同尺寸同高度，左右对称 */
+.reminder-entry {
+  position: fixed;
+  left: 25px;
+  bottom: 26px;
+  z-index: 1050;
+}
+.reminder-entry .v-btn { width: 48px; height: 48px; }
+
 /* Agent 抽屉打开时：三个快捷按钮收回去（淡出+下沉），关闭时弹回来 */
 .quick-actions-fade-enter-active,
 .quick-actions-fade-leave-active { transition: opacity .2s ease, transform .2s ease; }
@@ -689,6 +716,7 @@ onBeforeUnmount(() => {
   .calendar-back-button .v-btn__content { font-size: 0; }
   .agent-trigger .v-btn__content { font-size: 0; }
   .quick-actions { right: 14px; bottom: 16px; }
+  .reminder-entry { left: 14px; bottom: 16px; }
   .reminder-popover { right: 14px; top: 74px; width: calc(100vw - 28px); }
 }
 </style>

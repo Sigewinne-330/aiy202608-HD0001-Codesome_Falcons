@@ -498,7 +498,7 @@ export default {
     title: 'Reminder Center',
     subtitle: 'Review reminder history and manage how the system sends schedule reminders',
     tabHistory: 'History',
-    tabSettings: 'Settings',
+    tabSettings: 'Reminder Settings',
     enabled: 'Schedule reminders',
     enabledHelp: 'When off, the system stops generating new reminders for you. Existing settings are kept.',
     language: 'Reminder language',
