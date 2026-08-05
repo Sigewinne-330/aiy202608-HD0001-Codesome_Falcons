@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional, Protocol
 
 from sqlalchemy.orm import Session
@@ -11,6 +12,7 @@ from services.email_service import (
     EmailTransport,
     GenericEmailMessage,
 )
+from services.email_templates import render_reminder
 
 
 @dataclass(frozen=True)
@@ -110,6 +112,22 @@ class ChatReminderChannel:
         return ChannelResult(status="delivered", provider_message_id=str(message.id))
 
 
+def _envelope_has_overdue(envelope: ReminderEnvelope) -> bool:
+    """根据 item_references 里的截止时间判断是否含已逾期事项。"""
+    now = datetime.now()
+    for item in envelope.item_references:
+        raw = item.get("due_at") or item.get("due_date")
+        if not raw:
+            continue
+        try:
+            due = datetime.fromisoformat(str(raw))
+        except ValueError:
+            continue
+        if due < now:
+            return True
+    return False
+
+
 class EmailReminderChannel:
     name = "email"
     ambiguous_external_side_effect = True
@@ -124,6 +142,11 @@ class EmailReminderChannel:
                     recipient=envelope.recipient,
                     subject=envelope.subject,
                     body=envelope.body,
+                    html_body=render_reminder(
+                        envelope.subject,
+                        envelope.body,
+                        overdue=_envelope_has_overdue(envelope),
+                    ),
                 )
             )
             return ChannelResult(

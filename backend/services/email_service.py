@@ -7,6 +7,8 @@ from email.message import EmailMessage
 from email.utils import formataddr
 from typing import Optional, Protocol
 
+from services.email_templates import render_verification_code
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,7 +52,7 @@ class SMTPConfig:
             username=os.getenv("SMTP_USERNAME", "").strip(),
             password=os.getenv("SMTP_PASSWORD", ""),
             from_email=os.getenv("SMTP_FROM_EMAIL", "").strip(),
-            from_name=os.getenv("SMTP_FROM_NAME", "IB Deadline Assistant").strip(),
+            from_name="IBuddy",
             use_starttls=_as_bool("SMTP_USE_STARTTLS", True),
             use_ssl=_as_bool("SMTP_USE_SSL", False),
             timeout_seconds=_positive_int("SMTP_TIMEOUT_SECONDS", 10),
@@ -72,6 +74,7 @@ class GenericEmailMessage:
     recipient: str
     subject: str
     body: str
+    html_body: Optional[str] = None
 
 
 class EmailSender(Protocol):
@@ -100,6 +103,7 @@ class SMTPEmailSender:
                     f"{code}\n\n验证码将在 {expires_in_minutes} 分钟后失效，"
                     "请勿将验证码转发给他人。"
                 ),
+                html_body=render_verification_code(code, expires_in_minutes),
             )
         )
 
@@ -117,6 +121,8 @@ class SMTPEmailSender:
             )
             message["To"] = message_data.recipient
             message.set_content(message_data.body)
+            if message_data.html_body:
+                message.add_alternative(message_data.html_body, subtype="html")
 
             smtp_class = smtplib.SMTP_SSL if self.config.use_ssl else smtplib.SMTP
             with smtp_class(
