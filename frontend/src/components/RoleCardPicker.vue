@@ -141,6 +141,8 @@ const props = defineProps({
   modelValue: Boolean,
   cards: { type: Array, default: () => [] },
   selectedId: { type: [Number, String], default: null },
+  // 打开对话框时自动展开导入区（用于"导入角色卡"直达入口）
+  openImport: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue', 'select', 'unauthorized', 'imported'])
 const { t } = useI18n()
@@ -179,6 +181,7 @@ watch(
       expandedId.value = null
       detail.value = null
       cancelImport()
+      if (props.openImport) importOpen.value = true
     }
   },
 )

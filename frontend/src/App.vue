@@ -75,6 +75,9 @@
             </v-list>
             <v-divider />
             <v-list density="compact">
+              <v-list-item prepend-icon="mdi-upload-outline" @click="openStyleImport">
+                <v-list-item-title>{{ $t('reminders.importRoleCard') }}</v-list-item-title>
+              </v-list-item>
               <v-list-item prepend-icon="mdi-cog-outline" @click="goStyleSettings">
                 <v-list-item-title>{{ $t('reminders.goSettings') }}</v-list-item-title>
               </v-list-item>
@@ -223,6 +226,17 @@
       </transition>
 
       <SettingsDialog v-model="settingsOpen" :initial-section="settingsSection" @logout="handleLogout" />
+
+      <!-- 顶栏"导入角色卡"直达：打开选择器并自动展开导入区 -->
+      <RoleCardPicker
+        v-model="stylePickerOpen"
+        :cards="styleCards"
+        :selected-id="styleSelectedId"
+        open-import
+        @select="selectStyle"
+        @imported="onStyleImported"
+        @unauthorized="handleLogout"
+      />
     </template>
 
     <v-main v-else>
@@ -243,6 +257,7 @@ import { useAuth } from '@/stores/auth'
 import TaskDrawer from '@/components/TaskDrawer.vue'
 import AgentDrawer from '@/components/AgentDrawer.vue'
 import SettingsDialog from '@/components/SettingsDialog.vue'
+import RoleCardPicker from '@/components/RoleCardPicker.vue'
 import { onTasksChanged } from '@/services/taskSync'
 import { onOpenAgent } from '@/services/agentContext'
 import { getPreferences, updatePreferences, listRoleCards, ApiError } from '@/services/reminders'
@@ -456,6 +471,25 @@ function goStyleSettings() {
   styleMenuOpen.value = false
   settingsSection.value = 'reminders'
   settingsOpen.value = true
+}
+
+// ---- 顶栏导入角色卡：从菜单直达 Picker 的导入区 ----
+const stylePickerOpen = ref(false)
+
+function openStyleImport() {
+  styleMenuOpen.value = false
+  stylePickerOpen.value = true
+}
+
+// 导入成功：刷新卡片列表并自动选中新卡（selectStyle 内部会保存偏好）
+async function onStyleImported(newId) {
+  try {
+    const cards = await listRoleCards()
+    styleCards.value = Array.isArray(cards) ? cards : cards?.items || []
+    if (newId != null) await selectStyle(newId)
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) handleLogout()
+  }
 }
 
 function openAccountSettings() {
