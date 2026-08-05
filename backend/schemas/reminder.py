@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 UNSAFE_CARD_MARKERS = ("<script", "javascript:", "{{", "delete_task", "create_task")
 MAX_COMPACT_CARD_CHARS = 12000
+MAX_ROLE_CARD_IMPORT_BYTES = 64 * 1024
 
 
 def _validate_card_content(parts: list[str], extensions: dict[str, Any]) -> None:
@@ -32,6 +33,7 @@ class RoleCardSummary(BaseModel):
     creator: str
     version: str
     is_builtin: bool
+    scope: str
 
 
 class RoleCardDetail(RoleCardSummary):
@@ -110,7 +112,33 @@ class RoleCardCreate(BaseModel):
         return self
 
 
+class RoleCardImportRequest(BaseModel):
+    """Paste-only import envelope for compact and SillyTavern cards.
+
+    The backend intentionally accepts the source object as opaque JSON here;
+    the importer projects it into the small, plain-text role-card model below.
+    Unknown fields never reach the database.
+    """
+
+    card: dict[str, Any]
+
+    @field_validator("card")
+    @classmethod
+    def validate_import_size(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            raise ValueError("角色卡必须是 JSON 对象")
+        try:
+            size = len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("角色卡 JSON 无法解析") from exc
+        if size > MAX_ROLE_CARD_IMPORT_BYTES:
+            raise ValueError("角色卡 JSON 不能超过 64 KiB")
+        return value
+
+
 class RoleCardUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: Optional[str] = Field(default=None, min_length=1, max_length=120)
     description: Optional[str] = Field(default=None, max_length=2000)
     personality: Optional[str] = Field(default=None, max_length=2000)

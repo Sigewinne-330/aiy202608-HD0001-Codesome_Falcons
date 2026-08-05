@@ -1,11 +1,16 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models.reminder import ReminderDelivery, ReminderDigest, ReminderRoleCard
+from models.reminder import (
+    ReminderDelivery,
+    ReminderDigest,
+    ReminderPreference,
+    ReminderRoleCard,
+)
 from models.user import User
 from schemas.reminder import (
     DeliveryHistoryItem,
@@ -17,15 +22,22 @@ from schemas.reminder import (
     ReminderRunResponse,
     RoleCardCreate,
     RoleCardDetail,
+    RoleCardImportRequest,
     RoleCardSummary,
     RoleCardUpdate,
 )
 from services.auth import get_current_admin, get_current_user
 from services.reminder_orchestrator import ReminderOrchestrator
 from services.reminder_preferences import (
-    list_active_global_cards,
+    get_default_role_card,
+    list_active_role_cards,
+    role_card_visible_to_user,
     resolve_preferences,
     update_preferences,
+)
+from services.role_card_import import (
+    generate_private_role_card_slug,
+    normalize_imported_role_card,
 )
 
 
@@ -99,7 +111,10 @@ def list_role_cards(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return [RoleCardSummary.model_validate(card) for card in list_active_global_cards(db)]
+    return [
+        RoleCardSummary.model_validate(card)
+        for card in list_active_role_cards(db, current_user.id)
+    ]
 
 
 @router.get("/api/reminder-role-cards/{card_id}", response_model=RoleCardDetail)
@@ -113,14 +128,108 @@ def get_role_card(
         .filter(
             ReminderRoleCard.id == card_id,
             ReminderRoleCard.is_active.is_(True),
-            ReminderRoleCard.scope == "global",
-            ReminderRoleCard.owner_user_id.is_(None),
+            role_card_visible_to_user(current_user.id),
         )
         .first()
     )
     if not card:
         raise HTTPException(status_code=404, detail="角色卡不存在")
     return RoleCardDetail.model_validate(card)
+
+
+@router.post(
+    "/api/reminder-role-cards/import",
+    response_model=RoleCardDetail,
+    status_code=status.HTTP_201_CREATED,
+)
+def import_private_role_card(
+    data: RoleCardImportRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        normalized = normalize_imported_role_card(data.card)
+        card = ReminderRoleCard(
+            **normalized.model_dump(exclude={"slug", "is_active"}),
+            slug=generate_private_role_card_slug(db, normalized.slug),
+            scope="private",
+            owner_user_id=current_user.id,
+            created_by_user_id=current_user.id,
+            is_active=True,
+            is_builtin=False,
+        )
+        db.add(card)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="角色卡导入冲突，请重试") from exc
+    db.refresh(card)
+    return RoleCardDetail.model_validate(card)
+
+
+@router.patch(
+    "/api/reminder-role-cards/{card_id}", response_model=RoleCardDetail
+)
+def update_private_role_card(
+    card_id: int,
+    data: RoleCardUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    card = (
+        db.query(ReminderRoleCard)
+        .filter(
+            ReminderRoleCard.id == card_id,
+            ReminderRoleCard.scope == "private",
+            ReminderRoleCard.owner_user_id == current_user.id,
+        )
+        .first()
+    )
+    if not card:
+        raise HTTPException(status_code=404, detail="角色卡不存在")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(card, key, value)
+    card.created_by_user_id = current_user.id
+    db.commit()
+    db.refresh(card)
+    return RoleCardDetail.model_validate(card)
+
+
+@router.delete("/api/reminder-role-cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_private_role_card(
+    card_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    card = (
+        db.query(ReminderRoleCard)
+        .filter(
+            ReminderRoleCard.id == card_id,
+            ReminderRoleCard.scope == "private",
+            ReminderRoleCard.owner_user_id == current_user.id,
+        )
+        .first()
+    )
+    if not card:
+        raise HTTPException(status_code=404, detail="角色卡不存在")
+    card.is_active = False
+    preference = (
+        db.query(ReminderPreference)
+        .filter(
+            ReminderPreference.user_id == current_user.id,
+            ReminderPreference.role_card_id == card.id,
+        )
+        .first()
+    )
+    if preference:
+        fallback = get_default_role_card(db)
+        preference.role_card_id = fallback.id if fallback else None
+        preference.version = int(preference.version or 0) + 1
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/api/reminders/history", response_model=ReminderHistoryResponse)

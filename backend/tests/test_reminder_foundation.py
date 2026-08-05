@@ -74,15 +74,25 @@ class ReminderFoundationTests(unittest.TestCase):
         with self.SessionLocal() as db:
             first = seed_builtin_role_cards(db)
             second = seed_builtin_role_cards(db)
-            self.assertEqual(3, len(first))
-            self.assertEqual(3, len(second))
+            self.assertEqual(5, len(first))
+            self.assertEqual(5, len(second))
             cards = db.query(ReminderRoleCard).order_by(ReminderRoleCard.id).all()
             self.assertEqual(
-                ["friendly-warm-guy", "tech-geek", "sweet-high-school-girl"],
+                [
+                    "friendly-warm-guy",
+                    "tech-geek",
+                    "sweet-high-school-girl",
+                    "nahida",
+                    "furina",
+                ],
                 [card.slug for card in cards],
             )
             self.assertTrue(all(card.is_builtin for card in cards))
+            self.assertTrue(all(card.scope == "global" for card in cards))
+            self.assertTrue(all(card.owner_user_id is None for card in cards))
             self.assertIn("非性化", cards[2].personality)
+            self.assertIn("自然", cards[3].speaking_style)
+            self.assertIn("舞台", cards[4].speaking_style)
             cards[1].is_active = False
             db.commit()
             seed_builtin_role_cards(db)

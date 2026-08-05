@@ -107,6 +107,52 @@ class MainAgentRoleCardTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual("neutral", neutral.status)
             self.assertIsNone(neutral.role_card)
 
+    def test_shared_resolution_accepts_owner_private_card_but_not_other_users(self):
+        with self.SessionLocal() as db:
+            private = ReminderRoleCard(
+                slug="owner-private-card",
+                name="Owner private",
+                scope="private",
+                owner_user_id=1,
+                personality="owner only",
+            )
+            db.add(private)
+            db.commit()
+            update_preferences(
+                db,
+                1,
+                role_card_id=private.id,
+                role_card_supplied=True,
+            )
+            selected = resolve_role_card_selection(db, 1)
+            self.assertEqual("selected", selected.status)
+            self.assertEqual(private.id, selected.role_card.id)
+            other = resolve_role_card_selection(db, 2)
+            self.assertEqual("default", other.status)
+            self.assertEqual("friendly-warm-guy", other.role_card.slug)
+
+    def test_nahida_and_furina_are_global_selectable_style_only_cards(self):
+        with self.SessionLocal() as db:
+            for slug, expected_name in (("nahida", "纳西妲"), ("furina", "芙宁娜")):
+                card = db.query(ReminderRoleCard).filter_by(slug=slug).one()
+                self.assertEqual("global", card.scope)
+                self.assertIsNone(card.owner_user_id)
+                self.assertTrue(card.is_builtin)
+                update_preferences(
+                    db,
+                    1,
+                    role_card_id=card.id,
+                    role_card_supplied=True,
+                )
+                selection = resolve_role_card_selection(db, 1)
+                context = build_main_agent_role_context(SYSTEM_PROMPT, selection)
+                self.assertEqual(
+                    "selected", context.message_metadata["role_card"]["status"]
+                )
+                self.assertEqual(slug, context.message_metadata["role_card"]["slug"])
+                self.assertIn(expected_name, context.system_prompt)
+                self.assertTrue(context.system_prompt.startswith(SYSTEM_PROMPT))
+
     def test_prompt_projection_is_bounded_and_excludes_extensions(self):
         with self.SessionLocal() as db:
             card = db.query(ReminderRoleCard).filter_by(slug="tech-geek").one()

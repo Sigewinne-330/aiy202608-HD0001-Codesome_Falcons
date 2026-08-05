@@ -17,7 +17,7 @@
       </v-card-title>
 
       <v-card-text class="px-6 pb-2">
-        <!-- 导入角色卡：粘贴 JSON → POST /api/admin/reminder-role-cards -->
+        <!-- 导入角色卡：粘贴 JSON → 当前账号的私有角色卡 -->
         <v-expand-transition>
           <div v-if="importOpen" class="import-box">
             <div class="import-hint">{{ $t('reminders.importRoleCardHelp') }}</div>
@@ -71,9 +71,20 @@
           @click="internalSelected = card.id"
           @keydown.enter.space.prevent="internalSelected = card.id"
         >
-          <v-icon :icon="cardIcon(card.slug)" color="primary" class="mr-3" />
+          <img
+            v-if="cardAvatar(card.slug)"
+            :src="cardAvatar(card.slug)"
+            :alt="card.name"
+            class="role-card__avatar mr-3"
+          />
+          <v-icon v-else :icon="cardIcon(card.slug)" color="primary" class="mr-3" />
           <div class="role-card__copy">
-            <div class="role-card__name" v-text="card.name" />
+            <div class="role-card__name">
+              <span v-text="card.name" />
+              <span v-if="card.scope" class="role-card__scope">
+                {{ card.scope === 'private' ? $t('reminders.roleCardPrivate') : $t('reminders.roleCardGlobal') }}
+              </span>
+            </div>
             <div class="role-card__desc" v-text="card.description" />
 
             <!-- 按需展开的示例详情（全部纯文本） -->
@@ -123,7 +134,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getRoleCard, createRoleCard, ApiError } from '@/services/reminders'
+import { getRoleCard, importRoleCard, ApiError } from '@/services/reminders'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -190,16 +201,17 @@ async function submitImport() {
     importError.value = t('reminders.importInvalidJson')
     return
   }
+  const nestedName = payload.data && typeof payload.data === 'object' ? payload.data.name : null
   if (
-    typeof payload.slug !== 'string' || payload.slug.trim().length < 2 ||
-    typeof payload.name !== 'string' || !payload.name.trim()
+    (typeof payload.name !== 'string' || !payload.name.trim()) &&
+    (typeof nestedName !== 'string' || !nestedName.trim())
   ) {
     importError.value = t('reminders.importMissingFields')
     return
   }
   importing.value = true
   try {
-    const created = await createRoleCard(payload)
+    const created = await importRoleCard(payload)
     const newId = created?.id ?? null
     if (newId != null) internalSelected.value = newId
     cancelImport()
@@ -233,6 +245,15 @@ function cardIcon(slug) {
     'sweet-high-school-girl': 'mdi-flower-outline',
   }
   return map[slug] || 'mdi-account-star-outline'
+}
+
+function cardAvatar(slug) {
+  const base = import.meta.env.BASE_URL || '/'
+  const map = {
+    nahida: `${base}role-cards/nahida.png`,
+    furina: `${base}role-cards/furina.png`,
+  }
+  return map[slug] || ''
 }
 
 async function toggleDetail(card) {
@@ -291,10 +312,31 @@ function confirm() {
   flex: 1;
   min-width: 0;
 }
+.role-card__avatar {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 12px;
+  object-fit: cover;
+  object-position: top center;
+  background: #f2f5f9;
+  border: 1px solid #e3e8f0;
+}
 .role-card__name {
   font-weight: 600;
   color: #232a3a;
   font-size: 14px;
+}
+.role-card__scope {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #edf3ff;
+  color: #4d70ad;
+  font-size: 10px;
+  font-weight: 500;
+  vertical-align: 1px;
 }
 .role-card__desc {
   color: #77808f;

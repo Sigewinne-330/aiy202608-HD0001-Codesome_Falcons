@@ -56,7 +56,9 @@ Interactive main-Agent assistant messages may also expose optional provenance:
 
 ## Role cards
 
-Built-in global cards are `friendly-warm-guy`, `tech-geek`, and `sweet-high-school-girl`. Ordinary users can query/select active global cards. Only a database-authorized administrator can create/update/deactivate global cards. User-created/private cards and SillyTavern JSON/PNG import are future work; reserved ownership/extension fields must not be exposed as a create API prematurely. Future private cards must use `scope=private` plus an authoritative owner. Discovery currently exposes only active `scope=global` cards, so a malformed null owner cannot make a private-scope card public.
+Built-in global cards are `friendly-warm-guy`, `tech-geek`, `sweet-high-school-girl`, `nahida`, and `furina`. Ordinary users can query/select active global cards and import a private card through `POST /api/reminder-role-cards/import`; the private card is owned by the authenticated user and is never visible to another account. The shared selection resolver used by reminders and the main agent accepts either an active ownerless global card or the current user's active private card. Global cards can be created or changed only through startup seed data or the administrator endpoints; ordinary import/update/delete routes cannot promote or mutate a global card.
+
+Only a database-authorized administrator can create/update/deactivate global cards. A private owner can update or soft-delete their own card through the user-scoped PATCH/DELETE routes; deletion automatically falls back to the stable global default and leaves historical digest snapshots intact. Imports accept the compact subset and SillyTavern V1/V2 JSON from pasted text. They retain only bounded plain-text identity, style, prompt, and examples; PNG payloads, lorebooks, macros, scripts, tools, and unknown executable extensions are discarded. The generated private slug keeps the legacy global-unique schema compatible.
 
 ## Provider and retry behavior
 

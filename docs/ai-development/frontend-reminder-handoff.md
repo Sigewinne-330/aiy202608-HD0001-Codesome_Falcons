@@ -155,22 +155,35 @@ GET /api/reminder-role-cards
 GET /api/reminder-role-cards/{id}
 ```
 
-列表仅返回当前用户可选的、启用的全局角色卡。当前有三张：
+列表仅返回当前用户可选的、启用的角色卡：全局卡加当前账号自己的私有卡。当前内置有五张：
 
 | slug | 建议显示名 | 视觉/文案方向 |
 |---|---|---|
 | `friendly-warm-guy` | 友好暖男 | 温和、有分寸、鼓励式 |
 | `tech-geek` | 技术宅 | 清晰、结构化、效率导向 |
 | `sweet-high-school-girl` | 高中甜美少女 | 轻快、积极、友善 |
+| `nahida` | 纳西妲 | 温和、聪慧、自然与知识意象 |
+| `furina` | 芙宁娜 | 舞台感、灵动、真诚而有分寸 |
 
 建议使用单选卡片，每张展示 `name`、`description` 与选中状态；点击“查看示例/详情”后再请求详情接口，展示 `personality`、`speaking_style` 和 `example_messages`。
 
 ### 5.2 本期边界
 
-- 不提供新增、编辑、停用角色卡 UI。
-- 不实现 SillyTavern 角色卡 JSON/PNG 导入。
-- 不把 `system_prompt` 当作可编辑/可执行内容；仅管理员 API 可维护全局卡，普通用户界面不能调用管理员 API。
-- 不渲染 `extensions` 中未知的 HTML、脚本或宏；使用纯文本安全呈现。
+- 角色卡选择器已提供粘贴 JSON 导入；客户端调用 `POST /api/reminder-role-cards/import`，不要调用管理员 API。
+- 支持精简 JSON 与 SillyTavern V1/V2 的纯文本子集；不支持 PNG、lorebook、宏、脚本和工具执行。
+- 普通用户导入的卡只属于当前账号；列表/详情/偏好接口不会暴露其他用户的私有卡。
+- 不把 `system_prompt` 当作可编辑/可执行内容；始终按纯文本安全呈现。
+- 本期仍不提供角色卡编辑/删除 UI，后端已预留当前用户私有卡的 PATCH/DELETE 接口。
+
+后端私有卡生命周期接口为：
+
+```http
+POST   /api/reminder-role-cards/import
+PATCH  /api/reminder-role-cards/{id}
+DELETE /api/reminder-role-cards/{id}
+```
+
+其中 PATCH/DELETE 只接受当前用户自己创建的 `scope=private` 卡；DELETE 是停用并回退偏好，不会改写历史提醒记录。列表和详情响应新增 `scope` 字段，可用 `private`/`global` 显示归属标签。
 
 ## 6. 页面三：提醒历史
 
@@ -338,7 +351,9 @@ POST  /api/admin/reminders/run
 - [ ] 历史页能显示 digest、事项、邮件和聊天的独立状态。
 - [ ] `metadata` 缺失时普通聊天消息不受影响。
 - [ ] `source=reminder` 的聊天消息带有提醒标识，并可跳转提醒历史。
-- [ ] 不存在角色卡创建、导入或手动投递的普通用户入口；提醒档位入口仅允许追加/删除自定义 D+2 至 D+365，基础档位不可编辑。
+- [ ] 普通用户可粘贴合法 JSON 导入私有角色卡，导入成功后列表显示“仅自己可见”，保存偏好后提醒和主 AI 使用同一张卡。
+- [ ] 普通用户无法查看、选择、修改或删除其他账号的私有角色卡；全局角色卡仍只能由管理员维护。
+- [ ] 不存在手动投递的普通用户入口；提醒档位入口仅允许追加/删除自定义 D+2 至 D+365，基础档位不可编辑。
 
 ## 11. 与后端沟通时的注意事项
 

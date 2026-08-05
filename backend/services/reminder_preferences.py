@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Iterable, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -143,14 +144,29 @@ def get_default_role_card(db: Session) -> Optional[ReminderRoleCard]:
     )
 
 
-def get_selectable_role_card(db: Session, card_id: int) -> ReminderRoleCard:
+def role_card_visible_to_user(user_id: int):
+    """SQL predicate shared by catalog, preferences, and both agents."""
+    return or_(
+        and_(
+            ReminderRoleCard.scope == "global",
+            ReminderRoleCard.owner_user_id.is_(None),
+        ),
+        and_(
+            ReminderRoleCard.scope == "private",
+            ReminderRoleCard.owner_user_id == user_id,
+        ),
+    )
+
+
+def get_selectable_role_card(
+    db: Session, user_id: int, card_id: int
+) -> ReminderRoleCard:
     card = (
         db.query(ReminderRoleCard)
         .filter(
             ReminderRoleCard.id == card_id,
             ReminderRoleCard.is_active.is_(True),
-            ReminderRoleCard.scope == "global",
-            ReminderRoleCard.owner_user_id.is_(None),
+            role_card_visible_to_user(user_id),
         )
         .first()
     )
@@ -178,8 +194,7 @@ def resolve_role_card_selection(
             .filter(
                 ReminderRoleCard.id == row.role_card_id,
                 ReminderRoleCard.is_active.is_(True),
-                ReminderRoleCard.scope == "global",
-                ReminderRoleCard.owner_user_id.is_(None),
+                role_card_visible_to_user(user_id),
             )
             .first()
         )
@@ -309,7 +324,11 @@ def update_preferences(
     if chat_enabled is not None:
         row.chat_enabled = chat_enabled
     if role_card_supplied:
-        card = get_default_role_card(db) if role_card_id is None else get_selectable_role_card(db, role_card_id)
+        card = (
+            get_default_role_card(db)
+            if role_card_id is None
+            else get_selectable_role_card(db, user_id, role_card_id)
+        )
         row.role_card_id = card.id if card else None
     row.version = int(row.version or 0) + 1
     db.commit()
@@ -317,13 +336,12 @@ def update_preferences(
     return row
 
 
-def list_active_global_cards(db: Session) -> list[ReminderRoleCard]:
+def list_active_role_cards(db: Session, user_id: int) -> list[ReminderRoleCard]:
     return (
         db.query(ReminderRoleCard)
         .filter(
             ReminderRoleCard.is_active.is_(True),
-            ReminderRoleCard.scope == "global",
-            ReminderRoleCard.owner_user_id.is_(None),
+            role_card_visible_to_user(user_id),
         )
         .order_by(ReminderRoleCard.id.asc())
         .all()
