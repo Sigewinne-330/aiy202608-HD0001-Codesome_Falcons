@@ -119,7 +119,7 @@ class ScheduleIntervention(Base):
     input_revision = Column(String(64), nullable=False)
     projected_count = Column(Integer, nullable=False)
     ranked_recommendations = Column(JSON, nullable=False)
-    state = Column(String(20), nullable=False, default="pending")
+    state = Column(String(32), nullable=False, default="pending")
     decision = Column(String(32), nullable=True)
     selected_date = Column(Date, nullable=True)
     resolution_idempotency_key = Column(String(128), nullable=True)
