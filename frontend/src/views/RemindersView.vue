@@ -8,6 +8,36 @@
       </div>
     </header>
 
+    <v-card v-if="demoEnabled" class="demo-card" variant="tonal" color="primary">
+      <v-card-title class="demo-card__title">
+        <v-icon icon="mdi-bell-ring-outline" size="20" />
+        {{ $t('reminders.demoTitle') }}
+      </v-card-title>
+      <v-card-text>
+        <p class="demo-card__help">{{ $t('reminders.demoHelp') }}</p>
+        <v-alert v-if="demoError" type="error" variant="tonal" density="comfortable" class="mb-3">
+          {{ demoError }}
+        </v-alert>
+        <v-alert v-if="demoResult" type="success" variant="tonal" density="comfortable" class="mb-3">
+          <div>{{ demoResult.message }}</div>
+          <div class="demo-subject">{{ demoResult.subject }}</div>
+          <div class="demo-outcomes">
+            <span>{{ $t('reminders.demoChat') }}：{{ demoStatus(demoResult.chat.status) }}</span>
+            <span>{{ $t('reminders.demoEmail') }}：{{ demoStatus(demoResult.email.status) }}</span>
+          </div>
+        </v-alert>
+        <v-btn
+          color="primary"
+          prepend-icon="mdi-send-check-outline"
+          :loading="demoSending"
+          :disabled="demoSending"
+          @click="sendDemo"
+        >
+          {{ $t('reminders.demoButton') }}
+        </v-btn>
+      </v-card-text>
+    </v-card>
+
     <v-tabs
       :model-value="activeTab"
       color="primary"
@@ -36,17 +66,24 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
 import ReminderHistoryList from '@/components/ReminderHistoryList.vue'
 import ReminderSettingsPanel from '@/components/ReminderSettingsPanel.vue'
+import { ApiError, sendDemoReminder } from '@/services/reminders'
 
 const VALID_TABS = ['history', 'settings']
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const { logout } = useAuth()
 
 const historyList = ref(null)
+const demoEnabled = import.meta.env.VITE_DEMO_REMINDER_ENABLED === 'true'
+const demoSending = ref(false)
+const demoResult = ref(null)
+const demoError = ref('')
 
 const activeTab = computed(() => (VALID_TABS.includes(route.query.tab) ? route.query.tab : 'history'))
 const digestAnchor = computed(() => {
@@ -60,6 +97,34 @@ function switchTab(tab) {
   const query = { ...route.query, tab }
   if (tab !== 'history') delete query.digest
   router.replace({ path: '/reminders', query })
+}
+
+function demoStatus(status) {
+  const labels = {
+    delivered: 'reminders.demoDelivered',
+    skipped: 'reminders.demoSkipped',
+    failed: 'reminders.demoFailed',
+    retryable: 'reminders.demoRetryable',
+  }
+  return labels[status] ? t(labels[status]) : status
+}
+
+async function sendDemo() {
+  if (demoSending.value) return
+  demoSending.value = true
+  demoError.value = ''
+  demoResult.value = null
+  try {
+    demoResult.value = await sendDemoReminder()
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      handleUnauthorized()
+      return
+    }
+    demoError.value = error?.message || t('reminders.demoFailed')
+  } finally {
+    demoSending.value = false
+  }
 }
 
 // 非法 tab 自动替换为 history
@@ -107,5 +172,29 @@ function handleUnauthorized() {
 }
 .reminders-body {
   padding-top: 22px;
+}
+.demo-card {
+  margin-top: 20px;
+}
+.demo-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+}
+.demo-card__help {
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+.demo-subject {
+  margin-top: 6px;
+  font-weight: 600;
+}
+.demo-outcomes {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  font-size: 12px;
 }
 </style>

@@ -35,6 +35,11 @@ export function getHistory({ limit = 20, offset = 0 } = {}) {
   return api(`/api/reminders/history?limit=${limit}&offset=${offset}`)
 }
 
+/** POST /api/reminders/demo-send —— 开发/演示环境即时提醒 */
+export function sendDemoReminder() {
+  return api('/api/reminders/demo-send', { method: 'POST' })
+}
+
 /** POST /api/reminder-role-cards/import —— 当前用户私有角色卡导入 */
 export function importRoleCard(card) {
   return api('/api/reminder-role-cards/import', {

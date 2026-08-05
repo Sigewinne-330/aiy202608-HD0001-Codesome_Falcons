@@ -185,7 +185,7 @@ class ReminderTextAgent:
         db: Session,
         *,
         user_id: int,
-        digest_id: int,
+        digest_id: Optional[int],
         language: str,
         role_card: Optional[ReminderRoleCard],
         item_snapshots: list[dict],

@@ -42,6 +42,9 @@ class Settings:
         os.getenv("REMINDER_WORKER_INTERVAL_SECONDS", "60")
     )
     LLM_MONTHLY_TOKEN_QUOTA: int = int(os.getenv("LLM_MONTHLY_TOKEN_QUOTA", "0"))
+    DEMO_REMINDER_ENABLED: bool = os.getenv(
+        "DEMO_REMINDER_ENABLED", "false"
+    ).strip().lower() in {"1", "true", "yes", "on"}
 
     @property
     def database_url(self) -> str:

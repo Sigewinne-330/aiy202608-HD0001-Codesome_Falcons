@@ -189,6 +189,18 @@ class ReminderHistoryResponse(BaseModel):
     offset: int
 
 
+class DemoReminderChannelOutcome(BaseModel):
+    status: str
+    error_code: Optional[str] = None
+
+
+class DemoReminderResponse(BaseModel):
+    message: str
+    subject: str
+    chat: DemoReminderChannelOutcome
+    email: DemoReminderChannelOutcome
+
+
 class ManualReminderRunRequest(BaseModel):
     evaluation_time: Optional[datetime] = None
     user_id: Optional[int] = None

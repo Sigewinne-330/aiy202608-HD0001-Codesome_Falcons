@@ -80,3 +80,9 @@ The real five-minute gate must run only against a configured local environment. 
 `backend/run_main_agent_role_card_gate.py` is the sanitized main-Agent provider gate. It gives each built-in card the same synthetic read-only `list_tasks` result, requires the task facts to survive, and reports only provider/model labels, token totals, statuses, and content fingerprints. Missing or rejected provider credentials produce `BLOCKED`, never a fake PASS.
 
 Reports store only timestamps, non-secret provider/model labels, status, and sanitized errors. Never store account credentials, authorization codes, complete private prompts, full digest bodies, or inbox content in repository evidence.
+# 演示即时提醒
+
+本地演示时可同时设置后端 `DEMO_REMINDER_ENABLED=true` 与前端
+`VITE_DEMO_REMINDER_ENABLED=true`，然后在提醒中心点击“立即发送演示提醒”。
+该入口要求登录，复用当前账号的提醒语言、角色卡、站内聊天和 SMTP 邮件配置。
+演示请求不会创建任务、修改日历或写入正式提醒历史；生产环境必须保持两个开关关闭。

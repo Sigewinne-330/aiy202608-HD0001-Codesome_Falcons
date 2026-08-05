@@ -46,7 +46,7 @@ class ChatReminderChannel:
     ambiguous_external_side_effect = False
 
     def deliver(self, db: Session, envelope: ReminderEnvelope) -> ChannelResult:
-        source = "reminder"
+        source = "demo_reminder" if envelope.digest_id is None else "reminder"
         extra = {"source": source, "digest_id": envelope.digest_id}
         if envelope.task_notification_id is not None:
             notification = (
@@ -63,8 +63,15 @@ class ChatReminderChannel:
                 "offset_minutes": notification.offset_minutes,
             }
         else:
-            digest = db.query(ReminderDigest).filter(ReminderDigest.id == envelope.digest_id).one()
-            existing_id = digest.chat_message_id
+            digest = None
+            existing_id = None
+            if envelope.digest_id is not None:
+                digest = (
+                    db.query(ReminderDigest)
+                    .filter(ReminderDigest.id == envelope.digest_id)
+                    .one()
+                )
+                existing_id = digest.chat_message_id
         if existing_id:
             existing = (
                 db.query(ChatMessage)
@@ -107,7 +114,7 @@ class ChatReminderChannel:
         conversation.update_time = message.update_time
         if envelope.task_notification_id is not None:
             notification.chat_message_id = message.id
-        else:
+        elif digest is not None:
             digest.chat_message_id = message.id
         return ChannelResult(status="delivered", provider_message_id=str(message.id))
 

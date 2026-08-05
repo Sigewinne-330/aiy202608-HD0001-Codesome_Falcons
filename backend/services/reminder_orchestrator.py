@@ -24,9 +24,11 @@ from services.reminder_agent import (
     validated_chat_url,
 )
 from services.reminder_channels import (
+    ChannelResult,
     ChannelRegistry,
     ChatReminderChannel,
     EmailReminderChannel,
+    ReminderEnvelope,
 )
 from services.reminder_delivery import (
     deliver_digest_channels,
@@ -69,6 +71,64 @@ class ReminderOrchestrator:
         self.registry = ChannelRegistry(
             [ChatReminderChannel(), EmailReminderChannel(transport)]
         )
+
+    async def send_demo(self, db: Session, *, user: User) -> dict[str, object]:
+        """Send one immediate, non-durable reminder for a local/demo walkthrough."""
+        preferences = resolve_preferences(db, user.id)
+        now = datetime.now(timezone.utc)
+        due_label = now.astimezone(timezone.utc).date().isoformat()
+        item_snapshots = [
+            {
+                "item_type": "demo",
+                "item_id": None,
+                "title": (
+                    "演示提醒"
+                    if preferences.language.lower().startswith("zh")
+                    else "Demo reminder"
+                ),
+                "description": "This is a temporary reminder walkthrough.",
+                "due_date": due_label,
+                "cadence_label": "DEMO",
+                "priority": "medium",
+            }
+        ]
+        content = await self.agent.generate(
+            db,
+            user_id=user.id,
+            digest_id=None,
+            language=preferences.language,
+            role_card=preferences.role_card,
+            item_snapshots=item_snapshots,
+            app_base_url=settings.APP_BASE_URL,
+        )
+        envelope = ReminderEnvelope(
+            digest_id=None,
+            task_notification_id=None,
+            user_id=user.id,
+            recipient=user.email,
+            subject=content.subject,
+            body=content.body,
+            role_card_id=preferences.role_card.id if preferences.role_card else None,
+            item_references=tuple(item_snapshots),
+        )
+        outcomes: dict[str, ChannelResult] = {}
+        for channel_name, enabled in (
+            ("chat", preferences.chat_enabled),
+            ("email", preferences.email_enabled),
+        ):
+            if not enabled:
+                outcomes[channel_name] = ChannelResult(
+                    status="skipped", error_code="channel_disabled"
+                )
+                continue
+            try:
+                result = self.registry.get(channel_name).deliver(db, envelope)
+                db.commit()
+            except Exception:
+                db.rollback()
+                result = ChannelResult(status="failed", error_code="channel_failed")
+            outcomes[channel_name] = result
+        return {"subject": content.subject, "outcomes": outcomes}
 
     async def run(
         self,

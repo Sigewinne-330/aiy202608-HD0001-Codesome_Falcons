@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from config import settings
 from database import get_db
 from models.reminder import (
     ReminderDelivery,
@@ -14,6 +15,8 @@ from models.reminder import (
 from models.user import User
 from schemas.reminder import (
     DeliveryHistoryItem,
+    DemoReminderChannelOutcome,
+    DemoReminderResponse,
     ManualReminderRunRequest,
     ReminderHistoryItem,
     ReminderHistoryResponse,
@@ -280,6 +283,34 @@ def reminder_history(
             )
         )
     return ReminderHistoryResponse(items=items, limit=limit, offset=offset)
+
+
+@router.post("/api/reminders/demo-send", response_model=DemoReminderResponse)
+async def send_demo_reminder(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    orchestrator: ReminderOrchestrator = Depends(get_reminder_orchestrator),
+):
+    if not settings.DEMO_REMINDER_ENABLED:
+        raise HTTPException(status_code=404, detail="演示提醒功能未启用")
+    try:
+        result = await orchestrator.send_demo(db, user=current_user)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="演示提醒生成失败，请稍后重试") from exc
+    outcomes = result["outcomes"]
+    return DemoReminderResponse(
+        message="演示提醒已处理",
+        subject=str(result["subject"]),
+        chat=DemoReminderChannelOutcome(
+            status=outcomes["chat"].status,
+            error_code=outcomes["chat"].error_code,
+        ),
+        email=DemoReminderChannelOutcome(
+            status=outcomes["email"].status,
+            error_code=outcomes["email"].error_code,
+        ),
+    )
 
 
 @router.post(
