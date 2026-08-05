@@ -26,9 +26,9 @@
 ### 🤖 AI 对话规划助手（IBuddy Agent）
 
 - **多模态输入识别**：支持文字和图片拖拽/粘贴/截图上传，AI 自动从聊天记录、通知截图、课件中提取任务名称和截止日期；遇到模糊日期会主动追问确认
-- **流式对话 + 工具调用**：基于 SSE 的实时流式回复，Agent 可自主调用 16 个工具（任务 CRUD、子任务管理、日程分析、知识库检索等），完成从"聊天"到"写入数据库"的闭环操作
+- **流式对话 + 工具调用**：基于 SSE 的实时流式回复，Agent 可自主调用 16 个工具（任务 CRUD、子任务管理、日程分析、知识库调取等），完成从"聊天"到"写入数据库"的闭环操作
 - **小任务 vs 完整规划自动判定**：Agent 智能区分"设个提醒就行"的单步任务和"帮我拆解"的复杂任务，按需启动不同流程
-- **IB 学科知识库**：内置 Chemistry IA、Economics IA、Physics IA、Extended Essay、TOK 五大学科规划指南，Agent 在用户提及相关任务时自动检索，给出符合 IBO 官方标准的专业步骤拆解
+- **IB 学科知识库**：内置 Chemistry IA、Economics IA、Physics IA、Extended Essay、TOK 五大学科规划指南，Agent 在用户提及相关任务时自动调取，给出符合 IBO 官方标准的专业步骤拆解
 
 ### 📋 双模式任务管理
 
@@ -123,7 +123,7 @@
 
 ```bash
 git clone <repo-url>
-cd ib-deadline-assistant
+cd aiy202608-HD0001-Codesome_Falcons
 cp backend/.env.example backend/.env
 # 编辑 backend/.env，填写 DB_PASSWORD、ARK_API_KEY、SMTP 等
 ```
@@ -131,7 +131,7 @@ cp backend/.env.example backend/.env
 ### 2. 初始化数据库
 
 ```bash
-mysql -u root -p < backend/init_db.sql
+mysql -u root -p < backend/init_new_tables.sql
 ```
 
 ### 3. 启动后端
@@ -182,6 +182,6 @@ docker compose up -d
 
 ## 📄 版权与许可
 
-本作品版权归 **【真正参与的队员姓名】** 共同所有，采用 [MIT License](./LICENSE) 开源，使用请署名。
+本作品版权归 **喻言、文潇凯、林泽君、刘栋、卢致凯** 共同所有，采用 [MIT License](./LICENSE) 开源，使用请署名。
 
 > 本项目为 AIY 黑客松参赛作品，作品归团队所有；AIY 组委会仅作收录与展示。
