@@ -75,64 +75,8 @@
         />
       </div>
 
-      <!-- 提醒档位：基础档位只读 + 自定义逾期档位可增删 -->
-      <div class="setting-row setting-row--top">
-        <div>
-          <div class="setting-label">{{ $t('reminders.cadence') }}</div>
-          <div class="setting-help">{{ $t('reminders.cadenceHelp') }}</div>
-        </div>
-        <div class="cadence-editor">
-          <div class="cadence-chips">
-            <v-chip
-              v-for="offset in baseCadenceOffsets"
-              :key="'base-' + offset"
-              size="small"
-              variant="outlined"
-              prepend-icon="mdi-lock-outline"
-            >
-              {{ cadenceLabel(offset) }}
-            </v-chip>
-            <v-chip
-              v-for="offset in customCadenceOffsets"
-              :key="'custom-' + offset"
-              size="small"
-              color="primary"
-              variant="tonal"
-              closable
-              :close-icon="'mdi-close'"
-              :disabled="!form.enabled"
-              @click:close="removeCustomCadence(offset)"
-            >
-              {{ cadenceLabel(offset) }}
-            </v-chip>
-          </div>
-          <div class="cadence-add">
-            <v-text-field
-              v-model="cadenceInput"
-              type="number"
-              min="2"
-              max="365"
-              density="compact"
-              variant="outlined"
-              hide-details
-              :placeholder="$t('reminders.cadenceAddPlaceholder')"
-              class="cadence-input"
-              :disabled="!form.enabled"
-              @keyup.enter="addCustomCadence"
-            />
-            <v-btn
-              size="small"
-              variant="text"
-              color="primary"
-              :disabled="!form.enabled || !canAddCadence"
-              @click="addCustomCadence"
-            >
-              {{ $t('reminders.cadenceAdd') }}
-            </v-btn>
-          </div>
-          <div v-if="cadenceError" class="cadence-error">{{ cadenceError }}</div>
-        </div>
-      </div>
+      <!-- 每日汇总提醒（cadence）设置项已按需求暂时移除；
+           脚本中的 cadence 数据流与编辑逻辑完整保留，恢复时只需还原此区块 -->
 
       <!-- 任务级默认提醒（分钟偏移） -->
       <div class="setting-row setting-row--top">
@@ -192,8 +136,8 @@
         </v-btn>
       </div>
 
-      <!-- 保存区 -->
-      <div class="save-bar">
+      <!-- 保存区（external-save 模式下隐藏，由父级统一保存按钮驱动） -->
+      <div v-if="!externalSave" class="save-bar">
         <span v-if="saveMessage" class="save-message" :class="{ 'save-message--error': saveIsError }">
           <v-icon :icon="saveIsError ? 'mdi-alert-circle-outline' : 'mdi-check-circle-outline'" size="16" />
           {{ saveMessage }}
@@ -229,6 +173,10 @@ import RoleCardPicker from '@/components/RoleCardPicker.vue'
 import ReminderOffsetsEditor from '@/components/ReminderOffsetsEditor.vue'
 import { notifyRoleCardChanged, roleCardDisplayName } from '@/services/roleCardVisuals'
 
+defineProps({
+  // true 时隐藏面板自带保存栏，由父容器（如 SettingsDialog 底部按钮）调 save() 统一保存
+  externalSave: { type: Boolean, default: false },
+})
 const emit = defineEmits(['unauthorized'])
 const { t } = useI18n()
 
@@ -251,7 +199,8 @@ const form = reactive({
   role_card_id: null,
 })
 
-let snapshot = null
+// 响应式快照：dirty computed 依赖它，外部（SettingsDialog 保存按钮）读取 dirty 时才能正确触发重算
+const snapshot = ref(null)
 const preferences = ref(null)
 const roleCards = ref([])
 
@@ -286,15 +235,39 @@ const timezoneOptions = computed(() => {
   return merged
 })
 
-// ---- 提醒档位：基础档位不可删，仅可追加 D+2~D+365（即 offset -2~-365，排除基础档） ----
+// ---- 每日汇总提醒节奏：提前(锁) + 当天(锁) + 逾期(基础锁+自定义可删) ----
+// cadence_offsets 语义：正数=截止前 N 天，0=当天，负数=逾期 N 天
 const BASE_CADENCE = [2, 1, 0, -1, -3, -7]
 
-const baseCadenceOffsets = computed(() =>
-  BASE_CADENCE.filter((o) => form.cadence_offsets.includes(o)),
+// 提前段：正数 offset，降序展示（前 2 天 → 前 1 天）
+const beforeDays = computed(() =>
+  BASE_CADENCE.filter((o) => o > 0 && form.cadence_offsets.includes(o)).sort((a, b) => b - a),
 )
-const customCadenceOffsets = computed(() =>
-  form.cadence_offsets.filter((o) => !BASE_CADENCE.includes(o)).sort((a, b) => a - b),
+// 逾期基础段：负数 offset 转天数，升序（第 1 天 → 第 7 天）
+const overdueBaseDays = computed(() =>
+  BASE_CADENCE.filter((o) => o < 0 && form.cadence_offsets.includes(o)).map((o) => -o).sort((a, b) => a - b),
 )
+// 逾期自定义段：可增删
+const overdueCustomDays = computed(() =>
+  form.cadence_offsets.filter((o) => !BASE_CADENCE.includes(o)).map((o) => -o).sort((a, b) => a - b),
+)
+
+function beforeDayLabel(d) {
+  return t('reminders.cadenceBeforeDay', { n: d }, d)
+}
+function overdueDayLabel(d) {
+  return t('reminders.cadenceOverdueDay', { n: d }, d)
+}
+
+// 人话总结：随配置实时变化，如"截止前 2 天、前 1 天和当天提醒你；逾期后第 1、3、7 天继续追催"
+const cadenceSummary = computed(() => {
+  const before = beforeDays.value.map(beforeDayLabel).join(t('reminders.cadenceListSep'))
+  const overdue = [...overdueBaseDays.value, ...overdueCustomDays.value]
+    .sort((a, b) => a - b)
+    .map((d) => String(d))
+    .join(t('reminders.cadenceListSep'))
+  return t('reminders.cadenceSummary', { before, overdue })
+})
 
 const cadenceInput = ref('')
 const cadenceError = ref('')
@@ -334,12 +307,6 @@ function removeCustomCadence(offset) {
 const DISPATCH_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 const dispatchTimeValid = computed(() => DISPATCH_TIME_RE.test(form.daily_dispatch_time || ''))
 
-function cadenceLabel(offset) {
-  if (offset > 0) return `D-${offset}`
-  if (offset === 0) return t('reminders.cadenceToday')
-  return t('reminders.cadenceOverdue', { n: -offset })
-}
-
 const currentRoleCard = computed(() => {
   if (form.role_card_id == null) return preferences.value?.role_card || null
   return roleCards.value.find((c) => c.id === form.role_card_id) || preferences.value?.role_card || null
@@ -351,7 +318,7 @@ const currentRoleCardDescription = computed(
   () => currentRoleCard.value?.description || t('reminders.roleCardHelp'),
 )
 
-const dirty = computed(() => snapshot && Object.keys(buildPatch()).length > 0)
+const dirty = computed(() => snapshot.value && Object.keys(buildPatch()).length > 0)
 
 function applyPreferences(prefs) {
   preferences.value = prefs
@@ -371,7 +338,7 @@ function applyPreferences(prefs) {
   form.role_card_id = prefs.role_card?.id ?? null
   cadenceInput.value = ''
   cadenceError.value = ''
-  snapshot = {
+  snapshot.value = {
     enabled: form.enabled,
     language: form.language,
     timezone: form.timezone,
@@ -387,7 +354,7 @@ function applyPreferences(prefs) {
 // 数组字段按排序后的集合比较，避免顺序差异造成假 dirty
 function fieldEquals(key) {
   const a = form[key]
-  const b = snapshot[key]
+  const b = snapshot.value[key]
   if (Array.isArray(a) && Array.isArray(b)) {
     const sort = (arr) => [...arr].sort((x, y) => x - y)
     return JSON.stringify(sort(a)) === JSON.stringify(sort(b))
@@ -396,9 +363,9 @@ function fieldEquals(key) {
 }
 
 function buildPatch() {
-  if (!snapshot) return {}
+  if (!snapshot.value) return {}
   const patch = {}
-  for (const key of Object.keys(snapshot)) {
+  for (const key of Object.keys(snapshot.value)) {
     if (!fieldEquals(key)) {
       // cadence_offsets 语义为完整集合：有变化时整体提交
       patch[key] = Array.isArray(form[key]) ? [...form[key]] : form[key]
@@ -486,6 +453,9 @@ function showSaveMessage(text, isError) {
 }
 
 onMounted(loadAll)
+
+// 供父容器（SettingsDialog 底部统一保存按钮）驱动
+defineExpose({ save, dirty, saving, dispatchTimeValid, saveMessage, saveIsError })
 </script>
 
 <style scoped>
@@ -520,30 +490,86 @@ onMounted(loadAll)
 .field-220 { max-width: 220px; }
 .field-280 { max-width: 280px; }
 .cadence-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: 420px;
+  max-width: 460px;
 }
-.cadence-chips {
+/* 三段式时间线：提前(蓝) → 当天(橙) → 逾期(红) */
+.cadence-timeline {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+.cadence-zone {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+.cadence-zone--before { background: #eef4ff; }
+.cadence-zone--due { background: #fff4e5; }
+.cadence-zone--overdue { background: #fdeeee; }
+.cadence-zone__label {
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 7px;
+}
+.cadence-zone--before .cadence-zone__label { color: #3567d6; }
+.cadence-zone--due .cadence-zone__label { color: #c07a1f; }
+.cadence-zone--overdue .cadence-zone__label { color: #c04545; }
+.cadence-zone__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
+  gap: 5px;
+}
+.cadence-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  font-weight: 600;
+  color: #3a4356;
+  white-space: nowrap;
+}
+.cadence-chip .v-icon { color: #9aa5b5; }
+.cadence-chip--custom {
+  background: #fff;
+  border: 1px dashed #e0a3a0;
+  color: #c04545;
+}
+.cadence-chip__remove {
+  border: 0;
+  background: none;
+  padding: 0 0 0 2px;
+  font-size: 14px;
+  line-height: 1;
+  color: #c04545;
+  cursor: pointer;
+}
+.cadence-chip__remove:disabled { opacity: 0.4; cursor: not-allowed; }
+.cadence-arrow {
+  align-self: center;
+  color: #b8c0cf;
+  flex: 0 0 auto;
 }
 .cadence-add {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 4px;
+  margin-top: 8px;
 }
 .cadence-input {
-  max-width: 200px;
+  max-width: 150px;
 }
 .cadence-error {
   color: #c04545;
   font-size: 12px;
-  text-align: right;
+  margin-top: 5px;
+}
+@media (max-width: 640px) {
+  .cadence-timeline { flex-direction: column; }
+  .cadence-arrow { transform: rotate(90deg); align-self: flex-start; margin-left: 12px; }
 }
 .save-bar {
   display: flex;

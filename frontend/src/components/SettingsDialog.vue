@@ -134,7 +134,7 @@
 
           <template v-else-if="activeSection === 'reminders'">
             <SettingsHeading :title="$t('reminders.tabSettings')" :subtitle="$t('reminders.subtitle')" />
-            <ReminderSettingsPanel @unauthorized="handleReminderUnauthorized" />
+            <ReminderSettingsPanel ref="reminderPanel" external-save @unauthorized="handleReminderUnauthorized" />
           </template>
 
           <template v-else>
@@ -167,10 +167,21 @@
           </div>
 
           <div class="settings-actions">
-            <span v-if="saved" class="saved-hint"><v-icon icon="mdi-check-circle" size="17" /> {{ $t('settings.savedHint') }}</span>
+            <span v-if="activeSection === 'reminders' && reminderPanel?.saveMessage" class="saved-hint" :class="{ 'saved-hint--error': reminderPanel.saveIsError }">
+              <v-icon :icon="reminderPanel.saveIsError ? 'mdi-alert-circle-outline' : 'mdi-check-circle'" size="17" />
+              {{ reminderPanel.saveMessage }}
+            </span>
+            <span v-else-if="saved" class="saved-hint"><v-icon icon="mdi-check-circle" size="17" /> {{ $t('settings.savedHint') }}</span>
             <v-spacer />
             <v-btn variant="text" @click="dialogOpen = false">{{ $t('common.cancel') }}</v-btn>
-            <v-btn color="primary" @click="saveSettings">{{ $t('common.save') }}</v-btn>
+            <v-btn
+              color="primary"
+              :loading="activeSection === 'reminders' && reminderPanel?.saving"
+              :disabled="activeSection === 'reminders' && reminderPanel ? (!reminderPanel.dirty || !reminderPanel.dispatchTimeValid) : false"
+              @click="saveSettings"
+            >
+              {{ $t('common.save') }}
+            </v-btn>
           </div>
         </main>
       </div>
@@ -248,6 +259,8 @@ const dialogOpen = computed({
 
 const activeSection = ref('account')
 const saved = ref(false)
+// 提醒设置面板实例（external-save 模式下由本对话框底部按钮统一保存）
+const reminderPanel = ref(null)
 const storageKey = 'ibuddy_preferences'
 const defaultSettings = {
   displayName: '',
@@ -315,7 +328,12 @@ const weekDays = [
 
 const userInitial = computed(() => (user.value?.username || 'I').charAt(0).toUpperCase())
 
-function saveSettings() {
+async function saveSettings() {
+  // 提醒设置分区：委托面板走后端 API 保存（面板自身的保存栏已隐藏）
+  if (activeSection.value === 'reminders' && reminderPanel.value) {
+    await reminderPanel.value.save()
+    return
+  }
   localStorage.setItem(storageKey, JSON.stringify(settings))
   saved.value = true
   window.setTimeout(() => { saved.value = false }, 1800)
@@ -363,6 +381,7 @@ watch(dialogOpen, (isOpen) => {
 .feature-list > div { display: flex; align-items: center; gap: 9px; font-size: 13px; }
 .settings-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 15px 28px; border-top: 1px solid #e8ebf0; background: rgba(255,255,255,.94); backdrop-filter: blur(12px); }
 .saved-hint { display: inline-flex; align-items: center; gap: 5px; color: #299467; font-size: 12px; }
+.saved-hint--error { color: #c0473d; }
 @media (max-width: 720px) {
   .settings-card { height: calc(100vh - 20px); }
   .settings-layout { grid-template-columns: 78px 1fr; }
