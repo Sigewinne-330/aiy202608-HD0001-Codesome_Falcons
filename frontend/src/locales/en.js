@@ -155,6 +155,9 @@ export default {
   },
   settings: {
     title: 'Settings',
+    personalization: 'Personalization & privacy',
+    learningMemory: 'Learning memory',
+    learningDashboard: 'Learning dashboard',
     close: 'Close settings',
     account: 'Account',
     accountSub: 'Manage your IBuddy profile and sign-in status',

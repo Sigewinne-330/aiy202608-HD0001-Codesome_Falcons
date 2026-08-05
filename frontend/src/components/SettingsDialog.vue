@@ -137,7 +137,19 @@
             <ReminderSettingsPanel ref="reminderPanel" external-save @unauthorized="handleReminderUnauthorized" />
           </template>
 
-          <template v-else>
+          <template v-else-if="activeSection === 'personalization'">
+            <PersonalizationSettingsPanel />
+          </template>
+
+          <template v-else-if="activeSection === 'memory'">
+            <SchedulingMemoryCenter />
+          </template>
+
+          <template v-else-if="activeSection === 'learning-dashboard'">
+            <PersonalizationDashboard />
+          </template>
+
+          <template v-else-if="activeSection === 'subscription'">
             <SettingsHeading :title="$t('settingsBilling.balanceTitle')" :subtitle="$t('settingsBilling.balanceDesc')" />
             <div class="subscription-card">
               <div>
@@ -166,7 +178,7 @@
           </template>
           </div>
 
-          <div class="settings-actions">
+          <div v-if="!['personalization', 'memory', 'learning-dashboard'].includes(activeSection)" class="settings-actions">
             <span v-if="activeSection === 'reminders' && reminderPanel?.saveMessage" class="saved-hint" :class="{ 'saved-hint--error': reminderPanel.saveIsError }">
               <v-icon :icon="reminderPanel.saveIsError ? 'mdi-alert-circle-outline' : 'mdi-check-circle'" size="17" />
               {{ reminderPanel.saveMessage }}
@@ -196,6 +208,9 @@ import { useAuth } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
 import { setLocale, SUPPORTED_LOCALES, LOCALE_NAMES } from '@/i18n'
 import ReminderSettingsPanel from '@/components/ReminderSettingsPanel.vue'
+import PersonalizationSettingsPanel from '@/components/PersonalizationSettingsPanel.vue'
+import SchedulingMemoryCenter from '@/components/SchedulingMemoryCenter.vue'
+import PersonalizationDashboard from '@/components/PersonalizationDashboard.vue'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -312,6 +327,9 @@ const sections = [
   { value: 'connections', titleKey: 'settings.connections', icon: 'mdi-link-variant' },
   { value: 'time', titleKey: 'settings.time', icon: 'mdi-clock-outline' },
   { value: 'reminders', titleKey: 'reminders.tabSettings', icon: 'mdi-bell-cog-outline' },
+  { value: 'personalization', titleKey: 'settings.personalization', icon: 'mdi-tune-variant' },
+  { value: 'memory', titleKey: 'settings.learningMemory', icon: 'mdi-brain' },
+  { value: 'learning-dashboard', titleKey: 'settings.learningDashboard', icon: 'mdi-chart-box-outline' },
   { value: 'subscription', titleKey: 'settingsBilling.balanceTitle', icon: 'mdi-wallet-outline' },
 ]
 

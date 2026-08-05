@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, Optional
 
@@ -34,6 +36,7 @@ from schemas.scheduling import (
     SchedulingPreferenceUpdate,
 )
 from services.schedule_engine import RecommendationResult, RebalanceResult, recommend_date, rebalance
+from services.schedule_clarification import analyze_clarification_value, assumptions_from_effort_prior
 from services.schedule_policy import ALGORITHM_VERSION, DEFAULT_PREFERENCES, INTERVENTION_THRESHOLD, profile_for
 from services.schedule_projection import (
     ScheduleSnapshot,
@@ -42,6 +45,10 @@ from services.schedule_projection import (
     load_snapshot,
     serialize_item,
 )
+from services.schedule_taxonomy import normalize_task_archetype, resolve_effort_prior
+
+
+logger = logging.getLogger(__name__)
 
 
 class ScheduleError(Exception):
@@ -309,8 +316,12 @@ def record_schedule_outcome(
     source_type: str,
     source_id: int,
     completion_state: str,
+    *,
+    typed_capture_enabled: Optional[bool] = None,
 ) -> None:
-    """Persist a privacy-limited outcome for future consented evaluation."""
+    """Preserve legacy audit and append a consented typed completion event."""
+    normalized_state = str(completion_state or "").lower()
+    terminal_state = "completed" if normalized_state in {"done", "complete", "completed"} else "unknown"
     _audit(
         db,
         user_id,
@@ -321,11 +332,50 @@ def record_schedule_outcome(
         metadata={
             "source_type": source_type,
             "source_id": source_id,
-            "completion_state": completion_state,
-            "outcome": "completed",
+            "completion_state": normalized_state,
+            "outcome": terminal_state,
         },
     )
     db.commit()
+    try:
+        from schemas.schedule_personalization import OutcomeObservationInput
+        from services.schedule_personalization_config import personalization_runtime_config
+        from services.schedule_source_access import owned_schedule_source
+        from services.schedule_work_events import record_outcome_observation
+
+        source = owned_schedule_source(db, user_id, source_type, source_id)
+        if source is None:
+            return
+        source_version = int(getattr(source, "schedule_version", 1) or 1)
+        source_updated = getattr(source, "update_time", None) or getattr(source, "updated_at", None)
+        update_token = source_updated.isoformat() if source_updated else "na"
+        idempotency_key = f"legacy:{source_type}:{source_id}:{terminal_state}:{source_version}:{update_token}"[:128]
+        enabled = (
+            personalization_runtime_config.effective_capture_enabled
+            if typed_capture_enabled is None
+            else typed_capture_enabled
+        )
+        record_outcome_observation(
+            db,
+            user_id,
+            OutcomeObservationInput(
+                source={"source_type": source_type, "source_id": source_id},
+                idempotency_key=idempotency_key,
+                terminal_state=terminal_state,
+                provenance="lifecycle",
+                confidence="medium",
+            ),
+            capture_enabled=enabled,
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.warning(
+            "typed_schedule_outcome_capture_failed user_id=%s source_type=%s error_type=%s",
+            user_id,
+            source_type,
+            type(exc).__name__,
+        )
 
 
 def _intervention_result(
@@ -338,6 +388,8 @@ def _intervention_result(
     state: str,
     correlation_id: str,
     clarification_question: Optional[str] = None,
+    clarification_reason_code: Optional[str] = None,
+    clarification_sensitivity: Optional[dict] = None,
     error_code: Optional[str] = None,
 ) -> dict:
     return {
@@ -351,6 +403,8 @@ def _intervention_result(
         "recommendation": _serialize_candidate(recommendation.recommended if recommendation else None),
         "alternatives": [_serialize_candidate(candidate) for candidate in (recommendation.alternatives if recommendation else ())],
         "clarification_question": clarification_question,
+        "clarification_reason_code": clarification_reason_code,
+        "clarification_sensitivity": clarification_sensitivity,
         "error_code": error_code,
         "input_revision": None,
         "correlation_id": correlation_id,
@@ -364,6 +418,7 @@ def preflight_creation(
     *,
     persist_intervention: bool = True,
     override_allowed: bool = False,
+    personalization_config=None,
 ) -> dict:
     correlation_id = getattr(data, "correlation_id", None) or uuid.uuid4().hex
     try:
@@ -380,7 +435,8 @@ def preflight_creation(
             correlation_id=correlation_id,
             error_code="workload_read_failed",
         )
-    proposed = _item_from_request(data, user_id)
+    effective_data = data
+    proposed = _item_from_request(effective_data, user_id)
     count = len({item.key for item in snapshot.items_on(data.target_date)} | {proposed.key})
 
     if count <= INTERVENTION_THRESHOLD:
@@ -394,37 +450,65 @@ def preflight_creation(
             "correlation_id": correlation_id,
         }
 
+    clarification = None
     if _is_vague(data):
-        question = "为了准确安排这项工作，请确认预计需要多少小时，或补充完成范围/交付物？"
-        result = _intervention_result(
-            source_type=data.source_type.value,
-            requested_date=data.target_date,
-            projected_count=count,
-            recommendation=None,
-            intervention_id=None,
-            state="clarification_required",
-            correlation_id=correlation_id,
-            clarification_question=question,
-            error_code="ambiguous_effort",
+        archetype = normalize_task_archetype(
+            title=data.title,
+            description=data.description,
+            structured_kind=data.schedule_kind,
         )
-        if persist_intervention:
-            row = ScheduleIntervention(
-                user_id=user_id,
+        prior = resolve_effort_prior(
+            task_archetype=archetype.task_archetype,
+            subject=data.subject,
+        )
+        clarification = analyze_clarification_value(
+            snapshot,
+            proposed,
+            data.target_date,
+            assumptions_from_effort_prior(prior),
+            unresolved_fields=("effort_hours",),
+        )
+        if clarification.should_ask:
+            result = _intervention_result(
                 source_type=data.source_type.value,
-                provisional_payload=_as_json(data),
-                target_date=data.target_date,
-                input_revision=snapshot.revision,
+                requested_date=data.target_date,
                 projected_count=count,
-                ranked_recommendations=[],
+                recommendation=None,
+                intervention_id=None,
                 state="clarification_required",
                 correlation_id=correlation_id,
-                expires_at=_now() + timedelta(minutes=30),
+                clarification_question=clarification.question,
+                clarification_reason_code=clarification.reason_code,
+                clarification_sensitivity=clarification.to_dict(),
+                error_code="ambiguous_effort_material",
             )
-            db.add(row)
-            db.commit()
-            result["intervention_id"] = row.id
-            result["input_revision"] = snapshot.revision
-        return result
+            if persist_intervention:
+                row = ScheduleIntervention(
+                    user_id=user_id,
+                    source_type=data.source_type.value,
+                    provisional_payload=_as_json(data),
+                    target_date=data.target_date,
+                    input_revision=snapshot.revision,
+                    projected_count=count,
+                    ranked_recommendations=[],
+                    state="clarification_required",
+                    correlation_id=correlation_id,
+                    expires_at=_now() + timedelta(minutes=30),
+                )
+                db.add(row)
+                db.commit()
+                result["intervention_id"] = row.id
+                result["input_revision"] = snapshot.revision
+            return result
+        proposed = replace(
+            proposed,
+            estimated_hours=clarification.conservative_effort_hours,
+            effort_source="versioned_product_prior_p90",
+        )
+        effective_data = data.model_copy(update={
+            "estimated_hours": clarification.conservative_effort_hours,
+            "effort_source": "versioned_product_prior_p90",
+        })
 
     recommendation = recommend_date(snapshot, proposed, data.target_date, "balanced")
     if not recommendation.feasible:
@@ -436,6 +520,8 @@ def preflight_creation(
             intervention_id=None,
             state="analysis_error",
             correlation_id=correlation_id,
+            clarification_reason_code=clarification.reason_code if clarification else None,
+            clarification_sensitivity=clarification.to_dict() if clarification else None,
             error_code="infeasible_schedule",
         )
     else:
@@ -447,18 +533,76 @@ def preflight_creation(
             intervention_id=None,
             state="pending",
             correlation_id=correlation_id,
+            clarification_reason_code=clarification.reason_code if clarification else None,
+            clarification_sensitivity=clarification.to_dict() if clarification else None,
         )
 
     result["input_revision"] = snapshot.revision
+    deterministic_ranked = (
+        ([result["recommendation"]] if result.get("recommendation") else [])
+        + result.get("alternatives", [])
+    )
+    try:
+        from services.schedule_adaptive_integration import annotate_deterministic_recommendations
+        from services.schedule_personalization_config import personalization_runtime_config
+
+        result["personalization"] = annotate_deterministic_recommendations(
+            db,
+            user_id=user_id,
+            recommendations=deterministic_ranked,
+            context_identity=f"preflight:{correlation_id}:{snapshot.revision}",
+            hard_deadline=effective_data.hard_deadline_date,
+            config=personalization_config or personalization_runtime_config,
+        )
+        annotations_by_id = {
+            item["candidate_id"]: item
+            for item in result["personalization"].get("annotations", [])
+        }
+        display_rank = {
+            candidate_id: rank
+            for rank, candidate_id in enumerate(result["personalization"].get("display_order", []), start=1)
+        }
+        exploration = result["personalization"].get("exploration") or {}
+        for rank, item in enumerate(deterministic_ranked, start=1):
+            candidate_id = f"date:{item['date']}"
+            annotation = annotations_by_id.get(candidate_id, {})
+            item.update({
+                "baseline_rank": rank,
+                "personalized_rank": annotation.get("personalized_rank", rank),
+                "learned_adjustment": annotation.get("learned_adjustment", 0),
+                "display_rank": display_rank.get(candidate_id, rank),
+                "model_version": result["personalization"].get("model_version"),
+                "randomized_assignment": bool(exploration.get("randomized")),
+                "assignment_probability": exploration.get("assignment_probability"),
+                "assignment_denominator": exploration.get("assignment_denominator"),
+            })
+    except Exception as exc:
+        logger.warning(
+            "schedule_personalization_annotation_failed user_id=%s error_type=%s",
+            user_id,
+            type(exc).__name__,
+        )
+        result["personalization"] = {
+            "serving_mode": "disabled",
+            "baseline_order": [f"date:{item['date']}" for item in deterministic_ranked],
+            "display_order": [f"date:{item['date']}" for item in deterministic_ranked],
+            "fallback_reason": "integration_failure",
+            "annotations": [],
+            "authority": {
+                "feasibility": "deterministic_scheduler",
+                "apply_order": "deterministic_baseline",
+                "learned_auto_apply": False,
+            },
+        }
     if persist_intervention:
         row = ScheduleIntervention(
             user_id=user_id,
             source_type=data.source_type.value,
-            provisional_payload=_as_json(data),
+            provisional_payload=_as_json(effective_data),
             target_date=data.target_date,
             input_revision=snapshot.revision,
             projected_count=count,
-            ranked_recommendations=(([result["recommendation"]] if result.get("recommendation") else []) + result.get("alternatives", [])),
+            ranked_recommendations=deterministic_ranked,
             state=result["state"],
             correlation_id=correlation_id,
             expires_at=_now() + timedelta(minutes=30),
@@ -659,6 +803,21 @@ def resolve_intervention(
     )
     db.commit()
     try:
+        from services.schedule_observation_hooks import capture_intervention_resolution_after_commit
+
+        capture_intervention_resolution_after_commit(
+            db,
+            user_id,
+            row,
+            result["source_type"],
+            result["id"],
+            selected_date,
+            data.decision.value,
+        )
+    except Exception:
+        # The operational creation and resolution are already durable.
+        db.rollback()
+    try:
         # Late import avoids a lifecycle/trigger module cycle. The resolved
         # creation is already durable, so optional analysis is failure-isolated.
         from services.schedule_triggers import analyze_after_mutation
@@ -830,7 +989,15 @@ def create_plan(db: Session, user_id: int, data: PlanCreateRequest) -> dict:
     )
     db.commit()
     db.refresh(plan)
-    return _plan_dict(plan, db.query(SchedulePlanItem).filter(SchedulePlanItem.plan_id == plan.id).all())
+    persisted_items = db.query(SchedulePlanItem).filter(SchedulePlanItem.plan_id == plan.id).all()
+    try:
+        from services.schedule_observation_hooks import capture_plan_preview_after_commit
+
+        capture_plan_preview_after_commit(db, user_id, plan, persisted_items)
+    except Exception:
+        # Preview durability and deterministic output do not depend on analytics.
+        db.rollback()
+    return _plan_dict(plan, persisted_items)
 
 
 def get_plan(db: Session, user_id: int, plan_id: int) -> dict:
@@ -952,6 +1119,13 @@ def apply_plan(db: Session, user_id: int, plan_id: int, data: PlanApplyRequest, 
         metadata={"idempotency_key": data.idempotency_key[:8]},
     )
     db.commit()
+    try:
+        from services.schedule_observation_hooks import capture_plan_apply_after_commit
+
+        capture_plan_apply_after_commit(db, user_id, plan, plan_items, actor=actor)
+    except Exception:
+        # Apply is already committed; observation failure is analytical only.
+        db.rollback()
     return _plan_dict(plan, plan_items)
 
 

@@ -18,6 +18,8 @@
       </v-progress-circular>
     </div>
 
+    <WorkSessionControls :tasks="workTaskOptions" />
+
     <div class="task-panel__toolbar">
       <v-text-field
         v-model="search"
@@ -121,6 +123,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
 import { onTasksChanged } from '@/services/taskSync'
+import WorkSessionControls from '@/components/WorkSessionControls.vue'
 
 const emit = defineEmits(['close'])
 
@@ -166,6 +169,17 @@ const filteredTasks = computed(() => {
 })
 
 const allFlattened = computed(() => flatten(tasks.value))
+const workTaskOptions = computed(() => {
+  const result = []
+  function visit(nodes, child = false) {
+    for (const task of nodes || []) {
+      if (!isDone(task)) result.push({ id: task.id, title: task.title, source_type: child ? 'subtask' : 'task' })
+      visit(task.subtasks, true)
+    }
+  }
+  visit(tasks.value)
+  return result
+})
 
 const pendingCount = computed(() => allFlattened.value.filter((task) => !isDone(task)).length)
 const completionRate = computed(() => {

@@ -29,6 +29,19 @@ from .scheduling import (
     SchedulePlanItem,
     ScheduleAuditEvent,
 )
+from .schedule_personalization import (
+    SchedulingConsentSetting,
+    SchedulingConsentRevision,
+    SchedulingDecisionEvent,
+    SchedulingWorkSession,
+    SchedulingWorkEvent,
+    SchedulingOutcomeLabel,
+    SchedulingMemoryEntry,
+    SchedulingFeatureSnapshot,
+    SchedulingModelRegistry,
+    SchedulingModelPrediction,
+    SchedulingGovernanceJob,
+)
 
 __all__ = [
     "Deadline", "EmailVerification",
@@ -39,4 +52,8 @@ __all__ = [
     "SchedulingPreference", "ScheduleCapacityOverride", "ScheduleItemDependency",
     "ScheduleAllocation", "ScheduleIntervention", "SchedulePlan", "SchedulePlanItem",
     "ScheduleAuditEvent",
+    "SchedulingConsentSetting", "SchedulingConsentRevision",
+    "SchedulingDecisionEvent", "SchedulingWorkSession", "SchedulingWorkEvent",
+    "SchedulingOutcomeLabel", "SchedulingMemoryEntry", "SchedulingFeatureSnapshot",
+    "SchedulingModelRegistry", "SchedulingModelPrediction", "SchedulingGovernanceJob",
 ]

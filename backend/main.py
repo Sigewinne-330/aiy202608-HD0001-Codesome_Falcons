@@ -16,7 +16,7 @@ from database import (
     sync_reminder_legacy_foreign_keys,
     sync_reminder_user_foreign_keys,
 )
-from routers import auth, billing, calendar, chat, deadlines, reminders, scheduling, tasks
+from routers import auth, billing, calendar, chat, deadlines, reminders, scheduling, scheduling_personalization, tasks
 import models  # noqa: F401 - register every ORM model before startup create_all
 from services.image_storage import UPLOAD_DIR
 from services.reminder_seeds import seed_builtin_role_cards
@@ -72,6 +72,7 @@ app.include_router(calendar.router)
 app.include_router(billing.router)
 app.include_router(reminders.router)
 app.include_router(scheduling.router)
+app.include_router(scheduling_personalization.router)
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")

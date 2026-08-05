@@ -35,5 +35,10 @@ ALTER TABLE `deadlines`
 ALTER TABLE `schedule_interventions`
     ADD COLUMN `resolution_idempotency_key` VARCHAR(128) NULL;
 
+-- The overload clarification state is longer than the original VARCHAR(20)
+-- definition.  Keep the schema aligned with models/scheduling.py.
+ALTER TABLE `schedule_interventions`
+    MODIFY COLUMN `state` VARCHAR(32) NOT NULL;
+
 -- New tables and indexes are emitted by Base.metadata.create_all.  If a
 -- deployment uses only SQL, run the generated DDL from the current models.

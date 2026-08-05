@@ -155,6 +155,9 @@ export default {
   },
   settings: {
     title: '設定',
+    personalization: '個人化與隱私',
+    learningMemory: '學習記憶',
+    learningDashboard: '學習儀表板',
     close: '關閉設定',
     account: '帳號管理',
     accountSub: '管理你的 IBuddy 個人資料與登入狀態',

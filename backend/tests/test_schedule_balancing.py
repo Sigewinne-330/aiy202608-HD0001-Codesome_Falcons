@@ -205,6 +205,35 @@ class ScheduleBalancingTests(unittest.TestCase):
             self.assertEqual("clarification", result["kind"])
             self.assertEqual(3, db.query(Task).count())
 
+    def test_non_material_vague_work_uses_and_persists_conservative_prior(self):
+        target = date.today() + timedelta(days=5)
+        with self.SessionLocal() as db:
+            for index in range(3):
+                db.add(Task(
+                    user_id=1,
+                    task_type=TaskType.todo,
+                    id_name=f"small-{index}",
+                    title=f"small-{index}",
+                    deadline=target,
+                    estimated_hours=0.1,
+                    status="todo",
+                ))
+            db.commit()
+            result = preflight_creation(db, 1, PreflightRequest(
+                source_type="task",
+                title="上传文件",
+                target_date=target,
+            ))
+            self.assertEqual("overload_intervention", result["kind"])
+            self.assertIsNone(result["clarification_question"])
+            self.assertEqual("uncertainty_not_decision_material", result["clarification_reason_code"])
+            self.assertIsNotNone(result["clarification_sensitivity"])
+            intervention = db.query(__import__(
+                "models.scheduling", fromlist=["ScheduleIntervention"]
+            ).ScheduleIntervention).filter_by(id=result["intervention_id"]).one()
+            self.assertGreater(intervention.provisional_payload["estimated_hours"], 0)
+            self.assertEqual("versioned_product_prior_p90", intervention.provisional_payload["effort_source"])
+
     def test_capacity_override_and_stable_recommendation(self):
         requested = date.today() + timedelta(days=2)
         with self.SessionLocal() as db:

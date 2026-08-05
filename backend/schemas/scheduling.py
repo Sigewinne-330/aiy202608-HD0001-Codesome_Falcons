@@ -187,6 +187,14 @@ class Recommendation(BaseModel):
     increase_effort: bool
     reason_codes: List[str] = Field(default_factory=list)
     counterfactual: Optional[str] = None
+    baseline_rank: Optional[int] = None
+    personalized_rank: Optional[int] = None
+    learned_adjustment: Optional[float] = None
+    display_rank: Optional[int] = None
+    model_version: Optional[str] = None
+    randomized_assignment: bool = False
+    assignment_probability: Optional[float] = None
+    assignment_denominator: Optional[int] = None
 
 
 class InterventionResponse(BaseModel):
@@ -200,9 +208,12 @@ class InterventionResponse(BaseModel):
     recommendation: Optional[Recommendation] = None
     alternatives: List[Recommendation] = Field(default_factory=list)
     clarification_question: Optional[str] = None
+    clarification_reason_code: Optional[str] = None
+    clarification_sensitivity: Optional[Dict[str, Any]] = None
     error_code: Optional[str] = None
     input_revision: Optional[str] = None
     correlation_id: Optional[str] = None
+    personalization: Optional[Dict[str, Any]] = None
 
 
 class AnalysisResponse(BaseModel):
