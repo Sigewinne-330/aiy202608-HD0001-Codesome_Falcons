@@ -590,4 +590,12 @@ export default {
     managedHelp: '日程提醒由系统自动管理，可在提醒中心修改偏好。',
     goSettings: '前往提醒设置',
   },
+  // ---- 内置角色卡名称（key = 后端 slug，自定义卡回退显示后端原名） ----
+  roleCards: {
+    'friendly-warm-guy': '友好暖男',
+    'tech-geek': '技术宅',
+    'sweet-high-school-girl': '高中甜美少女',
+    nahida: '纳西妲',
+    furina: '芙宁娜',
+  },
 }

@@ -590,4 +590,12 @@ export default {
     managedHelp: '行程提醒由系統自動管理，可在提醒中心修改偏好。',
     goSettings: '前往提醒設定',
   },
+  // ---- 內建角色卡名稱（key = 後端 slug，自訂卡回退顯示後端原名） ----
+  roleCards: {
+    'friendly-warm-guy': '友好暖男',
+    'tech-geek': '技術宅',
+    'sweet-high-school-girl': '高中甜美少女',
+    nahida: '納西妲',
+    furina: '芙寧娜',
+  },
 }

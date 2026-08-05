@@ -590,4 +590,12 @@ export default {
     managedHelp: 'Reminders are managed automatically. Adjust preferences in the Reminder Center.',
     goSettings: 'Open reminder settings',
   },
+  // ---- 内置角色卡名称（key = 后端 slug，自定义卡回退显示后端原名） ----
+  roleCards: {
+    'friendly-warm-guy': 'Friendly Warm Senior',
+    'tech-geek': 'Tech Geek',
+    'sweet-high-school-girl': 'Sweet Schoolgirl',
+    nahida: 'Nahida',
+    furina: 'Furina',
+  },
 }

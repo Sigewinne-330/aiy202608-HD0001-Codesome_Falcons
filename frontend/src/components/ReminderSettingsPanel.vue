@@ -227,7 +227,7 @@ import { useI18n } from 'vue-i18n'
 import { getPreferences, updatePreferences, listRoleCards, ApiError } from '@/services/reminders'
 import RoleCardPicker from '@/components/RoleCardPicker.vue'
 import ReminderOffsetsEditor from '@/components/ReminderOffsetsEditor.vue'
-import { notifyRoleCardChanged } from '@/services/roleCardVisuals'
+import { notifyRoleCardChanged, roleCardDisplayName } from '@/services/roleCardVisuals'
 
 const emit = defineEmits(['unauthorized'])
 const { t } = useI18n()
@@ -344,7 +344,9 @@ const currentRoleCard = computed(() => {
   if (form.role_card_id == null) return preferences.value?.role_card || null
   return roleCards.value.find((c) => c.id === form.role_card_id) || preferences.value?.role_card || null
 })
-const currentRoleCardName = computed(() => currentRoleCard.value?.name || t('reminders.roleCardDefault'))
+const currentRoleCardName = computed(() =>
+  currentRoleCard.value ? roleCardDisplayName(currentRoleCard.value) : t('reminders.roleCardDefault'),
+)
 const currentRoleCardDescription = computed(
   () => currentRoleCard.value?.description || t('reminders.roleCardHelp'),
 )

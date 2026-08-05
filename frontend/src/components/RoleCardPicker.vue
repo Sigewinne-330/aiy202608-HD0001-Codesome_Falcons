@@ -74,13 +74,13 @@
           <img
             v-if="cardAvatar(card.slug)"
             :src="cardAvatar(card.slug)"
-            :alt="card.name"
+            :alt="roleCardDisplayName(card)"
             class="role-card__avatar mr-3"
           />
           <v-icon v-else :icon="cardIcon(card.slug)" color="primary" class="mr-3" />
           <div class="role-card__copy">
             <div class="role-card__name">
-              <span v-text="card.name" />
+              <span v-text="roleCardDisplayName(card)" />
               <span v-if="card.scope" class="role-card__scope">
                 {{ card.scope === 'private' ? $t('reminders.roleCardPrivate') : $t('reminders.roleCardGlobal') }}
               </span>
@@ -135,6 +135,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getRoleCard, importRoleCard, ApiError } from '@/services/reminders'
+import { roleCardDisplayName } from '@/services/roleCardVisuals'
 
 const props = defineProps({
   modelValue: Boolean,

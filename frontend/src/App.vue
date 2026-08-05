@@ -69,7 +69,7 @@
                   <template #prepend>
                     <v-icon :icon="styleCardIcon(card.slug)" size="20" class="mr-1" />
                   </template>
-                  <v-list-item-title>{{ card.name }}</v-list-item-title>
+                  <v-list-item-title>{{ roleCardDisplayName(card) }}</v-list-item-title>
                 </v-list-item>
               </template>
             </v-list>
@@ -206,7 +206,7 @@
 
       <!-- 左下角：提醒中心入口（与右下角 quick-actions 对称） -->
       <transition name="quick-actions-fade">
-        <div v-show="!agentDrawer" class="reminder-entry">
+        <div v-show="!taskDrawer" class="reminder-entry">
           <v-tooltip :text="$t('reminders.title')" location="right">
             <template #activator="{ props }">
               <v-btn
@@ -246,6 +246,7 @@ import SettingsDialog from '@/components/SettingsDialog.vue'
 import { onTasksChanged } from '@/services/taskSync'
 import { onOpenAgent } from '@/services/agentContext'
 import { getPreferences, updatePreferences, listRoleCards, ApiError } from '@/services/reminders'
+import { roleCardDisplayName } from '@/services/roleCardVisuals'
 import { notifyRoleCardChanged } from '@/services/roleCardVisuals'
 
 const router = useRouter()
@@ -387,6 +388,7 @@ const styleMenuOpen = ref(false)
 const styleCards = ref([])
 const styleSelectedId = ref(null)
 const styleDefaultName = ref('')
+const styleDefaultSlug = ref('')
 const styleLoaded = ref(false)
 const styleLoading = ref(false)
 const styleSaving = ref(false)
@@ -395,7 +397,9 @@ const settingsSection = ref('account')
 const currentStyleName = computed(() => {
   if (styleSelectedId.value != null) {
     const card = styleCards.value.find((c) => c.id === styleSelectedId.value)
-    if (card) return card.name
+    if (card) return roleCardDisplayName(card)
+    // 列表未加载时，用偏好里缓存的 slug 走同一套翻译
+    return roleCardDisplayName({ slug: styleDefaultSlug.value, name: styleDefaultName.value })
   }
   return styleDefaultName.value || t('reminders.roleCardDefault')
 })
@@ -417,6 +421,7 @@ watch(styleMenuOpen, async (open) => {
     styleCards.value = Array.isArray(cards) ? cards : cards?.items || []
     styleSelectedId.value = prefs?.role_card?.id ?? null
     styleDefaultName.value = prefs?.role_card?.name || ''
+    styleDefaultSlug.value = prefs?.role_card?.slug || ''
     notifyRoleCardChanged(prefs?.role_card || null)
     styleLoaded.value = true
   } catch (err) {
@@ -437,6 +442,7 @@ async function selectStyle(id) {
     const updated = await updatePreferences({ role_card_id: id })
     styleSelectedId.value = updated?.role_card?.id ?? null
     styleDefaultName.value = updated?.role_card?.name || styleDefaultName.value
+    styleDefaultSlug.value = updated?.role_card?.slug || styleDefaultSlug.value
     notifyRoleCardChanged(updated?.role_card || null)
     styleMenuOpen.value = false
   } catch (err) {
