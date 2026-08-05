@@ -153,7 +153,7 @@ def list_reminder_candidates(
                 )
             )
     for subtask, parent in subtasks:
-        offset = (subtask.notice_time - local_date).days
+        offset = (subtask.notice_time.date() - local_date).days
         if offset in cadence_offsets:
             candidates.append(
                 ReminderCandidate(
@@ -161,7 +161,7 @@ def list_reminder_candidates(
                     item_id=subtask.id,
                     title=subtask.name or "未命名子任务",
                     description=subtask.description or "",
-                    due_date=subtask.notice_time,
+                    due_date=subtask.notice_time.date(),
                     cadence_offset=offset,
                     priority=subtask.level or "medium",
                     subject=parent.subject or "",
@@ -360,7 +360,7 @@ def _reload_candidate(
         subtask, parent = row
         if (
             subtask.status in {"done", "completed"}
-            or subtask.notice_time != occurrence.due_date
+            or subtask.notice_time.date() != occurrence.due_date
         ):
             return None
         return ReminderCandidate(
@@ -368,7 +368,7 @@ def _reload_candidate(
             item_id=subtask.id,
             title=subtask.name or "未命名子任务",
             description=subtask.description or "",
-            due_date=subtask.notice_time,
+            due_date=subtask.notice_time.date(),
             cadence_offset=occurrence.cadence_offset,
             priority=subtask.level or "medium",
             subject=parent.subject or "",
