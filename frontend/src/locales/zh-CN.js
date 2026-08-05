@@ -248,6 +248,8 @@ export default {
     moreItems: '还有 {n} 项',
     syncing: '同步日程中…',
     dayDetail: '{month}月{day}日共有 {n} 项日程，可点击具体项目查看。',
+    dayDialogTitle: '{month}月{day}日',
+    dayDialogCount: '共 {n} 项',
   },
   calendarPanel: {
     today: '今天',

@@ -248,6 +248,8 @@ export default {
     moreItems: '+{n} more',
     syncing: 'Syncing schedule…',
     dayDetail: '{month}/{day} has {n} items. Click an item to view details.',
+    dayDialogTitle: '{month}/{day}',
+    dayDialogCount: '{n} items',
   },
   calendarPanel: {
     today: 'Today',

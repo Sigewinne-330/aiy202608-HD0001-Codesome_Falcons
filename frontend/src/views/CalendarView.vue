@@ -82,22 +82,43 @@
       </div>
     </v-card>
 
-    <v-snackbar v-model="dayNotice" location="bottom" timeout="2400" color="grey-darken-4">
-      {{ selectedDayText }}
-    </v-snackbar>
+    <!-- 单日详情弹窗：展示当天全部日程（"+N 更多"入口），点击条目跳转逻辑与月历一致 -->
+    <v-dialog v-model="dayDialog" max-width="440" scrollable>
+      <v-card rounded="xl">
+        <v-card-title class="day-dialog__title">
+          <span>{{ $t('calendar.dayDialogTitle', { month: dialogMonth, day: dialogDay }) }}</span>
+          <span class="day-dialog__count">{{ $t('calendar.dayDialogCount', { n: dialogItems.length }) }}</span>
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" :aria-label="$t('common.close')" @click="dayDialog = false" />
+        </v-card-title>
+        <v-card-text class="day-dialog__body">
+          <button
+            v-for="item in dialogItems"
+            :key="`${item.type}-${item.id}-${item.deadline_kind || 'main'}`"
+            type="button"
+            class="schedule-pill"
+            :class="[`schedule-pill--${pillShape(item)}`, { 'schedule-pill--urgent': item.priority === 'urgent' }]"
+            :style="{ '--pill-bg': pillColor(item).bg, '--pill-dot': pillColor(item).dot, '--pill-text': pillColor(item).text }"
+            :title="item.deadline_kind === 'personal' ? `${item.title} (${$t('calendar.personalDeadline')})` : item.title"
+            @click="openDialogItem(item)"
+          >
+            <i />
+            <span>{{ item.title }}</span>
+          </button>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
 import { onTasksChanged } from '@/services/taskSync'
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
 const { token } = useAuth()
 const now = new Date()
 
@@ -105,9 +126,14 @@ const currentYear = ref(Number(route.query.year) || now.getFullYear())
 const currentMonth = ref(Number(route.query.month) || now.getMonth() + 1)
 const monthData = ref({})
 const loading = ref(false)
-const dayNotice = ref(false)
-const selectedDayText = ref('')
+// 单日详情弹窗：选中天的完整 items 列表
+const dayDialog = ref(false)
+const selectedDay = ref(null)
 const weekDayKeys = ['weekMon', 'weekTue', 'weekWed', 'weekThu', 'weekFri', 'weekSat', 'weekSun']
+
+const dialogItems = computed(() => selectedDay.value?.items || [])
+const dialogMonth = computed(() => (selectedDay.value ? Number(selectedDay.value.date.slice(5, 7)) : ''))
+const dialogDay = computed(() => (selectedDay.value ? Number(selectedDay.value.date.slice(8, 10)) : ''))
 
 const monthItemCount = computed(() => Object.entries(monthData.value)
   .filter(([date]) => Number(date.slice(5, 7)) === currentMonth.value)
@@ -242,12 +268,14 @@ function openItem(item) {
 }
 
 function openDay(day) {
-  selectedDayText.value = t('calendar.dayDetail', {
-    month: Number(day.date.slice(5, 7)),
-    day: Number(day.date.slice(8, 10)),
-    n: day.items.length,
-  })
-  dayNotice.value = true
+  selectedDay.value = day
+  dayDialog.value = true
+}
+
+// 弹窗内点击条目：先关弹窗再走与月历一致的跳转逻辑
+function openDialogItem(item) {
+  dayDialog.value = false
+  openItem(item)
 }
 
 let stopTaskSync
@@ -465,6 +493,12 @@ onBeforeUnmount(() => stopTaskSync?.())
   box-shadow: none;
 }
 .more-items { border: 0; padding: 2px 5px; color: #7b86a0; background: transparent; cursor: pointer; text-align: left; font-size: 9px; font-weight: 650; }
+.more-items:hover { color: #4169e8; }
+/* 单日详情弹窗 */
+.day-dialog__title { display: flex; align-items: center; gap: 8px; padding: 18px 20px 10px; font-size: 16px; }
+.day-dialog__count { color: #8993a6; font-size: 12px; font-weight: 500; }
+.day-dialog__body { display: flex; flex-direction: column; gap: 6px; padding: 4px 20px 20px; }
+.day-dialog__body .schedule-pill { font-size: 12px; padding: 8px 10px; }
 .month-grid--loading { min-height: 500px; }
 .calendar-loading { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #7e889d; background: rgba(255,255,255,.78); backdrop-filter: blur(3px); font-size: 12px; }
 @media (max-width: 900px) {

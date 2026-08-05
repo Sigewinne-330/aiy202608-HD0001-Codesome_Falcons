@@ -248,6 +248,8 @@ export default {
     moreItems: '還有 {n} 項',
     syncing: '同步行程中…',
     dayDetail: '{month}月{day}日共有 {n} 項行程，可點擊具體項目查看。',
+    dayDialogTitle: '{month}月{day}日',
+    dayDialogCount: '共 {n} 項',
   },
   calendarPanel: {
     today: '今天',
