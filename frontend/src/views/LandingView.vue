@@ -131,46 +131,45 @@
                 <span class="mock-window-title">{{ $t('landing.windowTitle') }}</span>
               </div>
 
-              <div class="mock-week">
-                <div class="mock-day"><small>一</small><b>3</b></div>
-                <div class="mock-day"><small>二</small><b>4</b></div>
-                <div class="mock-day is-today"><small>三</small><b>5</b></div>
-                <div class="mock-day"><small>四</small><b>6</b></div>
-                <div class="mock-day"><small>五</small><b>7</b></div>
-                <div class="mock-day"><small>六</small><b>8</b></div>
-                <div class="mock-day"><small>日</small><b>9</b></div>
-              </div>
-
-              <div class="mock-task mock-task-blue">
-                <v-icon size="15" color="white">mdi-file-document-edit-outline</v-icon>
-                <div class="mock-task-copy">
-                  <b>{{ $t('landing.task1') }}</b>
-                  <small>{{ $t('landing.task1Meta') }}</small>
+              <!-- 月历网格（7×4 = 28 天） -->
+              <div class="mock-month">
+                <div class="mock-weekday" v-for="d in mockWeekDays" :key="d">{{ d }}</div>
+                <div
+                  v-for="i in 28"
+                  :key="i"
+                  class="mock-day-cell"
+                  :class="{ 'mock-today': i === 9 }"
+                >
+                  <span class="mock-day-num">{{ i }}</span>
+                  <!-- 示例任务标记 -->
+                  <span v-if="i === 9" class="mock-pill mock-pill-blue"></span>
+                  <span v-if="i === 9" class="mock-pill mock-pill-deadline"></span>
+                  <span v-if="i === 14" class="mock-pill mock-pill-teal"></span>
+                  <span v-if="i === 18" class="mock-pill mock-pill-blue"></span>
+                  <span v-if="i === 21" class="mock-pill mock-pill-deadline"></span>
                 </div>
-                <span class="mock-task-state">{{ $t('landing.task1State') }}</span>
               </div>
 
-              <div class="mock-task mock-task-orange">
-                <v-icon size="15" color="white">mdi-book-open-variant</v-icon>
-                <div class="mock-task-copy">
-                  <b>{{ $t('landing.task2') }}</b>
-                  <small>{{ $t('landing.task2Meta') }}</small>
-                </div>
-                <span class="mock-task-state">{{ $t('landing.task2State') }}</span>
+              <!-- 图例 -->
+              <div class="mock-legend">
+                <span><i class="l-todo" /> Todo</span>
+                <span><i class="l-process" /> Process</span>
+                <span><i class="l-deadline" /> DDL</span>
               </div>
+            </div>
 
-              <div class="mock-task mock-task-teal">
-                <v-icon size="15" color="white">mdi-flask-outline</v-icon>
-                <div class="mock-task-copy">
-                  <b>{{ $t('landing.task3') }}</b>
-                  <small>{{ $t('landing.task3Meta') }}</small>
-                </div>
-                <span class="mock-task-state">{{ $t('landing.task3State') }}</span>
+            <!-- 浮动 AI 对话气泡 -->
+            <div class="mock-chat-bubble">
+              <div class="mock-chat-header">
+                <v-icon size="14" color="#3265F5">mdi-creation-outline</v-icon>
+                <span>IBuddy</span>
               </div>
-
-              <div class="mock-bubble">
-                <v-icon size="15" color="#FF7043">mdi-bell-ring-outline</v-icon>
-                <span>{{ $t('landing.bubble') }}</span>
+              <div class="mock-chat-body">
+                <p>{{ $t('landing.chatPreview') }}</p>
+              </div>
+              <div class="mock-chat-input">
+                <span>{{ $t('landing.chatPlaceholder') }}</span>
+                <v-icon size="14" color="#3265F5">mdi-send</v-icon>
               </div>
             </div>
 
@@ -191,7 +190,7 @@
           </div>
 
           <v-row class="feature-grid" dense>
-            <v-col cols="12" sm="6" lg="3">
+            <v-col cols="12" sm="6" lg="4">
               <v-card class="feature-card" rounded="xl" elevation="1">
                 <div class="feature-icon icon-blue">
                   <v-icon size="26" color="#3265F5">mdi-creation-outline</v-icon>
@@ -201,7 +200,7 @@
               </v-card>
             </v-col>
 
-            <v-col cols="12" sm="6" lg="3">
+            <v-col cols="12" sm="6" lg="4">
               <v-card class="feature-card" rounded="xl" elevation="1">
                 <div class="feature-icon icon-purple">
                   <v-icon size="26" color="#7348E8">mdi-sitemap-outline</v-icon>
@@ -211,7 +210,7 @@
               </v-card>
             </v-col>
 
-            <v-col cols="12" sm="6" lg="3">
+            <v-col cols="12" sm="6" lg="4">
               <v-card class="feature-card" rounded="xl" elevation="1">
                 <div class="feature-icon icon-teal">
                   <v-icon size="26" color="#26A69A">mdi-lightning-bolt-outline</v-icon>
@@ -221,13 +220,33 @@
               </v-card>
             </v-col>
 
-            <v-col cols="12" sm="6" lg="3">
+            <v-col cols="12" sm="6" lg="4">
               <v-card class="feature-card" rounded="xl" elevation="1">
                 <div class="feature-icon icon-orange">
-                  <v-icon size="26" color="#FF7043">mdi-robot-happy-outline</v-icon>
+                  <v-icon size="26" color="#FF7043">mdi-calendar-month-outline</v-icon>
                 </div>
                 <h3>{{ $t('landing.f4Title') }}</h3>
                 <p>{{ $t('landing.f4Desc') }}</p>
+              </v-card>
+            </v-col>
+
+            <v-col cols="12" sm="6" lg="4">
+              <v-card class="feature-card" rounded="xl" elevation="1">
+                <div class="feature-icon icon-pink">
+                  <v-icon size="26" color="#E91E63">mdi-bell-outline</v-icon>
+                </div>
+                <h3>{{ $t('landing.f5Title') }}</h3>
+                <p>{{ $t('landing.f5Desc') }}</p>
+              </v-card>
+            </v-col>
+
+            <v-col cols="12" sm="6" lg="4">
+              <v-card class="feature-card" rounded="xl" elevation="1">
+                <div class="feature-icon icon-cyan">
+                  <v-icon size="26" color="#00BCD4">mdi-scale-balance</v-icon>
+                </div>
+                <h3>{{ $t('landing.f6Title') }}</h3>
+                <p>{{ $t('landing.f6Desc') }}</p>
               </v-card>
             </v-col>
           </v-row>
@@ -333,6 +352,8 @@ const { isAuthenticated } = useAuth()
 const currentLocale = computed(() => locale.value)
 const currentLanguageLabel = computed(() => LOCALE_NAMES[locale.value] || '简体中文')
 const languageOptions = SUPPORTED_LOCALES.map((code) => ({ title: LOCALE_NAMES[code], value: code }))
+
+const mockWeekDays = ['一', '二', '三', '四', '五', '六', '日']
 
 function changeLanguage(code) {
   setLocale(code)
@@ -522,79 +543,136 @@ function scrollToId(selector) {
   color: #8790a5;
 }
 
-.mock-week {
+/* 月历网格 */
+.mock-month {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
-  margin-bottom: 14px;
+  gap: 4px;
+  margin-bottom: 12px;
 }
 
-.mock-day {
+.mock-weekday {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8b95a8;
+  padding: 4px 0;
+}
+
+.mock-day-cell {
+  position: relative;
+  aspect-ratio: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 8px 0;
-  border-radius: 12px;
+  padding: 3px 2px;
+  border-radius: 8px;
   background: #f4f6fb;
+  gap: 2px;
+}
+
+.mock-day-cell.mock-today {
+  background: linear-gradient(135deg, #3265f5, #7348e8);
+  box-shadow: 0 4px 12px rgba(50, 101, 245, 0.25);
+}
+
+.mock-today .mock-day-num {
+  color: #fff;
+  font-weight: 700;
+}
+
+.mock-day-num {
+  font-size: 12px;
+  font-weight: 600;
+  color: #3c4a66;
+  line-height: 1;
+}
+
+/* 日历任务标记条 */
+.mock-pill {
+  width: 80%;
+  height: 4px;
+  border-radius: 2px;
+  display: block;
+  flex-shrink: 0;
+}
+
+.mock-pill-blue { background: #3265F5; }
+.mock-pill-teal { background: #26A69A; }
+.mock-pill-deadline { background: #FF7043; }
+
+/* 图例 */
+.mock-legend {
+  display: flex;
+  gap: 14px;
+  padding: 8px 0 0;
+  border-top: 1px solid rgba(20, 34, 66, 0.06);
+  font-size: 11px;
+  color: #8790a5;
+}
+
+.mock-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+.l-todo { background: #3265F5; }
+.l-process { background: #26A69A; }
+.l-deadline { background: #FF7043; }
+
+/* 浮动 AI 对话气泡 */
+.mock-chat-bubble {
+  position: absolute;
+  z-index: 2;
+  right: -20px;
+  bottom: -16px;
+  width: 200px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 14px 38px rgba(30, 41, 66, 0.2);
+  border: 1px solid rgba(20, 34, 66, 0.07);
+  overflow: hidden;
+  animation: mockFloat 3s ease-in-out infinite;
+}
+
+@keyframes mockFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.mock-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f2f6;
+  font-size: 12px;
+  font-weight: 600;
+  color: #28334b;
+}
+
+.mock-chat-body {
+  padding: 12px;
   font-size: 12px;
   color: #5a6478;
+  line-height: 1.55;
 }
 
-.mock-day b { font-size: 15px; color: #1e2942; }
-.mock-day.is-today {
-  background: linear-gradient(135deg, #3265f5, #7348e8);
-  box-shadow: 0 8px 18px rgba(50, 101, 245, 0.3);
-}
-.mock-day.is-today small,
-.mock-day.is-today b { color: #fff; }
+.mock-chat-body p { margin: 0; }
 
-.mock-task {
+.mock-chat-input {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 11px 12px;
-  border-radius: 13px;
-  margin-bottom: 10px;
-  color: #fff;
-}
-
-.mock-task-blue { background: linear-gradient(135deg, #3265f5, #4d7dff); }
-.mock-task-orange { background: linear-gradient(135deg, #ff7043, #ff9a5a); }
-.mock-task-teal { background: linear-gradient(135deg, #26a69a, #4ecdc4); }
-
-.mock-task-copy {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  line-height: 1.35;
-}
-
-.mock-task-copy b { font-size: 13.5px; }
-.mock-task-copy small { font-size: 11px; opacity: 0.82; }
-
-.mock-task-state {
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.22);
-  white-space: nowrap;
-}
-
-.mock-bubble {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-  padding: 11px 13px;
-  border: 1px solid rgba(255, 112, 67, 0.24);
-  background: #fff7f3;
-  border-radius: 13px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #b4552a;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-top: 1px solid #f0f2f6;
+  background: #f8f9fc;
+  font-size: 11px;
+  color: #a0a7b5;
 }
 
 /* ---------- 通用区块 ---------- */
@@ -644,6 +722,8 @@ function scrollToId(selector) {
 .icon-purple { background: rgba(115, 72, 232, 0.12); }
 .icon-teal { background: rgba(38, 166, 154, 0.12); }
 .icon-orange { background: rgba(255, 112, 67, 0.12); }
+.icon-pink { background: rgba(233, 30, 99, 0.12); }
+.icon-cyan { background: rgba(0, 188, 212, 0.12); }
 
 .feature-card h3 {
   font-size: 17px;
