@@ -188,7 +188,7 @@ def get_calendar_data(
         if ("subtask", st.id) in allocated_sources:
             continue
         if st.notice_time:
-            date_key = st.notice_time.isoformat() if isinstance(st.notice_time, date) else st.notice_time
+            date_key = st.notice_time.date().isoformat() if isinstance(st.notice_time, date) else st.notice_time
             item = CalendarDayItem(
                 id=st.id,
                 title=st.name,
