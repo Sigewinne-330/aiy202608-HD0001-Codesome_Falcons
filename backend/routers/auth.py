@@ -22,6 +22,7 @@ from services.auth import create_access_token, get_current_user, hash_password, 
 from services.billing import INITIAL_CREDITS, grant_credits
 from services.email_service import EmailDeliveryError, EmailSender, get_email_sender
 from services.email_verification import (
+    DUPLICATE_ACCOUNT_ERROR,
     GENERIC_ACCEPTED_MESSAGE,
     GENERIC_REGISTRATION_ERROR,
     RegistrationProofError,
@@ -120,10 +121,10 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
 
     if db.query(User).filter(func.lower(User.email) == str(data.email)).first():
         db.rollback()
-        raise HTTPException(status_code=400, detail=GENERIC_REGISTRATION_ERROR)
+        raise HTTPException(status_code=400, detail=DUPLICATE_ACCOUNT_ERROR)
     if db.query(User).filter(User.username == data.username).first():
         db.rollback()
-        raise HTTPException(status_code=400, detail=GENERIC_REGISTRATION_ERROR)
+        raise HTTPException(status_code=400, detail=DUPLICATE_ACCOUNT_ERROR)
 
     user = User(
         username=data.username,
@@ -149,7 +150,8 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=400, detail=GENERIC_REGISTRATION_ERROR) from exc
+        # 并发撞唯一约束（email/username unique）：与上方查重分支保持同一合并文案
+        raise HTTPException(status_code=400, detail=DUPLICATE_ACCOUNT_ERROR) from exc
     db.refresh(user)
     return TokenResponse(
         access_token=create_access_token(user.id),

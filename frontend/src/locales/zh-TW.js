@@ -105,6 +105,7 @@ export default {
     resendCode: '重新發送驗證碼',
     serverUnavailable: '無法連線伺服器，請確認後端服務已啟動後重試',
     emailServiceUnavailable: '信箱驗證碼服務暫時不可用，請檢查郵件服務設定或稍後重試',
+    duplicateAccount: '信箱或使用者名稱已被註冊',
     requestFailed: '請求失敗，請稍後重試',
   },
   landing: {

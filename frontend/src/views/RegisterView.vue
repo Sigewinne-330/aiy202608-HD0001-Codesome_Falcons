@@ -269,12 +269,19 @@ function resetEmail() {
   resetVerificationState()
 }
 
+// 后端 routers/auth.py 对邮箱/用户名重复返回的固定文案（DUPLICATE_ACCOUNT_ERROR），
+// 匹配后走 i18n，避免繁中/英文用户看到后端硬编码中文
+const BACKEND_DUPLICATE_ACCOUNT_ERROR = '邮箱或用户名已被注册'
+
 function registrationErrorMessage(error) {
   if (error?.kind === API_ERROR_KIND.TRANSPORT) {
     return t('auth.serverUnavailable')
   }
   if (error?.status === 503) {
     return t('auth.emailServiceUnavailable')
+  }
+  if (error?.status === 400 && error?.message === BACKEND_DUPLICATE_ACCOUNT_ERROR) {
+    return t('auth.duplicateAccount')
   }
   return error?.message || t('auth.requestFailed')
 }

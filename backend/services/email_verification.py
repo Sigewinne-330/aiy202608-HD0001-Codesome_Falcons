@@ -15,6 +15,8 @@ from services.verification_policy import VerificationPolicy
 GENERIC_ACCEPTED_MESSAGE = "如果该邮箱可用于注册，验证码将会发送，请检查收件箱。"
 GENERIC_VERIFICATION_ERROR = "验证码无效或已失效，请重新获取。"
 GENERIC_REGISTRATION_ERROR = "无法完成注册，请重新验证邮箱后再试。"
+# 邮箱或用户名重复时使用：合并表述，不指明具体是哪个，避免账号枚举
+DUPLICATE_ACCOUNT_ERROR = "邮箱或用户名已被注册"
 
 
 class VerificationRateLimitError(RuntimeError):

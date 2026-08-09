@@ -105,6 +105,7 @@ export default {
     resendCode: '重新发送验证码',
     serverUnavailable: '无法连接服务器，请确认后端服务已启动后重试',
     emailServiceUnavailable: '邮箱验证码服务暂时不可用，请检查邮件服务配置或稍后重试',
+    duplicateAccount: '邮箱或用户名已被注册',
     requestFailed: '请求失败，请稍后重试',
   },
   landing: {

@@ -105,6 +105,7 @@ export default {
     resendCode: 'Resend code',
     serverUnavailable: 'Unable to connect to the server. Check that the backend is running and try again.',
     emailServiceUnavailable: 'Email verification is temporarily unavailable. Check the mail configuration or try again later.',
+    duplicateAccount: 'This email or username is already registered.',
     requestFailed: 'Request failed. Please try again later.',
   },
   landing: {
