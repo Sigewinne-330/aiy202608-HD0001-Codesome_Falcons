@@ -25,6 +25,29 @@
         </div>
       </header>
 
+      <!-- 视图切换：全部任务 / 个人 Deadline + 紧急筛选（URL query 驱动，可分享可重定向） -->
+      <div class="view-switch">
+        <v-chip-group
+          :model-value="activeTab"
+          mandatory
+          selected-class="filter-chip--selected"
+          @update:model-value="setView({ tab: $event === 'deadlines' ? 'deadlines' : null })"
+        >
+          <v-chip value="all" variant="text" prepend-icon="mdi-check-circle-outline">{{ $t('tasks.tabAll') }}</v-chip>
+          <v-chip value="deadlines" variant="text" prepend-icon="mdi-calendar-alert-outline">{{ $t('tasks.tabDeadlines') }}</v-chip>
+        </v-chip-group>
+        <v-chip
+          class="urgent-toggle"
+          :color="urgentOnly ? 'error' : undefined"
+          :variant="urgentOnly ? 'flat' : 'text'"
+          prepend-icon="mdi-lightning-bolt-outline"
+          @click="setView({ filter: urgentOnly ? null : 'urgent' })"
+        >
+          {{ $t('tasks.filterUrgent') }}
+        </v-chip>
+      </div>
+
+      <template v-if="activeTab === 'all'">
       <div class="task-filters">
         <div class="filter-block">
           <span class="filter-label">{{ $t('tasks.typeLabel') }}</span>
@@ -182,6 +205,104 @@
       <span>{{ $t('tasks.emptyDesc') }}</span>
       <v-btn color="primary" variant="tonal" @click="openCreate">{{ $t('tasks.createTask') }}</v-btn>
     </div>
+      </template>
+
+      <!-- 个人 Deadline Tab（合并自 DeadlinesView） -->
+      <template v-else>
+        <div class="deadline-filters">
+          <v-chip-group v-model="deadlineStatusFilter" mandatory selected-class="filter-chip--selected">
+            <v-chip value="all" size="small" variant="text">{{ $t('common.all') }}</v-chip>
+            <v-chip value="pending" size="small" variant="text">{{ $t('deadlines.pending') }}</v-chip>
+            <v-chip value="done" size="small" variant="text">{{ $t('deadlines.done') }}</v-chip>
+            <v-chip value="overdue" size="small" variant="text">{{ $t('deadlines.overdue') }}</v-chip>
+          </v-chip-group>
+          <v-btn color="primary" prepend-icon="mdi-plus" size="small" @click="openDeadlineCreate">{{ $t('deadlines.add') }}</v-btn>
+        </div>
+
+        <v-alert v-if="collision?.overload" type="warning" variant="tonal" closable class="mb-4">
+          {{ collision.suggestion }}
+        </v-alert>
+
+        <div class="deadline-layout">
+          <div class="deadline-main">
+            <div v-if="loading" class="task-empty">
+              <v-progress-circular indeterminate color="primary" />
+              <span>{{ $t('common.loadingTasks') }}</span>
+            </div>
+
+            <div v-else-if="filteredDeadlines.length" class="deadline-list">
+              <div
+                v-for="d in filteredDeadlines"
+                :key="d.id"
+                :id="`deadline-item-${d.id}`"
+                class="deadline-row"
+                :class="{ 'deadline-row--overdue': d.status === 'overdue', 'deadline-row--focused': focusedDeadlineId === d.id }"
+              >
+                <v-btn
+                  class="deadline-check"
+                  :icon="d.status === 'done' ? 'mdi-check-circle' : 'mdi-circle-outline'"
+                  :color="deadlineStatusColor(d.status)"
+                  variant="text"
+                  density="comfortable"
+                  :aria-label="$t('deadlines.done')"
+                  @click="toggleDeadlineDone(d)"
+                />
+                <div class="deadline-copy">
+                  <strong>{{ d.title }}</strong>
+                  <small>
+                    <span v-if="d.source"><v-icon icon="mdi-link-variant" size="12" />{{ d.source }}</span>
+                    <span v-if="d.subject">{{ d.subject }}</span>
+                    <span v-if="d.description">{{ d.description }}</span>
+                  </small>
+                </div>
+                <div class="deadline-side">
+                  <span class="deadline-date" :class="{ 'is-overdue': d.status === 'overdue' }">{{ formatDeadlineDate(d.due_date) }}</span>
+                  <v-chip size="x-small" :color="priorityColor(d.priority)" variant="tonal">{{ priorityLabel(d.priority) }}</v-chip>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="task-empty">
+              <v-icon icon="mdi-calendar-check-outline" size="58" color="grey-lighten-1" />
+              <strong>{{ $t('deadlines.empty') }}</strong>
+              <v-btn color="primary" variant="tonal" @click="openDeadlineCreate">{{ $t('deadlines.add') }}</v-btn>
+            </div>
+          </div>
+
+          <aside class="deadline-aside">
+            <div class="deadline-panel">
+              <div class="deadline-panel__title">{{ $t('deadlines.upcoming') }}</div>
+              <div v-if="upcomingDeadlines.length" class="deadline-panel__list">
+                <div v-for="d in upcomingDeadlines" :key="d.id" class="deadline-panel__row">
+                  <span>{{ d.title }}</span>
+                  <small>{{ $t('common.daysLater', { n: deadlineDaysLeft(d.due_date) }) }} · {{ d.subject || $t('common.noSubject') }}</small>
+                </div>
+              </div>
+              <div v-else class="deadline-panel__empty">{{ $t('deadlines.upcomingEmpty') }}</div>
+            </div>
+
+            <div class="deadline-panel">
+              <div class="deadline-panel__title">{{ $t('deadlines.collision') }}</div>
+              <v-text-field
+                v-model="checkDate"
+                :label="$t('deadlines.checkDateLabel')"
+                type="date"
+                variant="outlined"
+                density="compact"
+                hide-details
+                class="mb-2"
+                @keydown.enter="checkCollision"
+              />
+              <v-btn block variant="tonal" color="primary" size="small" @click="checkCollision">{{ $t('deadlines.check') }}</v-btn>
+              <div v-if="collision" class="deadline-panel__result">
+                {{ $t('deadlines.collisionResult', { date: collision.date, count: collision.count }) }}
+                <v-chip v-if="collision.overload" size="x-small" color="warning" class="ml-1">{{ $t('deadlines.overload') }}</v-chip>
+                <v-chip v-else size="x-small" color="success" class="ml-1">{{ $t('deadlines.reasonable') }}</v-chip>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </template>
     </div>
 
     <v-dialog v-model="createDialog" max-width="580">
@@ -327,6 +448,39 @@
       </v-card>
     </v-dialog>
 
+    <!-- 新建 Deadline 对话框（合并自 DeadlinesView） -->
+    <v-dialog v-model="deadlineDialog" max-width="500">
+      <v-card rounded="xl" :title="$t('deadlines.dialogTitle')">
+        <v-card-text>
+          <v-text-field v-model="deadlineForm.title" :label="$t('deadlines.titleField')" variant="outlined" density="comfortable" class="mb-2" />
+          <v-text-field v-model="deadlineForm.source" :label="$t('deadlines.source')" variant="outlined" density="comfortable" class="mb-2" />
+          <v-text-field v-model="deadlineForm.subject" :label="$t('deadlines.subject')" variant="outlined" density="comfortable" class="mb-2" />
+          <v-row dense>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model="deadlineForm.due_date" :label="$t('deadlines.dueDate')" type="date" variant="outlined" density="comfortable" />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="deadlineForm.priority"
+                :label="$t('deadlines.priority')"
+                :items="priorityOptions"
+                :item-title="priorityTitle"
+                item-value="value"
+                variant="outlined"
+                density="comfortable"
+              />
+            </v-col>
+          </v-row>
+          <v-textarea v-model="deadlineForm.description" :label="$t('deadlines.note')" variant="outlined" density="comfortable" rows="2" />
+        </v-card-text>
+        <v-card-actions class="px-6 pb-5">
+          <v-spacer />
+          <v-btn variant="text" @click="deadlineDialog = false">{{ $t('common.cancel') }}</v-btn>
+          <v-btn color="primary" :loading="saving" :disabled="!deadlineForm.title || !deadlineForm.due_date" @click="createDeadline">{{ $t('common.add') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="errorVisible" color="error" timeout="3500">{{ errorMessage }}</v-snackbar>
   </section>
 </template>
@@ -335,8 +489,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { authFetch } from '@/stores/auth'
+import { authFetch, api } from '@/stores/auth'
 import { notifyTasksChanged, onTasksChanged } from '@/services/taskSync'
+import { daysUntil } from '@/utils/tasks'
 import ReminderOffsetsEditor from '@/components/ReminderOffsetsEditor.vue'
 
 const API_BASE = '/api'
@@ -360,6 +515,33 @@ const deletingSubtask = ref(false)
 const errorVisible = ref(false)
 const errorMessage = ref('')
 const focusedTaskId = ref(null)  // 从提醒弹窗跳转后要高亮的任务/子任务 id
+
+// ---- 视图状态（URL query 驱动）：tab=all|deadlines，filter=urgent ----
+const activeTab = computed(() => (route.query.tab === 'deadlines' ? 'deadlines' : 'all'))
+const urgentOnly = computed(() => route.query.filter === 'urgent')
+function setView(patch) {
+  const query = { ...route.query }
+  for (const [key, value] of Object.entries(patch)) {
+    if (value == null) delete query[key]
+    else query[key] = value
+  }
+  router.replace({ query })
+}
+// 紧急判定：tasks 与 deadlines 通用（对齐手册口径）
+function isUrgent(item) {
+  return item?.priority === 'urgent' || item?.status === 'overdue'
+}
+
+// ---- deadlines Tab 状态（合并自 DeadlinesView） ----
+const deadlines = ref([])
+const upcomingDeadlines = ref([])
+const collision = ref(null)
+const checkDate = ref('')
+const deadlineStatusFilter = ref('all')
+const deadlineDialog = ref(false)
+const focusedDeadlineId = ref(null)
+const emptyDeadlineForm = () => ({ title: '', source: '', subject: '', due_date: '', priority: 'medium', description: '' })
+const deadlineForm = ref(emptyDeadlineForm())
 
 const priorityOptions = [
   { titleKey: 'common.low', value: 'low' },
@@ -386,7 +568,13 @@ const reminderModeOptions = computed(() => [
 const filteredTasks = computed(() => tasks.value.filter((task) => {
   const matchesType = typeFilter.value === 'all' || task.task_type === typeFilter.value
   const matchesStatus = statusFilter.value === 'all' || task.status === statusFilter.value
-  return matchesType && matchesStatus
+  const matchesUrgent = !urgentOnly.value || isUrgent(task)
+  return matchesType && matchesStatus && matchesUrgent
+}))
+const filteredDeadlines = computed(() => deadlines.value.filter((d) => {
+  const matchesStatus = deadlineStatusFilter.value === 'all' || d.status === deadlineStatusFilter.value
+  const matchesUrgent = !urgentOnly.value || isUrgent(d)
+  return matchesStatus && matchesUrgent
 }))
 const todoCount = computed(() => tasks.value.filter((task) => task.task_type !== 'process').length)
 const processCount = computed(() => tasks.value.filter((task) => task.task_type === 'process').length)
@@ -422,12 +610,24 @@ function showError(message) {
   errorVisible.value = true
 }
 
-/** 处理提醒弹窗跳转的 focus 参数：定位并高亮对应任务卡片 */
+/** 处理提醒弹窗跳转的 focus 参数：定位并高亮对应任务卡片 / deadline 行 */
 function handleFocus() {
   const focusId = route.query.focus
-  if (!focusId || !tasks.value.length) return
+  if (!focusId) return
   const target = Number(focusId)
 
+  // deadlines Tab：在 deadline 列表中定位
+  if (activeTab.value === 'deadlines') {
+    if (!deadlines.value.some((d) => d.id === target)) return
+    focusedDeadlineId.value = target
+    nextTick(() => {
+      document.getElementById(`deadline-item-${target}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+    window.setTimeout(() => { focusedDeadlineId.value = null }, 2600)
+    return
+  }
+
+  if (!tasks.value.length) return
   // 顶级任务直接匹配
   let card = tasks.value.find((task) => task.id === target)
   // 否则在子任务中查找其父级卡片
@@ -451,9 +651,14 @@ function handleFocus() {
 async function loadTasks() {
   loading.value = true
   try {
-    const response = await authFetch(`${API_BASE}/tasks`)
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    tasks.value = await response.json()
+    const [taskData, deadlineData, upcomingData] = await Promise.all([
+      api(`${API_BASE}/tasks`),
+      api(`${API_BASE}/deadlines`),
+      api(`${API_BASE}/deadlines/upcoming?days=7`),
+    ])
+    tasks.value = Array.isArray(taskData) ? taskData : []
+    deadlines.value = Array.isArray(deadlineData) ? deadlineData : []
+    upcomingDeadlines.value = Array.isArray(upcomingData) ? upcomingData : []
   } catch (error) {
     showError(t('tasks.loadFail', { msg: error.message }))
   } finally {
@@ -462,8 +667,9 @@ async function loadTasks() {
   }
 }
 
-// 已在任务页时再次跳转（同路由不同 query）也能响应 focus
+// 已在任务页时再次跳转（同路由不同 query）也能响应 focus；切 Tab 后同样重新定位
 watch(() => route.query.focus, () => handleFocus())
+watch(activeTab, () => handleFocus())
 
 function openCreate() {
   form.value = emptyForm()
@@ -606,6 +812,58 @@ async function toggleDone(task) {
     notifyTasksChanged()
   } catch (error) {
     showError(t('tasks.updateFail', { msg: error.message }))
+  }
+}
+
+// ---- deadlines Tab 操作（合并自 DeadlinesView，统一走 api() 获得 401 拦截） ----
+function deadlineStatusColor(s) {
+  return { pending: 'warning', done: 'success', overdue: 'error' }[s] || 'grey'
+}
+
+function formatDeadlineDate(value) {
+  if (!value) return ''
+  const date = new Date(`${value}T00:00:00`)
+  return t('common.monthDay', { month: date.getMonth() + 1, day: date.getDate() })
+}
+
+function deadlineDaysLeft(value) {
+  return daysUntil(value)
+}
+
+function openDeadlineCreate() {
+  deadlineForm.value = emptyDeadlineForm()
+  deadlineDialog.value = true
+}
+
+async function createDeadline() {
+  saving.value = true
+  try {
+    await api(`${API_BASE}/deadlines`, { method: 'POST', body: JSON.stringify(deadlineForm.value) })
+    deadlineDialog.value = false
+    notifyTasksChanged()  // 触发本页 reload + App 铃铛/日历联动
+  } catch (error) {
+    showError(error.message)
+  } finally {
+    saving.value = false
+  }
+}
+
+async function toggleDeadlineDone(d) {
+  const nextStatus = d.status === 'done' ? 'pending' : 'done'
+  try {
+    await api(`${API_BASE}/deadlines/${d.id}`, { method: 'PUT', body: JSON.stringify({ status: nextStatus }) })
+    notifyTasksChanged()
+  } catch (error) {
+    showError(error.message)
+  }
+}
+
+async function checkCollision() {
+  if (!checkDate.value) return
+  try {
+    collision.value = await api(`${API_BASE}/deadlines/check/collisions?date=${checkDate.value}`)
+  } catch (error) {
+    showError(error.message)
   }
 }
 
@@ -855,4 +1113,41 @@ onBeforeUnmount(() => stopTaskSync?.())
 .type-selector button { color: var(--ib-text-secondary); }
 .type-selector button.active { color: var(--ib-primary-strong); border-color: var(--ib-primary); background: var(--ib-primary-soft) !important; box-shadow: inset 0 0 0 1px var(--ib-primary) !important; }
 .reminder-offsets-box { border-color: var(--ib-border-strong); }
+
+/* 视图切换行 + deadlines Tab（合并自 DeadlinesView，token 化） */
+.view-switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 22px; padding: 10px 14px; border: 1px solid var(--ib-border); border-radius: var(--ib-radius-md); background: var(--ib-surface); box-shadow: var(--ib-shadow-card); }
+.view-switch :deep(.v-chip-group) { padding: 0; }
+.view-switch :deep(.v-chip) { color: var(--ib-text-secondary); }
+.view-switch :deep(.filter-chip--selected) { color: var(--ib-primary-strong) !important; background: var(--ib-primary-soft) !important; }
+.urgent-toggle { flex: 0 0 auto; }
+.task-filters { margin-top: 14px; }
+.deadline-filters { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 14px 0; }
+.deadline-filters :deep(.v-chip) { color: var(--ib-text-secondary); }
+.deadline-filters :deep(.filter-chip--selected) { color: var(--ib-primary-strong) !important; background: var(--ib-primary-soft) !important; }
+.deadline-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+.deadline-list { display: flex; flex-direction: column; gap: 12px; }
+.deadline-row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid var(--ib-border); border-radius: var(--ib-radius-md); background: var(--ib-surface); box-shadow: var(--ib-shadow-card); }
+.deadline-row--overdue { border-color: color-mix(in srgb, var(--ib-danger) 35%, var(--ib-border)); }
+.deadline-row--focused { border-color: var(--ib-primary) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ib-primary) 22%, transparent) !important; }
+.deadline-copy { flex: 1; min-width: 0; }
+.deadline-copy strong { display: block; overflow-wrap: anywhere; color: var(--ib-text); font-size: 14px; }
+.deadline-copy small { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; color: var(--ib-text-secondary); font-size: 11px; }
+.deadline-copy small span { display: inline-flex; align-items: center; gap: 4px; }
+.deadline-side { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 6px; }
+.deadline-date { color: var(--ib-primary-strong); font-size: 12px; font-weight: 600; }
+.deadline-date.is-overdue { color: var(--ib-danger); }
+.deadline-panel { padding: 14px 16px; border: 1px solid var(--ib-border); border-radius: var(--ib-radius-md); background: var(--ib-surface); box-shadow: var(--ib-shadow-card); }
+.deadline-panel + .deadline-panel { margin-top: 16px; }
+.deadline-panel__title { margin-bottom: 10px; color: var(--ib-text); font-size: 13px; font-weight: 700; }
+.deadline-panel__list { display: flex; flex-direction: column; gap: 8px; }
+.deadline-panel__row span { display: block; color: var(--ib-text); font-size: 12px; }
+.deadline-panel__row small { color: var(--ib-text-secondary); font-size: 10px; }
+.deadline-panel__empty { padding: 12px 0; color: var(--ib-text-muted); font-size: 11px; text-align: center; }
+.deadline-panel__result { margin-top: 8px; color: var(--ib-text-secondary); font-size: 11px; }
+@media (max-width: 1050px) {
+  .deadline-layout { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .deadline-filters { align-items: flex-start; flex-direction: column; }
+}
 </style>

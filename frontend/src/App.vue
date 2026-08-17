@@ -333,8 +333,12 @@ async function loadUpcoming() {
 }
 
 function openReminder(item) {
-  const target = item.type === 'deadline' ? '/deadlines' : '/tasks'
-  router.push({ path: target, query: { focus: item.id } })
+  // deadline 落到任务页的 deadlines Tab；task 保持 /tasks?focus=
+  if (item.type === 'deadline') {
+    router.push({ path: '/tasks', query: { tab: 'deadlines', focus: item.id } })
+  } else {
+    router.push({ path: '/tasks', query: { focus: item.id } })
+  }
 }
 
 function formatReminderDate(value) {

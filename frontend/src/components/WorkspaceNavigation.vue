@@ -91,8 +91,6 @@ const rail = ref(true)
 const primaryItems = [
   { to: '/calendar', icon: 'mdi-calendar-blank-outline', label: 'nav.calendar' },
   { to: '/tasks', icon: 'mdi-check-circle-outline', label: 'nav.tasks' },
-  { to: '/deadlines', icon: 'mdi-calendar-alert-outline', label: 'nav.deadlines' },
-  { to: '/urgent', icon: 'mdi-lightning-bolt-outline', label: 'nav.urgent' },
   { to: '/progress', icon: 'mdi-chart-timeline-variant', label: 'nav.progress' },
   { to: '/reminders', icon: 'mdi-bell-outline', label: 'reminders.title' },
 ]
