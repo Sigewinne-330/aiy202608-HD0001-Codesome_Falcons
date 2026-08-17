@@ -60,6 +60,25 @@
             </div>
           </template>
 
+          <template v-else-if="activeSection === 'appearance'">
+            <SettingsHeading :title="$t('settings.appearance')" :subtitle="$t('settings.appearanceSub')" />
+            <div class="setting-block">
+              <div class="setting-label">{{ $t('settings.themeMode') }}</div>
+              <v-btn-toggle
+                :model-value="themeMode"
+                mandatory
+                divided
+                variant="outlined"
+                density="comfortable"
+                @update:model-value="setThemeMode"
+              >
+                <v-btn value="system" prepend-icon="mdi-theme-light-dark">{{ $t('settings.themeSystem') }}</v-btn>
+                <v-btn value="light" prepend-icon="mdi-white-balance-sunny">{{ $t('settings.themeLight') }}</v-btn>
+                <v-btn value="dark" prepend-icon="mdi-weather-night">{{ $t('settings.themeDark') }}</v-btn>
+              </v-btn-toggle>
+            </div>
+          </template>
+
           <template v-else-if="activeSection === 'connections'">
             <SettingsHeading :title="$t('settings.connections')" :subtitle="$t('settings.connectionsSub')" />
             <div v-for="connection in connections" :key="connection.key" class="connection-card">
@@ -207,6 +226,7 @@ import { useRouter } from 'vue-router'
 import { api, useAuth } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
 import { setLocale, SUPPORTED_LOCALES, LOCALE_NAMES } from '@/i18n'
+import { useAppTheme } from '@/services/theme'
 import ReminderSettingsPanel from '@/components/ReminderSettingsPanel.vue'
 import PersonalizationSettingsPanel from '@/components/PersonalizationSettingsPanel.vue'
 import SchedulingMemoryCenter from '@/components/SchedulingMemoryCenter.vue'
@@ -220,6 +240,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'logout'])
 const { user, logout } = useAuth()
 const { locale } = useI18n()
+const { mode: themeMode, setThemeMode } = useAppTheme()
 const router = useRouter()
 const balance = ref(0)
 const summary = ref({ today_spent: 0, month_spent: 0 })
@@ -317,6 +338,7 @@ watch(() => settings.language, (lang) => {
 
 const sections = [
   { value: 'account', titleKey: 'settings.account', icon: 'mdi-account-circle-outline' },
+  { value: 'appearance', titleKey: 'settings.appearance', icon: 'mdi-theme-light-dark' },
   { value: 'connections', titleKey: 'settings.connections', icon: 'mdi-link-variant' },
   { value: 'time', titleKey: 'settings.time', icon: 'mdi-clock-outline' },
   { value: 'reminders', titleKey: 'reminders.tabSettings', icon: 'mdi-bell-cog-outline' },
