@@ -204,7 +204,7 @@
 <script setup>
 import { computed, defineComponent, h, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuth } from '@/stores/auth'
+import { api, useAuth } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
 import { setLocale, SUPPORTED_LOCALES, LOCALE_NAMES } from '@/i18n'
 import ReminderSettingsPanel from '@/components/ReminderSettingsPanel.vue'
@@ -218,24 +218,17 @@ const props = defineProps({
   initialSection: { type: String, default: 'account' },
 })
 const emit = defineEmits(['update:modelValue', 'logout'])
-const { user, token, logout } = useAuth()
+const { user, logout } = useAuth()
 const { locale } = useI18n()
 const router = useRouter()
 const balance = ref(0)
 const summary = ref({ today_spent: 0, month_spent: 0 })
 
-function billingHeaders() {
-  return token.value ? { Authorization: `Bearer ${token.value}` } : {}
-}
-
 async function loadBalance() {
   try {
-    const res = await fetch('/api/billing/summary', { headers: billingHeaders() })
-    if (res.ok) {
-      const data = await res.json()
-      balance.value = data.balance || 0
-      summary.value = data
-    }
+    const data = await api('/api/billing/summary')
+    balance.value = data?.balance || 0
+    summary.value = data || summary.value
   } catch {
     /* ignore */
   }

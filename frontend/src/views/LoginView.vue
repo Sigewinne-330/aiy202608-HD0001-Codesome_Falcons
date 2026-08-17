@@ -1,6 +1,6 @@
 <template>
-  <v-container class="fill-height d-flex align-center justify-center">
-    <v-card class="pa-6" max-width="420" width="100%" elevation="4" rounded="xl">
+  <v-container class="auth-page fill-height d-flex align-center justify-center">
+    <v-card class="auth-card pa-6" max-width="420" width="100%" rounded="xl">
       <!-- 标题 -->
       <div class="text-center mb-6">
         <router-link
@@ -81,11 +81,13 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/stores/auth'
+import { safeInternalRedirect } from '@/utils/navigation'
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 const { login } = useAuth()
 
@@ -114,7 +116,7 @@ async function handleLogin() {
 
   try {
     await login(email.value, password.value)
-    router.push('/calendar')
+    router.replace(safeInternalRedirect(route.query.redirect))
   } catch (e) {
     errorMsg.value = e.message
   } finally {
@@ -122,3 +124,11 @@ async function handleLogin() {
   }
 }
 </script>
+
+<style scoped>
+.auth-page { min-height: 100vh; padding: 28px 16px; background: var(--ib-background); }
+.auth-card { border-color: var(--ib-border); background: var(--ib-surface) !important; box-shadow: var(--ib-shadow-overlay) !important; }
+.auth-card h2 { color: var(--ib-text); }
+.auth-card p,
+.auth-card .text-grey { color: var(--ib-text-secondary) !important; }
+</style>

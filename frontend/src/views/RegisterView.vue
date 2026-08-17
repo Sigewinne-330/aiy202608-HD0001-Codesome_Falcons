@@ -1,6 +1,6 @@
 <template>
-  <v-container class="fill-height d-flex align-center justify-center">
-    <v-card class="pa-6" max-width="420" width="100%" elevation="4" rounded="xl">
+  <v-container class="auth-page fill-height d-flex align-center justify-center">
+    <v-card class="auth-card pa-6" max-width="420" width="100%" rounded="xl">
       <div class="text-center mb-6">
         <router-link
           to="/"
@@ -179,11 +179,13 @@
 
 <script setup>
 import { onBeforeUnmount, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { API_ERROR_KIND, useAuth } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
+import { safeInternalRedirect } from '@/utils/navigation'
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 const { requestVerificationCode, verifyEmailCode, register, login } = useAuth()
 
@@ -347,13 +349,13 @@ async function handleVerifyAndRegister() {
       password.value,
       verificationToken.value,
     )
-    router.push('/calendar')
+    router.replace(safeInternalRedirect(route.query.redirect))
   } catch (error) {
     // 网络抖动可能发生在后端已写入用户之后；用登录确认，避免重复注册。
     if (verificationToken.value) {
       try {
         await login(verificationEmail.value, password.value)
-        router.push('/calendar')
+        router.replace(safeInternalRedirect(route.query.redirect))
         return
       } catch {
         // 注册未完成时保留原始错误。
@@ -373,3 +375,11 @@ watch(email, () => {
 
 onBeforeUnmount(clearCountdown)
 </script>
+
+<style scoped>
+.auth-page { min-height: 100vh; padding: 28px 16px; background: var(--ib-background); }
+.auth-card { border-color: var(--ib-border); background: var(--ib-surface) !important; box-shadow: var(--ib-shadow-overlay) !important; }
+.auth-card h2 { color: var(--ib-text); }
+.auth-card p,
+.auth-card .text-grey { color: var(--ib-text-secondary) !important; }
+</style>

@@ -2,7 +2,7 @@
   <section class="billing-page">
     <header class="page-header">
       <div>
-        <div class="eyebrow">BALANCE & RECHARGE</div>
+        <div class="eyebrow">{{ $t('billing.eyebrow') }}</div>
         <h1>{{ $t('billing.title') }}</h1>
         <p>{{ $t('billing.subtitle') }}</p>
       </div>
@@ -62,7 +62,7 @@
             type="button"
             class="plan-card"
             :class="{ 'plan-card--selected': selectedPlan?.code === plan.code, 'plan-card--hot': plan.code === 'p30' }"
-            @click="selectedPlan = plan"
+            @click="openPay(plan)"
           >
             <span v-if="plan.code === 'p30'" class="plan-hot">{{ $t('billing.popular') }}</span>
             <span class="plan-amount">¥{{ plan.amount }}</span>
@@ -288,4 +288,38 @@ onMounted(loadAll)
 @media (max-width: 480px) {
   .plans-grid { grid-template-columns: 1fr; }
 }
+
+/* Mono Workspace visual layer */
+.billing-page { min-height: calc(100vh - 60px); padding: 28px clamp(18px, 3vw, 44px) 72px; color: var(--ib-text); background: var(--ib-background); }
+.billing-page > * { width: min(100%, var(--ib-content-max)); margin-inline: auto; }
+.eyebrow { color: var(--ib-primary-strong); }
+.page-header h1,
+.card-title,
+.plan-amount,
+.ledger-copy strong { color: var(--ib-text); }
+.page-header p,
+.usage-label,
+.plan-credits,
+.demo-note,
+.ledger-copy small,
+.ledger-empty,
+.pay-desc { color: var(--ib-text-secondary); }
+.balance-card { border-color: var(--ib-primary); background: var(--ib-primary) !important; box-shadow: none; }
+.usage-card,
+.ledger-card,
+.plan-card { border-color: var(--ib-border); background: var(--ib-surface) !important; box-shadow: var(--ib-shadow-card); }
+.usage-bar { background: var(--ib-primary); }
+.usage-bar.is-zero { background: var(--ib-border); }
+.plan-card--selected { border-color: var(--ib-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ib-primary) 18%, transparent); }
+.plan-card--hot { border-color: var(--ib-warning); }
+.plan-hot { background: var(--ib-warning); }
+.ledger-item { border-color: var(--ib-border); }
+.ledger-icon--consume { color: var(--ib-primary-strong); background: var(--ib-primary-soft); }
+.ledger-icon--recharge { color: var(--ib-success); background: color-mix(in srgb, var(--ib-success) 12%, var(--ib-surface)); }
+.ledger-icon--gift { color: var(--ib-warning); background: color-mix(in srgb, var(--ib-warning) 12%, var(--ib-surface)); }
+.pay-amount { color: var(--ib-primary-strong); }
+.pay-credits,
+.ledger-amount--recharge,
+.ledger-amount--gift { color: var(--ib-success); }
+.ledger-amount--consume { color: var(--ib-danger); }
 </style>

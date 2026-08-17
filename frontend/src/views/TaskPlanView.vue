@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="plan-page ib-page">
     <div class="d-flex align-center mb-4">
       <v-icon size="28" color="primary" class="mr-2">mdi-calendar-edit-outline</v-icon>
       <div>
@@ -267,4 +267,10 @@ async function generatePlan() {
 .gap-1 { gap: 4px; }
 .gap-2 { gap: 8px; }
 .gap-4 { gap: 16px; }
+.plan-page > .d-flex:first-child { min-height: 58px; margin-bottom: 24px !important; }
+.plan-page > .d-flex:first-child .text-h6 { color: var(--ib-text); font-size: clamp(26px, 3vw, 36px) !important; letter-spacing: -.035em; }
+.plan-page > .d-flex:first-child .text-caption { color: var(--ib-text-secondary) !important; }
+.plan-page .v-card,
+.plan-page .v-sheet { border-color: var(--ib-border) !important; background: var(--ib-surface) !important; }
+.plan-page .v-timeline-item__body .v-card { border-radius: var(--ib-radius-md) !important; }
 </style>

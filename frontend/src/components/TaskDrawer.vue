@@ -121,16 +121,16 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useAuth } from '@/stores/auth'
+import { api } from '@/stores/auth'
 import { onTasksChanged } from '@/services/taskSync'
 import WorkSessionControls from '@/components/WorkSessionControls.vue'
+import { flattenTasks, isTaskDone, priorityColor, priorityWeight } from '@/utils/tasks'
 
 const emit = defineEmits(['close'])
 
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
-const { token } = useAuth()
 const tasks = ref([])       // 原始树
 const loading = ref(true)
 const search = ref('')
@@ -138,14 +138,6 @@ const expanded = ref(new Set())
 const isTasksPage = computed(() => route.path === '/tasks')
 
 /** 递归 flatten 用于计数和完成率计算 */
-function flatten(nodes, output = []) {
-  for (const task of nodes || []) {
-    output.push(task)
-    flatten(task.subtasks, output)
-  }
-  return output
-}
-
 /** 根据搜索关键词过滤任务树 */
 function filterTree(nodes, keyword) {
   if (!nodes) return []
@@ -168,7 +160,7 @@ const filteredTasks = computed(() => {
     .sort((a, b) => priorityWeight(b.priority) - priorityWeight(a.priority))
 })
 
-const allFlattened = computed(() => flatten(tasks.value))
+const allFlattened = computed(() => flattenTasks(tasks.value))
 const workTaskOptions = computed(() => {
   const result = []
   function visit(nodes, child = false) {
@@ -195,15 +187,7 @@ function toggleExpand(id) {
 }
 
 function isDone(task) {
-  return ['done', 'completed'].includes(task.status)
-}
-
-function priorityWeight(priority) {
-  return { urgent: 4, high: 3, medium: 2, low: 1 }[priority] || 0
-}
-
-function priorityColor(priority) {
-  return { urgent: 'error', high: 'warning', medium: 'primary', low: 'success' }[priority] || 'primary'
+  return isTaskDone(task)
 }
 
 function formatDate(value) {
@@ -233,9 +217,7 @@ function handleFooterAction() {
 async function loadTasks() {
   loading.value = true
   try {
-    const headers = token.value ? { Authorization: `Bearer ${token.value}` } : {}
-    const response = await fetch('/api/tasks', { headers })
-    tasks.value = response.ok ? await response.json() : []
+    tasks.value = await api('/api/tasks') || []
   } catch {
     tasks.value = []
   } finally {

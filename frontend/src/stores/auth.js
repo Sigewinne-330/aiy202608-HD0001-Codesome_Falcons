@@ -2,6 +2,7 @@ import { ref, computed } from 'vue'
 
 const TOKEN_KEY = 'ib_auth_token'
 const USER_KEY = 'ib_auth_user'
+const AUTH_UNAUTHORIZED_EVENT = 'ibuddy:unauthorized'
 
 export const API_ERROR_KIND = Object.freeze({
   TRANSPORT: 'transport',
@@ -10,11 +11,12 @@ export const API_ERROR_KIND = Object.freeze({
 })
 
 export class ApiError extends Error {
-  constructor(message, { kind, status = null, cause } = {}) {
+  constructor(message, { kind, status = null, cause, details = null } = {}) {
     super(message, cause ? { cause } : undefined)
     this.name = 'ApiError'
     this.kind = kind
     this.status = status
+    this.details = details
   }
 }
 
@@ -33,15 +35,42 @@ function loadUser() {
 
 const isAuthenticated = computed(() => !!token.value)
 
+function clearSession() {
+  token.value = ''
+  user.value = null
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(USER_KEY)
+}
+
+function emitUnauthorized() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(AUTH_UNAUTHORIZED_EVENT, {
+    detail: { redirect: `${window.location.pathname}${window.location.search}${window.location.hash}` },
+  }))
+}
+
+export function onUnauthorized(handler) {
+  if (typeof window === 'undefined') return () => {}
+  window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handler)
+  return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handler)
+}
+
 // ---- API 请求封装 ----
 export async function authFetch(path, options = {}) {
-  const headers = { ...(options.headers || {}) }
+  const { skipUnauthorizedHandler = false, ...fetchOptions } = options
+  const headers = { ...(fetchOptions.headers || {}) }
   if (token.value) headers.Authorization = `Bearer ${token.value}`
-  return fetch(path, { ...options, headers })
+  const response = await fetch(path, { ...fetchOptions, headers })
+  if (response.status === 401 && token.value && !skipUnauthorizedHandler) {
+    clearSession()
+    emitUnauthorized()
+  }
+  return response
 }
 
 export async function api(path, options = {}) {
-  const headers = { 'Content-Type': 'application/json', ...options.headers }
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
+  const headers = { ...(isFormData ? {} : { 'Content-Type': 'application/json' }), ...options.headers }
   let res
   try {
     res = await authFetch(path, { ...options, headers })
@@ -54,6 +83,7 @@ export async function api(path, options = {}) {
 
   // 先拿文本，再尝试解析 JSON，避免空响应 / 非 JSON 响应直接抛错
   const text = await res.text()
+  if (!text && res.ok) return null
   let data
   try {
     data = JSON.parse(text)
@@ -72,6 +102,7 @@ export async function api(path, options = {}) {
     throw new ApiError(detail || `请求失败 (HTTP ${res.status})`, {
       kind: API_ERROR_KIND.HTTP,
       status: res.status,
+      details: data,
     })
   }
   return data
@@ -114,6 +145,7 @@ export function useAuth() {
     const data = await api('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
+      skipUnauthorizedHandler: true,
     })
     saveSession(data)
     return data
@@ -121,10 +153,7 @@ export function useAuth() {
 
   /** 退出登录 */
   function logout() {
-    token.value = ''
-    user.value = null
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
+    clearSession()
   }
 
   /** 应用启动时恢复会话 */

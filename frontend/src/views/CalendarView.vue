@@ -114,12 +114,12 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuth } from '@/stores/auth'
+import { api } from '@/stores/auth'
 import { onTasksChanged } from '@/services/taskSync'
+import { priorityWeight } from '@/utils/tasks'
 
 const route = useRoute()
 const router = useRouter()
-const { token } = useAuth()
 const now = new Date()
 
 const currentYear = ref(Number(route.query.year) || now.getFullYear())
@@ -174,10 +174,6 @@ function dateKey(date) {
   return `${year}-${month}-${day}`
 }
 
-function priorityWeight(priority) {
-  return { urgent: 4, high: 3, medium: 2, low: 1 }[priority] || 0
-}
-
 // Process 任务调色板（按 parent_task_id 分组循环）
 const PROCESS_PALETTE = [
   { bg: '#e8f5e9', dot: '#43a047', text: '#2e5a30' },
@@ -209,18 +205,10 @@ function pillShape(item) {
   return 'todo'
 }
 
-function authHeaders() {
-  return token.value ? { Authorization: `Bearer ${token.value}` } : {}
-}
-
 async function loadCalendar() {
   loading.value = true
   try {
-    const response = await fetch(`/api/calendar?year=${currentYear.value}&month=${currentMonth.value}`, {
-      headers: authHeaders(),
-    })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const data = await response.json()
+    const data = await api(`/api/calendar?year=${currentYear.value}&month=${currentMonth.value}`)
     monthData.value = Object.fromEntries((data.days || []).map((day) => [day.date, day]))
     const totalCount = Object.values(monthData.value).reduce((sum, d) => sum + (d.count || 0), 0)
     console.log(`[Calendar] Loaded ${Object.keys(monthData.value).length} days, ${totalCount} items for ${currentYear.value}-${currentMonth.value}`)
@@ -506,5 +494,41 @@ onBeforeUnmount(() => stopTaskSync?.())
   .calendar-heading__stats { display: none; }
   .calendar-card { min-width: 760px; }
   .calendar-heading p { max-width: 520px; }
+}
+
+/* Mono Workspace visual layer */
+.calendar-workspace { min-height: calc(100vh - 60px); padding: 28px clamp(18px, 3vw, 44px) 72px; color: var(--ib-text); background: var(--ib-background); }
+.calendar-heading { width: min(100%, var(--ib-content-max)); margin-inline: auto; }
+.calendar-heading .eyebrow { color: var(--ib-primary-strong); }
+.calendar-heading h1 { color: var(--ib-text); }
+.calendar-heading p,
+.calendar-heading__stats span,
+.calendar-legend > span { color: var(--ib-text-secondary); }
+.calendar-heading__stats > div,
+.calendar-card { border-color: var(--ib-border); background: var(--ib-surface) !important; box-shadow: var(--ib-shadow-card) !important; }
+.calendar-card { width: min(100%, var(--ib-content-max)); margin-inline: auto; border-radius: var(--ib-radius-lg) !important; }
+.calendar-toolbar,
+.weekday-grid,
+.calendar-day { border-color: var(--ib-border); }
+.weekday-grid { background: var(--ib-surface-subtle); }
+.weekday-grid > div { color: var(--ib-text-muted); }
+.calendar-day { background: var(--ib-surface); }
+.calendar-day:hover { background: var(--ib-surface-subtle); }
+.calendar-day--muted,
+.calendar-day--weekend:not(.calendar-day--muted) { background: color-mix(in srgb, var(--ib-surface-subtle) 62%, var(--ib-surface)); }
+.calendar-day--today { background: var(--ib-primary-soft); box-shadow: inset 0 0 0 1.5px var(--ib-primary); }
+.calendar-day__number,
+.schedule-pill--todo,
+.schedule-pill--personal-todo { color: var(--ib-text-secondary); }
+.calendar-day--today .calendar-day__number { background: var(--ib-primary); color: var(--ib-on-primary); }
+.today-label,
+.more-items:hover { color: var(--ib-primary-strong); }
+.item-count { background: var(--ib-surface-subtle); color: var(--ib-text-secondary); }
+.schedule-pill--todo:hover,
+.schedule-pill--personal-todo:hover { background: var(--ib-surface-subtle); }
+.calendar-loading { background: color-mix(in srgb, var(--ib-surface) 84%, transparent); color: var(--ib-text-secondary); }
+:global([data-theme='dark']) .schedule-pill:not(.schedule-pill--todo):not(.schedule-pill--personal-todo) {
+  background: color-mix(in srgb, var(--pill-dot) 16%, var(--ib-surface));
+  color: var(--ib-text);
 }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <div class="d-flex" style="height: calc(100vh - 48px);">
+  <div class="chat-workspace d-flex">
     <!-- 对话列表侧栏 -->
     <v-navigation-drawer permanent width="260" class="conversation-drawer">
       <div class="pa-3">
@@ -844,4 +844,22 @@ onBeforeUnmount(() => stopRoleCardListener?.())
 .gap-2 { gap: 8px; }
 .gap-3 { gap: 12px; }
 .cursor-pointer { cursor: pointer; }
+
+/* Mono Workspace visual layer */
+.chat-workspace { height: calc(100vh - 60px); min-height: 560px; background: var(--ib-background); }
+.conversation-drawer { border-right: 1px solid var(--ib-border) !important; background: var(--ib-surface) !important; }
+.conversation-item { color: var(--ib-text-secondary); }
+.conversation-item.v-list-item--active { color: var(--ib-primary-strong); background: var(--ib-primary-soft); }
+.chat-workspace > .d-flex.flex-column { padding: 22px clamp(16px, 2.5vw, 32px) 18px; }
+.chat-workspace .v-sheet { border-color: var(--ib-border) !important; background: var(--ib-surface) !important; }
+.user-message { background: var(--ib-primary); color: var(--ib-on-primary); border-radius: var(--ib-radius-md) var(--ib-radius-md) var(--ib-radius-sm) var(--ib-radius-md); }
+.assistant-message { background: var(--ib-surface-subtle); color: var(--ib-text); border-radius: var(--ib-radius-sm) var(--ib-radius-md) var(--ib-radius-md) var(--ib-radius-md); }
+.chat-img-thumb { border-color: var(--ib-border); }
+.chat-composer--drag { border-color: var(--ib-primary); background: var(--ib-primary-soft); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ib-primary) 14%, transparent); }
+.message-content :deep(code) { background: var(--ib-surface-subtle); }
+
+@media (max-width: 700px) {
+  .conversation-drawer { display: none; }
+  .chat-workspace > .d-flex.flex-column { padding: 14px 12px 10px; }
+}
 </style>
