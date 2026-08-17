@@ -18,7 +18,7 @@ let vuetifyTheme = null
 
 function applyTheme() {
   const name = resolved.value === 'dark' ? 'ibuddyDark' : 'ibuddyLight'
-  if (vuetifyTheme) vuetifyTheme.global.name.value = name
+  if (vuetifyTheme) vuetifyTheme.change(name)
   if (typeof document !== 'undefined') {
     document.documentElement.dataset.theme = resolved.value
     document.documentElement.style.colorScheme = resolved.value

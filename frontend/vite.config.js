@@ -13,6 +13,24 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const moduleId = id.replaceAll('\\', '/')
+          if (moduleId.includes('/node_modules/vuetify/')) return 'vuetify-vendor'
+          if (
+            moduleId.includes('/node_modules/vue/')
+            || moduleId.includes('/node_modules/@vue/')
+            || moduleId.includes('/node_modules/vue-router/')
+            || moduleId.includes('/node_modules/vue-i18n/')
+          ) return 'vue-vendor'
+          if (moduleId.includes('/node_modules/markdown-it/') || moduleId.includes('/node_modules/katex/')) return 'rich-text'
+          return undefined
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

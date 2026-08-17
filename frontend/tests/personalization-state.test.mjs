@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 
 const source = readFileSync(new URL('../src/services/personalization.js', import.meta.url), 'utf8')
 const pureSource = source
-  .replace("import { api, authFetch } from '@/stores/auth'", 'const api = () => {}; const authFetch = () => {}')
+  .replace(/^import\s+\{[^}]+\}\s+from\s+'@\/stores\/auth'\s*$/m, 'const api = () => {}')
   .replace('export const ', 'const ')
   .replaceAll('export function ', 'function ')
   .replace('export const personalizationApi', 'const personalizationApi')
