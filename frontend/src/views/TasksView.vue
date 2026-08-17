@@ -807,4 +807,52 @@ onBeforeUnmount(() => stopTaskSync?.())
   .subtask-row > .v-chip { display: none; }
   .type-selector { grid-template-columns: 1fr; }
 }
+
+/* Mono Workspace visual layer */
+.tasks-page { min-height: calc(100vh - 60px); padding: 28px clamp(18px, 3vw, 44px) 72px; color: var(--ib-text); background: var(--ib-background); }
+.tasks-page::before { display: none; }
+.tasks-header { padding: 22px 24px; border-color: var(--ib-border); border-radius: var(--ib-radius-lg); background: var(--ib-surface); box-shadow: var(--ib-shadow-card); }
+.tasks-header::after { display: none; }
+.title-mark { border-radius: var(--ib-radius-md); background: var(--ib-primary); box-shadow: none; }
+.eyebrow { color: var(--ib-primary-strong); }
+.tasks-header h1,
+.task-card__title h2,
+.task-overview strong,
+.task-empty strong { color: var(--ib-text); }
+.tasks-header p,
+.task-card__title p,
+.task-meta,
+.task-overview span,
+.task-empty { color: var(--ib-text-secondary); }
+.task-overview,
+.task-filters,
+.task-card,
+.subtask-row,
+.type-selector button,
+.task-empty { border-color: var(--ib-border); background: var(--ib-surface) !important; box-shadow: var(--ib-shadow-card) !important; }
+.task-filters { border-radius: var(--ib-radius-md); }
+.filter-label { border-color: var(--ib-border); color: var(--ib-text-muted); }
+.task-filters :deep(.v-chip) { color: var(--ib-text-secondary); }
+.task-filters :deep(.filter-chip--selected) { color: var(--ib-primary-strong) !important; background: var(--ib-primary-soft) !important; }
+.task-card { border-radius: var(--ib-radius-lg) !important; }
+.task-card::before { height: 3px; background: var(--ib-primary); }
+.task-card--process { border-color: var(--ib-border); }
+.task-card--process::before { background: var(--ib-primary); }
+.task-card:hover { border-color: var(--ib-border-strong); box-shadow: var(--ib-shadow-card) !important; }
+.task-card--focused { border-color: var(--ib-primary) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ib-primary) 22%, transparent) !important; }
+.task-meta span,
+.progress-block { border-color: var(--ib-border); background: var(--ib-surface-subtle); }
+.progress-block > div,
+.subtask-copy small { color: var(--ib-text-secondary); }
+.progress-block strong,
+.subtask-heading,
+.subtask-copy strong { color: var(--ib-text); }
+.subtask-section { border-color: var(--ib-border); background: var(--ib-surface-subtle); }
+.subtask-heading small,
+.subtask-index { color: var(--ib-primary-strong); background: var(--ib-primary-soft); }
+.add-first-subtask { border-color: var(--ib-border-strong); color: var(--ib-primary-strong); background: var(--ib-surface); }
+.add-first-subtask:hover { border-color: var(--ib-primary); background: var(--ib-primary-soft); }
+.type-selector button { color: var(--ib-text-secondary); }
+.type-selector button.active { color: var(--ib-primary-strong); border-color: var(--ib-primary); background: var(--ib-primary-soft) !important; box-shadow: inset 0 0 0 1px var(--ib-primary) !important; }
+.reminder-offsets-box { border-color: var(--ib-border-strong); }
 </style>

@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuth } from '@/stores/auth'
 import i18n from '@/i18n'
+import { safeInternalRedirect } from '@/utils/navigation'
 
 const routes = [
   // ---- 项目介绍页（所有人进入网站的第一个界面，已登录用户也停留在此） ----
@@ -80,9 +81,7 @@ const routes = [
   },
   {
     path: '/dashboard',
-    name: 'Dashboard',
-    component: () => import('../views/DashboardView.vue'),
-    meta: { titleKey: 'nav.dashboard', icon: 'mdi-view-dashboard', requiresAuth: true },
+    redirect: '/calendar',
   },
   {
     path: '/billing',
@@ -95,6 +94,10 @@ const routes = [
     name: 'Reminders',
     component: () => import('../views/RemindersView.vue'),
     meta: { titleKey: 'reminders.title', icon: 'mdi-bell-outline', requiresAuth: true },
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/',
   },
 ]
 
@@ -114,7 +117,7 @@ router.beforeEach((to, from, next) => {
 
   // 已登录用户访问登录/注册页 → 跳转到首页（Landing 例外：所有人都先看介绍页）
   if (to.meta.guest && to.meta.guestRedirect !== false && isAuthenticated.value) {
-    return next({ path: '/' })
+    return next(safeInternalRedirect(to.query.redirect, '/calendar'))
   }
 
   next()

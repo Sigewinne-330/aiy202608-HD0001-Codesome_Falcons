@@ -160,6 +160,7 @@ import { useI18n } from 'vue-i18n'
 import { authFetch } from '@/stores/auth'
 import { notifyTasksChanged } from '@/services/taskSync'
 import { openAgent } from '@/services/agentContext'
+import { aggregateRisk } from '@/utils/tasks'
 
 const props = defineProps({
   timeline: { type: Object, required: true },
@@ -218,30 +219,7 @@ const doneCount = computed(() => milestones.value.filter((item) => statusProgres
 
 const nextMilestone = computed(() => milestones.value.find((item) => item.status !== 'done' && item.deadline) || null)
 
-function nodeRisk(item) {
-  if (item.status === 'done') return 0
-  if (!item.deadline) return 25
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const due = new Date(`${item.deadline}T00:00:00`)
-  const days = Math.round((due - today) / 86400000)
-  let base = 18
-  if (days < 0) base = 100
-  else if (days <= 3) base = 88
-  else if (days <= 7) base = 72
-  else if (days <= 14) base = 52
-  else if (days <= 30) base = 32
-  const statusFactor = item.status === 'in_progress' ? 0.72 : 1
-  const priorityFactor = { low: 0.75, medium: 0.9, high: 1.05, urgent: 1.18 }[item.priority] || 0.9
-  return Math.min(100, Math.round(base * statusFactor * priorityFactor))
-}
-
-const risk = computed(() => {
-  const scores = milestones.value.filter((item) => item.status !== 'done').map(nodeRisk)
-  if (!scores.length) return 0
-  const average = scores.reduce((sum, value) => sum + value, 0) / scores.length
-  return Math.round(Math.max(...scores) * 0.6 + average * 0.4)
-})
+const risk = computed(() => aggregateRisk(milestones.value))
 
 const riskLevel = computed(() => risk.value >= 70 ? 'high' : risk.value >= 40 ? 'medium' : 'low')
 const riskLabel = computed(() => ({ high: t('progress.highRisk'), medium: t('progress.watchRisk'), low: t('progress.lowRisk') })[riskLevel.value])

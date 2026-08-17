@@ -71,11 +71,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useAuth } from '@/stores/auth'
+import { api } from '@/stores/auth'
+import { daysUntil, flattenTasks, priorityColor, priorityWeight } from '@/utils/tasks'
 
 const router = useRouter()
 const { t } = useI18n()
-const { token } = useAuth()
 const items = ref([])
 const loading = ref(true)
 const filter = ref('all')
@@ -90,32 +90,9 @@ const filteredItems = computed(() => filter.value === 'all'
 
 const overdueCount = computed(() => urgentItems.value.filter((item) => item.daysLeft < 0).length)
 
-function flatten(nodes, output = []) {
-  for (const item of nodes || []) {
-    output.push(item)
-    flatten(item.subtasks, output)
-  }
-  return output
-}
-
-function daysUntil(value) {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const date = new Date(`${value}T00:00:00`)
-  return Math.round((date - today) / 86400000)
-}
-
-function priorityWeight(priority) {
-  return { urgent: 4, high: 3, medium: 2, low: 1 }[priority] || 0
-}
-
 function priorityLabel(priority) {
   const keyMap = { urgent: 'urgent', high: 'high', medium: 'medium', low: 'low' }
   return t(`common.${keyMap[priority] || ''}`) || t('common.normal')
-}
-
-function priorityColor(priority) {
-  return { urgent: 'error', high: 'warning', medium: 'primary', low: 'success' }[priority] || 'primary'
 }
 
 function dueLabel(days) {
@@ -137,13 +114,12 @@ function openItem(item) {
 async function loadItems() {
   loading.value = true
   try {
-    const headers = token.value ? { Authorization: `Bearer ${token.value}` } : {}
-    const [taskResponse, deadlineResponse] = await Promise.all([
-      fetch('/api/tasks', { headers }),
-      fetch('/api/deadlines', { headers }),
+    const [taskData, deadlineData] = await Promise.all([
+      api('/api/tasks'),
+      api('/api/deadlines'),
     ])
-    const tasks = taskResponse.ok ? flatten(await taskResponse.json()) : []
-    const deadlines = deadlineResponse.ok ? await deadlineResponse.json() : []
+    const tasks = flattenTasks(taskData)
+    const deadlines = Array.isArray(deadlineData) ? deadlineData : []
 
     const taskItems = tasks
       .filter((item) => item.task_type !== 'process')
@@ -203,4 +179,29 @@ onMounted(loadItems)
   .rank, .urgent-item .v-chip { display: none; }
   .due-block { min-width: 72px; }
 }
+
+/* Mono Workspace visual layer */
+.urgent-page { min-height: calc(100vh - 60px); padding: 28px clamp(18px, 3vw, 44px) 72px; color: var(--ib-text); background: var(--ib-background); }
+.urgent-page > * { width: min(100%, var(--ib-content-max)); margin-inline: auto; }
+.eyebrow { color: var(--ib-danger); }
+.page-header h1,
+.urgent-item,
+.urgent-empty strong { color: var(--ib-text); }
+.page-header p,
+.urgent-summary span,
+.urgent-item__meta,
+.due-block strong,
+.due-block small,
+.urgent-empty { color: var(--ib-text-secondary); }
+.urgent-summary > div,
+.urgent-list-card { border-color: var(--ib-border); background: var(--ib-surface) !important; box-shadow: var(--ib-shadow-card) !important; }
+.urgent-list-card { border-radius: var(--ib-radius-lg) !important; }
+.list-toolbar,
+.urgent-item { border-color: var(--ib-border); }
+.urgent-item:hover { background: var(--ib-surface-subtle); transform: none; }
+.priority-marker { color: var(--ib-primary-strong); background: var(--ib-primary-soft); }
+.priority-marker--urgent { color: var(--ib-danger); background: color-mix(in srgb, var(--ib-danger) 11%, var(--ib-surface)); }
+.priority-marker--high { color: var(--ib-warning); background: color-mix(in srgb, var(--ib-warning) 12%, var(--ib-surface)); }
+.due-block.overdue strong,
+.urgent-summary .danger strong { color: var(--ib-danger); }
 </style>

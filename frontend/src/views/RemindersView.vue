@@ -2,7 +2,7 @@
   <section class="reminders-page">
     <header class="page-header">
       <div>
-        <div class="eyebrow">REMINDER CENTER</div>
+        <div class="eyebrow">{{ $t('reminders.eyebrow') }}</div>
         <h1>{{ $t('reminders.title') }}</h1>
         <p>{{ $t('reminders.subtitle') }}</p>
       </div>
@@ -197,4 +197,13 @@ function handleUnauthorized() {
   margin-top: 6px;
   font-size: 12px;
 }
+
+/* Mono Workspace visual layer */
+.reminders-page { width: min(100%, 1120px); min-height: calc(100vh - 60px); padding: 28px clamp(18px, 3vw, 44px) 72px; color: var(--ib-text); }
+.page-header h1 { color: var(--ib-text); font-size: clamp(28px, 3vw, 39px); letter-spacing: -.04em; }
+.page-header p,
+.demo-card__help { color: var(--ib-text-secondary); }
+.eyebrow { color: var(--ib-primary-strong); font-weight: 800; }
+.reminders-tabs { border-color: var(--ib-border); }
+.demo-card { border-color: var(--ib-border); background: var(--ib-surface) !important; }
 </style>

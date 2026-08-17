@@ -174,6 +174,7 @@ import { authFetch } from '@/stores/auth'
 import TimelineManager from '@/components/TimelineManager.vue'
 import { notifyTasksChanged, onTasksChanged } from '@/services/taskSync'
 import { openAgent } from '@/services/agentContext'
+import { aggregateRisk } from '@/utils/tasks'
 
 const route = useRoute()
 const router = useRouter()
@@ -233,29 +234,9 @@ function timelineProgress(timeline) {
   return Math.round(nodes.reduce((sum, node) => sum + statusProgress(node.status), 0) / nodes.length)
 }
 
-function itemRisk(item) {
-  if (item.status === 'done' || item.status === 'completed') return 0
-  if (!item.deadline) return 25
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const days = Math.round((new Date(`${item.deadline}T00:00:00`) - today) / 86400000)
-  let base = 18
-  if (days < 0) base = 100
-  else if (days <= 3) base = 88
-  else if (days <= 7) base = 72
-  else if (days <= 14) base = 52
-  else if (days <= 30) base = 32
-  const statusFactor = item.status === 'in_progress' ? 0.72 : 1
-  const priorityFactor = { low: 0.75, medium: 0.9, high: 1.05, urgent: 1.18 }[item.priority] || 0.9
-  return Math.min(100, Math.round(base * statusFactor * priorityFactor))
-}
-
 function timelineRisk(timeline) {
   const nodes = timeline.subtasks?.length ? timeline.subtasks : [timeline]
-  const scores = nodes.filter((item) => !['done', 'completed'].includes(item.status)).map(itemRisk)
-  if (!scores.length) return 0
-  const average = scores.reduce((sum, value) => sum + value, 0) / scores.length
-  return Math.round(Math.max(...scores) * 0.6 + average * 0.4)
+  return aggregateRisk(nodes)
 }
 
 function timelineNext(timeline) {
@@ -468,4 +449,48 @@ onBeforeUnmount(() => stopTaskSync?.())
 @media (max-width: 900px) { .category-summary-grid { grid-template-columns: 1fr 1fr; }.category-header { align-items: flex-start; flex-wrap: wrap; }.header-actions { width: 100%; justify-content: flex-end; }.overall-card { grid-template-columns: 1fr auto; }.overall-bars { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; } }
 @media (max-width: 700px) { .progress-page { padding: 20px 14px 110px; }.page-header { align-items: flex-start; }.category-grid, .timeline-grid { grid-template-columns: 1fr; }.category-summary-grid { grid-template-columns: 1fr 1fr; }.header-actions .v-btn { flex: 1; }.overall-card { grid-template-columns: 1fr; }.overall-score { justify-self: start; }.overall-bars { grid-template-columns: 1fr; }.card-bars { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 480px) { .category-summary-grid { grid-template-columns: 1fr; }.category-empty > div { flex-direction: column; width: 100%; } }
+
+/* Mono Workspace visual layer */
+.progress-page { min-height: calc(100vh - 60px); padding: 28px clamp(18px, 3vw, 44px) 72px; color: var(--ib-text); background: var(--ib-background); }
+.progress-page > * { width: min(100%, var(--ib-content-max)); margin-inline: auto; }
+.eyebrow { color: var(--ib-primary-strong); }
+.page-header h1,
+.category-header h1,
+.overall-card__copy h2,
+.category-card,
+.timeline-card,
+.category-empty h2 { color: var(--ib-text); }
+.page-header p,
+.category-header p,
+.overall-card__copy p,
+.overall-next,
+.category-meta,
+.category-card__status span,
+.category-next,
+.timeline-card p,
+.timeline-card__progress span,
+.timeline-card__meta,
+.category-empty { color: var(--ib-text-secondary); }
+.overall-card,
+.category-card,
+.category-summary-grid .v-card,
+.timeline-card,
+.category-empty,
+.group-tabs button { border-color: var(--ib-border); background: var(--ib-surface) !important; box-shadow: var(--ib-shadow-card) !important; }
+.overall-card { border-radius: var(--ib-radius-lg) !important; }
+.section-tag,
+.category-empty > span { color: var(--ib-primary-strong); background: var(--ib-primary-soft); }
+.category-card,
+.timeline-card { border-radius: var(--ib-radius-lg); }
+.category-card:hover,
+.timeline-card:hover { border-color: var(--ib-border-strong); box-shadow: var(--ib-shadow-card) !important; }
+.status-bar > div,
+.card-bars > div > span,
+.category-summary-grid span,
+.category-summary-grid small { color: var(--ib-text-secondary); }
+.status-bar strong,
+.card-bars > div > strong { color: var(--ib-text); }
+.group-tabs button { color: var(--ib-text-secondary); }
+.group-tabs button.active { border-color: var(--ib-primary); color: var(--ib-primary-strong); background: var(--ib-primary-soft) !important; }
+.page-loading { inset: 60px 0 0; background: color-mix(in srgb, var(--ib-background) 74%, transparent); }
 </style>

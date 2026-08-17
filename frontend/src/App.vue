@@ -1,35 +1,76 @@
 <template>
   <v-app>
+    <GlobalFeedback />
     <template v-if="isAuthenticated && !isLanding">
-      <v-app-bar class="workspace-bar" height="64" flat>
+      <WorkspaceNavigation
+        v-model="navigationOpen"
+        @open-agent="openGlobalAgent"
+        @open-settings="openSettings"
+      />
+
+      <v-app-bar class="workspace-bar" height="60" flat>
         <v-btn
-          icon="mdi-format-list-bulleted"
+          class="navigation-trigger"
+          icon="mdi-menu"
           variant="text"
-          :aria-label="$t('app.openTaskList')"
-          @click="taskDrawer = true"
+          :aria-label="$t('app.navigation')"
+          @click="navigationOpen = !navigationOpen"
         />
 
-        <v-btn
-          v-if="!isCalendarPage"
-          class="calendar-back-button"
-          variant="text"
-          size="small"
-          prepend-icon="mdi-arrow-left"
-          :aria-label="$t('common.backCalendar')"
-          @click="router.push('/calendar')"
-        >
-          {{ $t('common.backCalendar') }}
-        </v-btn>
+        <div class="page-identity">
+          <span class="page-identity__product">IBuddy</span>
+          <span class="page-identity__divider" aria-hidden="true" />
+          <strong>{{ currentPageTitle }}</strong>
+        </div>
 
-        <button class="brand-button" type="button" @click="router.push('/calendar')">
-          <span class="brand-mark">IB</span>
-          <span class="brand-copy">
-            <strong>IBuddy</strong>
-            <small>{{ currentPageTitle }}</small>
-          </span>
-        </button>
+        <v-tooltip :text="$t('app.openTaskList')" location="bottom">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              class="task-quick-trigger"
+              icon="mdi-format-list-checks"
+              variant="text"
+              :aria-label="$t('app.openTaskList')"
+              @click="taskDrawer = true"
+            />
+          </template>
+        </v-tooltip>
 
         <v-spacer />
+
+        <v-menu location="bottom end" :close-on-content-click="false">
+          <template #activator="{ props }">
+            <v-btn v-bind="props" class="upcoming-trigger" icon variant="text" :aria-label="$t('app.upcoming')">
+              <v-badge :content="reminders.length" :model-value="reminders.length > 0" color="error" floating>
+                <v-icon icon="mdi-bell-outline" />
+              </v-badge>
+            </v-btn>
+          </template>
+          <v-card class="upcoming-menu" width="360" max-width="calc(100vw - 28px)">
+            <div class="upcoming-menu__header">
+              <div>
+                <div class="upcoming-menu__eyebrow">{{ $t('app.nextSevenDays') }}</div>
+                <strong>{{ $t('app.upcoming') }}</strong>
+              </div>
+              <v-btn variant="text" size="small" to="/reminders">{{ $t('reminders.title') }}</v-btn>
+            </div>
+            <v-divider />
+            <v-list v-if="reminders.length" density="comfortable" lines="two" max-height="420" class="overflow-y-auto">
+              <v-list-item
+                v-for="item in reminders.slice(0, 8)"
+                :key="`${item.type}-${item.id}`"
+                :title="item.title"
+                :subtitle="`${formatReminderDate(item.date)} · ${item.subject || $t('common.uncategorized')}`"
+                :prepend-icon="item.type === 'deadline' ? 'mdi-calendar-alert-outline' : 'mdi-check-circle-outline'"
+                @click="openReminder(item)"
+              />
+            </v-list>
+            <div v-else class="upcoming-menu__empty">
+              <v-icon icon="mdi-check-circle-outline" size="28" />
+              <span>{{ $t('app.noUpcoming') }}</span>
+            </div>
+          </v-card>
+        </v-menu>
 
         <!-- 交流风格快捷选择：与提醒设置共享 role_card_id -->
         <v-menu v-model="styleMenuOpen" location="bottom end" :close-on-content-click="false">
@@ -151,80 +192,6 @@
         </router-view>
       </v-main>
 
-      <v-slide-x-reverse-transition>
-        <v-card
-          v-if="activeReminder && reminderVisible && !agentDrawer"
-          class="reminder-popover"
-          rounded="xl"
-          elevation="12"
-          role="status"
-        >
-          <v-card-text class="pa-4">
-            <div class="d-flex align-start">
-              <v-avatar color="warning" variant="tonal" size="38" class="mr-3">
-                <v-icon icon="mdi-bell-ring-outline" />
-              </v-avatar>
-              <div class="reminder-copy" @click="openReminder(activeReminder)">
-                <div class="text-overline text-warning font-weight-bold">{{ $t('app.comingSoon') }}</div>
-                <div class="text-body-1 font-weight-bold">{{ activeReminder.title }}</div>
-                <div class="text-caption text-medium-emphasis mt-1">
-                  {{ formatReminderDate(activeReminder.date) }} · {{ activeReminder.subject || $t('common.uncategorized') }}
-                </div>
-              </div>
-              <v-btn
-                icon="mdi-close"
-                variant="text"
-                size="x-small"
-                :aria-label="$t('app.closeReminder')"
-                @click="reminderVisible = false"
-              />
-            </div>
-            <div class="reminder-action" @click="openReminder(activeReminder)">
-              {{ $t('app.viewTask') }}
-              <v-icon icon="mdi-arrow-right" size="17" />
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-slide-x-reverse-transition>
-
-      <transition name="quick-actions-fade">
-        <div v-show="!agentDrawer" class="quick-actions" :aria-label="$t('app.quickActions')">
-          <v-tooltip :text="$t('app.urgent')" location="left">
-            <template #activator="{ props }">
-              <v-btn v-bind="props" icon="mdi-alert-outline" color="error" elevation="8" :aria-label="$t('app.openUrgent')" @click="router.push('/urgent')" />
-            </template>
-          </v-tooltip>
-          <v-tooltip :text="$t('app.progress')" location="left">
-            <template #activator="{ props }">
-              <v-btn v-bind="props" icon="mdi-chart-timeline-variant" color="primary" elevation="8" :aria-label="$t('app.openProgress')" @click="router.push('/progress')" />
-            </template>
-          </v-tooltip>
-          <v-tooltip :text="$t('app.settings')" location="left">
-            <template #activator="{ props }">
-              <v-btn v-bind="props" icon="mdi-cog-outline" color="grey-darken-3" elevation="8" :aria-label="$t('app.openSettings')" @click="settingsOpen = true" />
-            </template>
-          </v-tooltip>
-        </div>
-      </transition>
-
-      <!-- 左下角：提醒中心入口（与右下角 quick-actions 对称） -->
-      <transition name="quick-actions-fade">
-        <div v-show="!taskDrawer" class="reminder-entry">
-          <v-tooltip :text="$t('reminders.title')" location="right">
-            <template #activator="{ props }">
-              <v-btn
-                v-bind="props"
-                icon="mdi-bell-outline"
-                color="warning"
-                elevation="8"
-                :aria-label="$t('reminders.title')"
-                @click="router.push('/reminders')"
-              />
-            </template>
-          </v-tooltip>
-        </div>
-      </transition>
-
       <SettingsDialog v-model="settingsOpen" :initial-section="settingsSection" @logout="handleLogout" />
 
       <!-- 顶栏"导入角色卡"直达：打开选择器并自动展开导入区 -->
@@ -253,32 +220,38 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useAuth } from '@/stores/auth'
+import { useTheme } from 'vuetify'
+import { api, onUnauthorized, useAuth } from '@/stores/auth'
 import TaskDrawer from '@/components/TaskDrawer.vue'
 import AgentDrawer from '@/components/AgentDrawer.vue'
 import SettingsDialog from '@/components/SettingsDialog.vue'
 import RoleCardPicker from '@/components/RoleCardPicker.vue'
+import WorkspaceNavigation from '@/components/WorkspaceNavigation.vue'
+import GlobalFeedback from '@/components/GlobalFeedback.vue'
 import { onTasksChanged } from '@/services/taskSync'
 import { onOpenAgent } from '@/services/agentContext'
 import { getPreferences, updatePreferences, listRoleCards, ApiError } from '@/services/reminders'
 import { roleCardDisplayName } from '@/services/roleCardVisuals'
 import { notifyRoleCardChanged } from '@/services/roleCardVisuals'
+import { initializeTheme } from '@/services/theme'
+import { notify } from '@/services/feedback'
+import { flattenTasks } from '@/utils/tasks'
 
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
-const { user, token, isAuthenticated, logout, restoreSession } = useAuth()
+const theme = useTheme()
+const { user, isAuthenticated, logout, restoreSession } = useAuth()
 
 // Landing 介绍页是所有人的第一界面：即使已登录也走干净布局（无顶栏/侧栏）
 const isLanding = computed(() => route.name === 'Landing')
-const isCalendarPage = computed(() => route.name === 'Calendar')
 
+const navigationOpen = ref(true)
 const taskDrawer = ref(false)
 const agentDrawer = ref(false)
 const agentContext = ref(null)
 const settingsOpen = ref(false)
 const reminders = ref([])
-const reminderVisible = ref(true)
 
 // ---- Agent 抽屉：覆盖式浮层，默认 520px（比原 420 大），支持拖拽调整并记住偏好 ----
 const AGENT_WIDTH_KEY = 'ibuddy.agentDrawerWidth'
@@ -324,30 +297,17 @@ function stopAgentResize() {
 
 const currentPageTitle = computed(() => route.meta.titleKey ? t(route.meta.titleKey) : t('app.defaultTitle'))
 const userInitial = computed(() => (user.value?.username || 'I').charAt(0).toUpperCase())
-const activeReminder = computed(() => reminders.value[0] || null)
-
-function authHeaders() {
-  return token.value ? { Authorization: `Bearer ${token.value}` } : {}
-}
-
-function flattenTasks(nodes, output = []) {
-  for (const task of nodes || []) {
-    output.push(task)
-    flattenTasks(task.subtasks, output)
-  }
-  return output
-}
 
 async function loadUpcoming() {
   if (!isAuthenticated.value) return
   try {
-    const [taskResponse, deadlineResponse] = await Promise.all([
-      fetch('/api/tasks', { headers: authHeaders() }),
-      fetch('/api/deadlines/upcoming?days=7', { headers: authHeaders() }),
+    const [taskData, deadlineData] = await Promise.all([
+      api('/api/tasks'),
+      api('/api/deadlines/upcoming?days=7'),
     ])
 
-    const tasks = taskResponse.ok ? flattenTasks(await taskResponse.json()) : []
-    const deadlines = deadlineResponse.ok ? await deadlineResponse.json() : []
+    const tasks = flattenTasks(taskData)
+    const deadlines = Array.isArray(deadlineData) ? deadlineData : []
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const nextWeek = new Date(today)
@@ -364,16 +324,17 @@ async function loadUpcoming() {
 
     const deadlineItems = deadlines.map((item) => ({ ...item, type: 'deadline', date: item.due_date }))
     reminders.value = [...taskItems, ...deadlineItems].sort((a, b) => a.date.localeCompare(b.date))
-    reminderVisible.value = true
-  } catch {
+  } catch (error) {
     reminders.value = []
+    if (!(error instanceof ApiError && error.status === 401)) {
+      notify(error.message || t('common.requestFailed'), { type: 'error' })
+    }
   }
 }
 
 function openReminder(item) {
   const target = item.type === 'deadline' ? '/deadlines' : '/tasks'
   router.push({ path: target, query: { focus: item.id } })
-  reminderVisible.value = false
 }
 
 function formatReminderDate(value) {
@@ -396,6 +357,21 @@ function handleLogout() {
 function openGlobalAgent() {
   agentContext.value = null
   agentDrawer.value = true
+}
+
+function handleUnauthorized(event) {
+  const redirect = event?.detail?.redirect || route.fullPath || '/calendar'
+  if (route.path === '/login') return
+  settingsOpen.value = false
+  taskDrawer.value = false
+  agentDrawer.value = false
+  notify(t('auth.sessionExpired'), { type: 'warning', timeout: 5200 })
+  router.replace({ path: '/login', query: { redirect } })
+}
+
+function openSettings() {
+  settingsSection.value = 'account'
+  settingsOpen.value = true
 }
 
 // ---- 顶栏交流风格选择：懒加载偏好与卡片列表，选择即保存 ----
@@ -547,68 +523,55 @@ watch(isAuthenticated, (authenticated) => {
   if (authenticated) loadUpcoming()
 })
 
+let stopTheme = null
+
 onMounted(async () => {
+  stopTheme = initializeTheme(theme)
   await restoreSession()
   await loadUpcoming()
 })
 
 const stopTaskSync = onTasksChanged(loadUpcoming)
 const stopOpenAgent = onOpenAgent(handleOpenAgent)
+const stopUnauthorized = onUnauthorized(handleUnauthorized)
 onBeforeUnmount(() => {
   stopTaskSync()
   stopOpenAgent()
+  stopUnauthorized()
+  stopTheme?.()
   syncDrawerScrollLock(false)
 })
 </script>
 
 <style>
 .workspace-bar {
-  border-bottom: 1px solid rgba(20, 34, 66, 0.08) !important;
-  background: rgba(255, 255, 255, 0.94) !important;
-  backdrop-filter: blur(18px);
-  padding: 0 18px;
+  border-bottom: 1px solid var(--ib-border) !important;
+  background: color-mix(in srgb, var(--ib-surface) 92%, transparent) !important;
+  backdrop-filter: blur(16px);
+  padding: 0 14px;
 }
 
-.brand-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  color: #17233d;
-  text-align: left;
-  padding: 4px 8px;
-}
+.navigation-trigger { display: none !important; }
 
-.calendar-back-button {
-  flex: 0 0 auto;
-  margin: 0 6px 0 2px;
-  color: #4e61a1 !important;
-}
-
-.brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 11px;
-  background: linear-gradient(135deg, #3265f5, #7348e8);
-  color: white;
-  font-size: 13px;
-  font-weight: 800;
-  box-shadow: 0 8px 22px rgba(50, 101, 245, 0.24);
-}
-
-.brand-copy {
+.page-identity {
   display: flex;
-  flex-direction: column;
-  line-height: 1.08;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  color: var(--ib-text-secondary);
+  white-space: nowrap;
 }
 
-.brand-copy strong { font-size: 17px; }
-.brand-copy small { margin-top: 4px; color: #8790a5; font-size: 10px; }
+.page-identity__product { color: var(--ib-text-muted); font-size: 12px; font-weight: 700; }
+.page-identity__divider { width: 1px; height: 16px; background: var(--ib-border-strong); }
+.page-identity strong { overflow: hidden; color: var(--ib-text); font-size: 14px; text-overflow: ellipsis; }
+.task-quick-trigger { margin-left: 8px; color: var(--ib-text-secondary) !important; }
+.upcoming-trigger { color: var(--ib-text-secondary) !important; }
+
+.upcoming-menu { overflow: hidden; }
+.upcoming-menu__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; }
+.upcoming-menu__eyebrow { margin-bottom: 3px; color: var(--ib-text-muted); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.upcoming-menu__empty { display: grid; min-height: 150px; place-items: center; align-content: center; gap: 10px; color: var(--ib-text-secondary); }
 
 .account-trigger {
   display: inline-flex;
@@ -625,39 +588,37 @@ onBeforeUnmount(() => {
   transition: background-color .16s ease, transform .16s ease;
 }
 
-.account-trigger:hover { background: rgba(50, 101, 245, .10); }
+.account-trigger:hover { background: var(--ib-primary-soft); }
 .account-trigger:active { transform: scale(.96); }
-.account-trigger:focus-visible { outline: 3px solid rgba(50, 101, 245, .30); outline-offset: 2px; }
+.account-trigger:focus-visible { outline: 3px solid color-mix(in srgb, var(--ib-primary) 30%, transparent); outline-offset: 2px; }
 
-.style-trigger { margin-right: 6px; color: #4a5468; text-transform: none; letter-spacing: 0; }
+.style-trigger { margin-right: 6px; color: var(--ib-text-secondary); text-transform: none; letter-spacing: 0; }
 .style-trigger__name { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 @media (max-width: 720px) {
   .style-trigger__name { display: none; }
 }
 
 .workspace-main {
-  background:
-    radial-gradient(circle at 12% 5%, rgba(76, 111, 255, 0.10), transparent 28%),
-    radial-gradient(circle at 88% 88%, rgba(102, 75, 230, 0.08), transparent 28%),
-    #f7f8fc;
+  background: var(--ib-background);
 }
 
 .workspace-drawer {
-  top: 64px !important;
-  height: calc(100% - 64px) !important;
-  border: 0 !important;
+  top: 60px !important;
+  height: calc(100% - 60px) !important;
+  border-color: var(--ib-border) !important;
+  background: var(--ib-surface) !important;
   z-index: 1005 !important;
-  box-shadow: 0 20px 50px rgba(20, 30, 60, 0.15) !important;
+  box-shadow: var(--ib-shadow-overlay) !important;
   overscroll-behavior: contain;
 }
 
 .drawer-backdrop {
   position: fixed;
   z-index: 1001;
-  inset: 64px 0 0;
+  inset: 60px 0 0;
   width: 100%;
   border: 0;
-  background: rgba(25, 35, 66, .08);
+  background: color-mix(in srgb, var(--ib-text) 10%, transparent);
   backdrop-filter: blur(1.5px);
   cursor: pointer;
   touch-action: none;
@@ -684,7 +645,7 @@ onBeforeUnmount(() => {
   width: 3px;
   height: 52px;
   border-radius: 3px;
-  background: rgba(61, 84, 146, 0.18);
+  background: var(--ib-border-strong);
   opacity: 0;
   transition: opacity .15s ease, background .15s ease;
   pointer-events: none;
@@ -692,71 +653,27 @@ onBeforeUnmount(() => {
 .agent-resizer:hover::after,
 .agent-resizer:active::after {
   opacity: 1;
-  background: rgba(50, 101, 245, 0.5);
+  background: color-mix(in srgb, var(--ib-primary) 55%, transparent);
 }
-
-.reminder-popover {
-  position: fixed !important;
-  z-index: 1100;
-  top: 82px;
-  right: 24px;
-  width: min(360px, calc(100vw - 48px));
-  border: 1px solid rgba(255, 169, 46, 0.28);
-  background: rgba(255, 255, 255, 0.97) !important;
-}
-
-.reminder-copy { flex: 1; min-width: 0; cursor: pointer; }
-.reminder-action {
-  margin: 13px 0 0 51px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: #315dda;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.quick-actions {
-  position: fixed;
-  right: 25px;
-  bottom: 26px;
-  z-index: 1050;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.quick-actions .v-btn { width: 48px; height: 48px; }
-
-/* 左下角提醒中心入口：与 quick-actions 同尺寸同高度，左右对称 */
-.reminder-entry {
-  position: fixed;
-  left: 25px;
-  bottom: 26px;
-  z-index: 1050;
-}
-.reminder-entry .v-btn { width: 48px; height: 48px; }
-
-/* Agent 抽屉打开时：三个快捷按钮收回去（淡出+下沉），关闭时弹回来 */
-.quick-actions-fade-enter-active,
-.quick-actions-fade-leave-active { transition: opacity .2s ease, transform .2s ease; }
-.quick-actions-fade-enter-from,
-.quick-actions-fade-leave-to { opacity: 0; transform: translateY(18px) scale(.96); }
 
 .page-fade-enter-active,
 .page-fade-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
 .page-fade-enter-from { opacity: 0; transform: translateY(4px); }
 .page-fade-leave-to { opacity: 0; }
 
+@media (max-width: 959px) {
+  .navigation-trigger { display: inline-grid !important; }
+}
+
 @media (max-width: 700px) {
-  .brand-copy small { display: none; }
   .workspace-bar { padding: 0 8px; }
-  .calendar-back-button { padding-inline: 7px !important; }
-  .calendar-back-button .v-btn__content { font-size: 0; }
+  .page-identity__product,
+  .page-identity__divider { display: none; }
+  .page-identity strong { max-width: 124px; }
+  .task-quick-trigger { display: none !important; }
+  .style-trigger { min-width: 40px !important; padding-inline: 7px !important; }
+  .style-trigger .v-btn__prepend { margin: 0 !important; }
   .agent-trigger .v-btn__content { font-size: 0; }
-  .quick-actions { right: 14px; bottom: 16px; }
-  .reminder-entry { left: 14px; bottom: 16px; }
-  .reminder-popover { right: 14px; top: 74px; width: calc(100vw - 28px); }
+  .account-trigger { margin-left: 4px; margin-right: 2px; }
 }
 </style>

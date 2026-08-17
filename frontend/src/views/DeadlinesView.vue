@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="deadlines-page ib-page">
     <div class="d-flex align-center mb-4">
       <v-icon size="28" color="primary" class="mr-2">mdi-calendar-clock-outline</v-icon>
       <div>
@@ -270,8 +270,15 @@ onMounted(loadDeadlines)
 
 <style scoped>
 .deadline-item--focused {
-  background: #eaf0ff !important;
-  border-left: 3px solid #4169e8;
+  background: var(--ib-primary-soft) !important;
+  border-left: 3px solid var(--ib-primary);
   border-radius: 8px;
 }
+.deadlines-page > .d-flex:first-child { min-height: 58px; margin-bottom: 24px !important; }
+.deadlines-page > .d-flex:first-child .text-h6 { color: var(--ib-text); font-size: clamp(26px, 3vw, 36px) !important; letter-spacing: -.035em; }
+.deadlines-page > .d-flex:first-child .text-caption { color: var(--ib-text-secondary) !important; }
+.deadlines-page .v-card { border-color: var(--ib-border); background: var(--ib-surface); }
+.deadlines-page .v-list { background: transparent; }
+.deadlines-page .v-list-item { border-bottom: 1px solid var(--ib-border); }
+.deadlines-page .v-list-item:last-child { border-bottom: 0; }
 </style>

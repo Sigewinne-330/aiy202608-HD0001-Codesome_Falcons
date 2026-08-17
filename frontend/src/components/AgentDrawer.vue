@@ -232,7 +232,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useAuth } from '@/stores/auth'
+import { api, authFetch } from '@/stores/auth'
 import { notifyTasksChanged } from '@/services/taskSync'
 import { compressImageFile } from '@/services/imageCompress'
 import { getPreferences } from '@/services/reminders'
@@ -313,7 +313,6 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const { t } = useI18n()
-const { token } = useAuth()
 const router = useRouter()
 
 /** 提醒消息 → 跳转提醒中心精确定位并关闭抽屉（只用 digest_id，不读 metadata 内的 URL/任务 ID） */
@@ -383,21 +382,11 @@ function stripContext(content) {
   return String(content || '').replace(/^\[PROGRESS_CONTEXT\][\s\S]*?\[\/PROGRESS_CONTEXT\]\n[^\n]*\n\n/, '')
 }
 
-function headers(extra = {}) {
-  return {
-    ...extra,
-    ...(token.value ? { Authorization: `Bearer ${token.value}` } : {}),
-  }
-}
-
 /** 加载积分余额（头部显示） */
 async function loadBalance() {
   try {
-    const res = await fetch('/api/billing/summary', { headers: headers() })
-    if (res.ok) {
-      const data = await res.json()
-      balance.value = data.balance || 0
-    }
+    const data = await api('/api/billing/summary')
+    balance.value = data?.balance || 0
   } catch {
     /* ignore */
   }
@@ -422,11 +411,8 @@ function useSuggestion(value) {
 
 async function loadConversations() {
   try {
-    const convRes = await fetch('/api/chat/conversations', { headers: headers() })
-    if (convRes.ok) {
-      const convData = await convRes.json()
-      conversations.value = convData.conversations || []
-    }
+    const data = await api('/api/chat/conversations')
+    conversations.value = data?.conversations || []
   } catch {
     conversations.value = []
   }
@@ -515,19 +501,16 @@ async function switchConversation(convId) {
   activeConversationId.value = convId
   messages.value = []
   try {
-    const response = await fetch(`/api/chat/history?conversation_id=${convId}`, { headers: headers() })
-    if (response.ok) {
-      const data = await response.json()
-      messages.value = (data.messages || []).map((item) => ({
-        role: item.role,
-        content: item.role === 'user' ? stripContext(item.content) : item.content,
-        credits: tokensToCredits(item.token),
-        creditsIsEstimate: false,
-        images: item.images || null,
-        metadata: item.metadata || null,
-      }))
-      await scrollToBottom()
-    }
+    const data = await api(`/api/chat/history?conversation_id=${convId}`)
+    messages.value = (data?.messages || []).map((item) => ({
+      role: item.role,
+      content: item.role === 'user' ? stripContext(item.content) : item.content,
+      credits: tokensToCredits(item.token),
+      creditsIsEstimate: false,
+      images: item.images || null,
+      metadata: item.metadata || null,
+    }))
+    await scrollToBottom()
   } catch {
     messages.value = []
   }
@@ -536,7 +519,7 @@ async function switchConversation(convId) {
 /** 删除对话 */
 async function deleteConversation(convId) {
   try {
-    await fetch(`/api/chat/conversations/${convId}`, { method: 'DELETE', headers: headers() })
+    await api(`/api/chat/conversations/${convId}`, { method: 'DELETE' })
     conversations.value = conversations.value.filter(c => c.id !== convId)
     if (activeConversationId.value === convId) {
       activeConversationId.value = null
@@ -565,27 +548,22 @@ async function sendMessage() {
   input.value = ''
   selectedImages.value = []
   loading.value = true
-  let taskMutationSucceeded = false
   await scrollToBottom()
 
   try {
     // 没有对话时先创建一个（避免每次发送都新建窗口）
     if (!activeConversationId.value) {
-      const convRes = await fetch('/api/chat/conversations', {
+      const convData = await api('/api/chat/conversations', {
         method: 'POST',
-        headers: headers({ 'Content-Type': 'application/json' }),
       })
-      if (convRes.ok) {
-        const convData = await convRes.json()
-        activeConversationId.value = convData.id
-      }
+      activeConversationId.value = convData?.id || null
     }
     controller = new AbortController()
     const body = { content: contextualize(content), conversation_id: activeConversationId.value }
     if (images.length) body.images = images
-    const response = await fetch('/api/chat/stream', {
+    const response = await authFetch('/api/chat/stream', {
       method: 'POST',
-      headers: headers({ 'Content-Type': 'application/json' }),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       signal: controller.signal,
     })
@@ -626,12 +604,10 @@ async function sendMessage() {
           // 实时估算积分，让数字随生成过程增长（结束时用后端权威值替换）
           messages.value[responseIndex].credits = tokensToCredits(estimateTokens(messages.value[responseIndex].content))
           messages.value[responseIndex].creditsIsEstimate = true
-          if (chunk.includes('✓ 操作成功')) taskMutationSucceeded = true
         } catch {
           messages.value[responseIndex].content += payload
           messages.value[responseIndex].credits = tokensToCredits(estimateTokens(messages.value[responseIndex].content))
           messages.value[responseIndex].creditsIsEstimate = true
-          if (payload.includes('✓ 操作成功')) taskMutationSucceeded = true
         }
       }
       await scrollToBottom()
