@@ -3,6 +3,7 @@ import zhCN from '@/locales/zh-CN'
 import zhTW from '@/locales/zh-TW'
 import en from '@/locales/en'
 import { progressMessages } from '@/locales/progress'
+import { redesignMessages } from '@/locales/redesign'
 
 export const SUPPORTED_LOCALES = ['zh-CN', 'zh-TW', 'en']
 
@@ -43,14 +44,35 @@ export function setLocale(locale) {
   return target
 }
 
+function localeMessages(base, locale, editLabel) {
+  const redesign = redesignMessages[locale]
+  return {
+    ...base,
+    common: { ...base.common, edit: editLabel, ...redesign.common },
+    chat: { ...base.chat, ...redesign.chat },
+    calendar: { ...base.calendar, ...redesign.calendar },
+    urgent: { ...base.urgent, ...redesign.urgent },
+    tasks: { ...base.tasks, ...redesign.tasks },
+    deadlines: { ...base.deadlines, ...redesign.deadlines },
+    billing: { ...base.billing, ...redesign.billing },
+    plan: { ...base.plan, ...redesign.plan },
+    reminders: { ...base.reminders, ...redesign.reminders },
+    personalization: redesign.personalization,
+    progress: { ...base.progress, ...progressMessages[locale] },
+  }
+}
+
+const initialLocale = getInitialLocale()
+if (typeof document !== 'undefined') document.documentElement.lang = initialLocale
+
 const i18n = createI18n({
   legacy: false,
-  locale: getInitialLocale(),
+  locale: initialLocale,
   fallbackLocale: 'zh-CN',
   messages: {
-    'zh-CN': { ...zhCN, common: { ...zhCN.common, edit: '编辑' }, progress: { ...zhCN.progress, ...progressMessages['zh-CN'] } },
-    'zh-TW': { ...zhTW, common: { ...zhTW.common, edit: '編輯' }, progress: { ...zhTW.progress, ...progressMessages['zh-TW'] } },
-    en: { ...en, common: { ...en.common, edit: 'Edit' }, progress: { ...en.progress, ...progressMessages.en } },
+    'zh-CN': localeMessages(zhCN, 'zh-CN', '编辑'),
+    'zh-TW': localeMessages(zhTW, 'zh-TW', '編輯'),
+    en: localeMessages(en, 'en', 'Edit'),
   },
 })
 

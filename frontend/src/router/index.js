@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { watch } from 'vue'
 import { useAuth } from '@/stores/auth'
 import i18n from '@/i18n'
 import { safeInternalRedirect } from '@/utils/navigation'
@@ -123,10 +124,13 @@ router.beforeEach((to, from, next) => {
   next()
 })
 
-// 页面标题跟随语言
-router.afterEach((to) => {
+function updateDocumentTitle(to) {
   const t = i18n.global.t
   document.title = to.meta.titleKey ? t(to.meta.titleKey) : 'IBuddy'
-})
+}
+
+// 页面标题跟随路由与语言
+router.afterEach(updateDocumentTitle)
+watch(() => i18n.global.locale.value, () => updateDocumentTitle(router.currentRoute.value))
 
 export default router

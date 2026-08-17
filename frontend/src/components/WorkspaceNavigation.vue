@@ -9,13 +9,13 @@
     :width="244"
     :scrim="true"
   >
-    <div class="nav-brand" role="button" tabindex="0" @click="goHome" @keydown.enter="goHome">
+    <button type="button" class="nav-brand" :aria-label="$t('nav.calendar')" @click="goHome">
       <span class="nav-brand__mark">IB</span>
       <span v-if="!rail || !mdAndUp" class="nav-brand__copy">
         <strong>IBuddy</strong>
         <small>{{ $t('landing.slogan') }}</small>
       </span>
-    </div>
+    </button>
 
     <v-list class="nav-list" nav density="comfortable" :aria-label="$t('app.navigation')">
       <v-list-item
@@ -91,6 +91,8 @@ const rail = ref(true)
 const primaryItems = [
   { to: '/calendar', icon: 'mdi-calendar-blank-outline', label: 'nav.calendar' },
   { to: '/tasks', icon: 'mdi-check-circle-outline', label: 'nav.tasks' },
+  { to: '/plan', icon: 'mdi-calendar-edit-outline', label: 'nav.plan' },
+  { to: '/chat', icon: 'mdi-message-processing-outline', label: 'nav.chat' },
   { to: '/deadlines', icon: 'mdi-calendar-alert-outline', label: 'nav.deadlines' },
   { to: '/urgent', icon: 'mdi-lightning-bolt-outline', label: 'nav.urgent' },
   { to: '/progress', icon: 'mdi-chart-timeline-variant', label: 'nav.progress' },
@@ -124,9 +126,14 @@ function goHome() {
   min-height: 64px;
   align-items: center;
   gap: 11px;
+  width: 100%;
   padding: 10px 16px;
+  border: 0;
+  background: transparent;
+  text-align: left;
   cursor: pointer;
 }
+.nav-brand:focus-visible { outline: 3px solid color-mix(in srgb, var(--ib-primary) 28%, transparent); outline-offset: -3px; }
 
 .nav-brand__mark {
   display: grid;

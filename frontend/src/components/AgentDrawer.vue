@@ -1,161 +1,189 @@
 <template>
-  <div class="agent-panel">
-    <div class="agent-panel__header">
-      <div class="d-flex align-center">
-        <RoleCardAvatar
-          :slug="activeRoleCard?.slug"
-          :title="activeRoleCard?.name"
-          :size="42"
-          :icon-size="21"
-          class="mr-3 agent-avatar"
-        />
+  <section class="agent-panel" :aria-label="$t('agent.title')">
+    <header class="agent-header">
+      <RoleCardAvatar
+        :slug="activeRoleCard?.slug"
+        :title="activeRoleCard?.name"
+        :size="40"
+        :icon-size="20"
+      />
+      <div class="agent-identity">
+        <strong>{{ $t('agent.title') }}</strong>
         <div>
-          <div class="text-subtitle-1 font-weight-bold">{{ $t('agent.title') }}</div>
-          <div class="agent-status-line">
-            <span class="agent-status"><span /> {{ $t('agent.status') }}</span>
-            <span
-              class="balance-pill"
-              :class="{ 'balance-pill--low': balance < 1000 }"
-              :title="$t('billing.balance')"
-              @click="goBilling"
-            >
-              <v-icon icon="mdi-lightning-bolt" size="11" />
-              {{ balance.toLocaleString() }} {{ $t('billing.creditsUnit') }}
-            </span>
-          </div>
+          <span class="agent-status"><i />{{ $t('agent.status') }}</span>
+          <button
+            type="button"
+            class="balance-pill"
+            :class="{ 'balance-pill--low': balance < 1000 }"
+            :aria-label="$t('billing.balance')"
+            @click="goBilling"
+          >
+            <v-icon icon="mdi-lightning-bolt-outline" size="12" />
+            {{ balance.toLocaleString() }}
+          </button>
         </div>
       </div>
-      <div class="d-flex align-center">
-        <!-- 对话列表菜单 -->
-        <v-menu location="bottom end">
-          <template v-slot:activator="{ props }">
-            <v-btn
-              icon="mdi-message-text-outline"
-              variant="text"
-              size="small"
-              :aria-label="$t('agent.history')"
-              :disabled="loading"
-              v-bind="props"
-            />
-          </template>
-          <v-list dense style="max-height: 320px; overflow-y: auto; min-width: 220px;">
-            <v-list-subheader>{{ $t('agent.history') }}</v-list-subheader>
-            <v-list-item
-              v-for="conv in conversations"
-              :key="conv.id"
-              :active="conv.id === activeConversationId"
-              density="compact"
-              @click="switchConversation(conv.id)"
-            >
-              <template v-slot:prepend>
-                <v-icon size="14" class="mr-2">mdi-message-outline</v-icon>
-              </template>
-              <v-list-item-title class="text-caption" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                {{ conv.title || $t('agent.newConversation') }}
-              </v-list-item-title>
-              <template v-slot:append>
-                <v-btn
-                  icon="mdi-close"
-                  size="x-small"
-                  variant="text"
-                  @click.stop="deleteConversation(conv.id)"
-                />
-              </template>
-            </v-list-item>
-            <div v-if="conversations.length === 0" class="text-center text-caption text-grey py-3">
-              {{ $t('agent.noHistory') }}
-            </div>
-          </v-list>
-        </v-menu>
-        <!-- 新建对话 -->
-        <v-btn
-          icon="mdi-plus"
-          variant="text"
-          size="small"
-          :aria-label="$t('agent.newConversation')"
-          :disabled="loading"
-          @click="newConversation"
-        />
-        <v-btn icon="mdi-close" variant="text" size="small" :aria-label="$t('agent.close')" @click="$emit('close')" />
-      </div>
-    </div>
+      <v-spacer />
 
-    <div ref="messageContainer" class="agent-panel__messages scroll-container">
-      <div v-if="messages.length === 0" class="agent-welcome">
-        <div class="agent-welcome__icon"><v-icon icon="mdi-message-processing-outline" size="30" /></div>
-        <div class="text-subtitle-1 font-weight-bold mt-4">{{ $t('agent.welcomeTitle') }}</div>
-        <div class="text-caption text-medium-emphasis text-center mt-1">{{ $t('agent.welcomeSub') }}</div>
-        <button v-for="suggestion in suggestions" :key="suggestion" type="button" @click="useSuggestion(suggestion)">
-          {{ $t(suggestion) }}
+      <v-menu location="bottom end" max-width="calc(100vw - 24px)">
+        <template #activator="{ props: menuProps }">
+          <v-btn
+            v-bind="menuProps"
+            icon="mdi-message-text-outline"
+            variant="text"
+            size="small"
+            :aria-label="$t('agent.history')"
+            :disabled="loading"
+          />
+        </template>
+        <v-card class="agent-history-menu" width="280">
+          <div class="agent-history-menu__title">
+            <strong>{{ $t('agent.history') }}</strong>
+            <small>{{ $t('chat.conversationCount', { n: conversations.length }) }}</small>
+          </div>
+          <v-divider />
+          <div class="agent-history-list scroll-container">
+            <button
+              v-for="conversation in conversations"
+              :key="conversation.id"
+              type="button"
+              :class="{ active: conversation.id === activeConversationId }"
+              @click="switchConversation(conversation.id)"
+            >
+              <v-icon icon="mdi-message-outline" size="16" />
+              <span>{{ conversation.title || $t('agent.newConversation') }}</span>
+              <v-btn
+                icon="mdi-close"
+                size="x-small"
+                variant="text"
+                :aria-label="$t('chat.deleteConversation')"
+                @click.stop="deleteConversation(conversation.id)"
+              />
+            </button>
+            <div v-if="!conversations.length" class="agent-history-empty">{{ $t('agent.noHistory') }}</div>
+          </div>
+        </v-card>
+      </v-menu>
+
+      <v-btn
+        icon="mdi-plus"
+        variant="text"
+        size="small"
+        :aria-label="$t('agent.newConversation')"
+        :disabled="loading"
+        @click="newConversation"
+      />
+      <v-btn icon="mdi-close" variant="text" size="small" :aria-label="$t('agent.close')" @click="$emit('close')" />
+    </header>
+
+    <v-alert v-if="historyError" type="error" variant="tonal" density="compact" closable class="agent-alert">
+      {{ historyError }}
+      <template #append>
+        <v-btn size="x-small" variant="text" @click="retryHistory">{{ $t('common.retry') }}</v-btn>
+      </template>
+    </v-alert>
+
+    <div
+      ref="messageContainer"
+      class="agent-messages scroll-container"
+      role="log"
+      aria-live="polite"
+      :aria-label="$t('chat.messages')"
+    >
+      <div v-if="historyLoading && !messages.length" class="agent-welcome">
+        <v-progress-circular indeterminate color="primary" size="28" />
+        <span>{{ $t('chat.loadingHistory') }}</span>
+      </div>
+
+      <div v-else-if="!messages.length" class="agent-welcome">
+        <span class="agent-welcome__icon"><v-icon icon="mdi-creation-outline" size="28" /></span>
+        <strong>{{ $t('agent.welcomeTitle') }}</strong>
+        <p>{{ $t('agent.welcomeSub') }}</p>
+        <button v-for="suggestion in suggestions" :key="suggestion" type="button" @click="sendSuggestion(suggestion)">
+          <span>{{ $t(suggestion) }}</span>
+          <v-icon icon="mdi-arrow-up-right" size="14" />
         </button>
       </div>
 
-      <div v-for="(message, index) in messages" :key="index" class="agent-message" :class="`agent-message--${message.role}`">
+      <article
+        v-for="(message, index) in messages"
+        v-else
+        :key="index"
+        class="agent-message"
+        :class="`agent-message--${message.role}`"
+      >
         <RoleCardAvatar
           v-if="message.role === 'assistant'"
           :slug="messageRoleCardSlug(message, activeRoleCard?.slug)"
           :size="28"
           :icon-size="15"
         />
-        <div class="agent-bubble" :class="{ 'agent-bubble--md': message.role === 'assistant' }">
-          <!-- 汇总提醒消息标识：metadata.source === 'reminder' -->
-          <div v-if="message.metadata?.source === 'reminder'" class="reminder-banner">
-            <v-icon size="14" color="primary">mdi-bell-ring-outline</v-icon>
-            <v-chip size="x-small" color="primary" variant="tonal">{{ $t('reminders.chatChip') }}</v-chip>
-            <v-spacer />
-            <v-btn
-              size="x-small"
-              variant="text"
-              color="primary"
-              @click="goReminderDetail(message.metadata)"
-            >
+        <div class="agent-bubble">
+          <div v-if="message.metadata?.source === 'reminder'" class="agent-message-context">
+            <v-icon icon="mdi-bell-ring-outline" size="14" />
+            <span>{{ $t('reminders.chatChip') }}</span>
+            <v-btn size="x-small" variant="text" @click="goReminderDetail(message.metadata)">
               {{ $t('reminders.viewDetail') }}
             </v-btn>
           </div>
-          <!-- 任务级提醒消息标识：metadata.source === 'task_relative_reminder' -->
-          <div v-else-if="message.metadata?.source === 'task_relative_reminder'" class="reminder-banner">
-            <v-icon size="14" color="deep-purple">mdi-bell-outline</v-icon>
-            <v-chip size="x-small" color="deep-purple" variant="tonal">{{ $t('reminders.taskChatChip') }}</v-chip>
-            <v-spacer />
+          <div v-else-if="message.metadata?.source === 'task_relative_reminder'" class="agent-message-context">
+            <v-icon icon="mdi-bell-outline" size="14" />
+            <span>{{ $t('reminders.taskChatChip') }}</span>
             <v-btn
               v-if="message.metadata?.task_id"
               size="x-small"
               variant="text"
-              color="deep-purple"
               @click="goTaskReminderDetail(message.metadata)"
             >
               {{ $t('reminders.viewDetail') }}
             </v-btn>
           </div>
-          <!-- 流式中且无内容：打字动画 -->
-          <div v-if="message.streaming && !message.content" class="typing-dots"><i /><i /><i /></div>
-          <!-- 用户消息：图片 + 文本 -->
-          <div v-else-if="message.role === 'user'">
-            <div v-if="message.images && message.images.length" class="agent-images">
-              <img
-                v-for="(img, i) in message.images"
-                :key="i"
-                :src="img"
-                class="agent-img"
-                :alt="`image-${i + 1}`"
-                @click="previewImage(img)"
-              />
-            </div>
-            <div v-if="message.content" class="agent-text">{{ message.content }}</div>
+
+          <div v-if="message.images?.length" class="agent-images">
+            <button
+              v-for="(image, imageIndex) in message.images"
+              :key="imageIndex"
+              type="button"
+              :aria-label="$t('chat.previewImage', { n: imageIndex + 1 })"
+              @click="previewImage(image)"
+            >
+              <img :src="image" :alt="$t('chat.imageNumber', { n: imageIndex + 1 })" />
+            </button>
           </div>
-          <!-- 提醒正文：纯文本原样展示（汇总提醒与任务级提醒均已含完整文本） -->
-          <div v-else-if="message.metadata?.source === 'reminder' || message.metadata?.source === 'task_relative_reminder'" class="agent-text reminder-plain-text" v-text="message.content" />
-          <!-- AI 消息：Markdown + LaTeX 实时渲染（key 切换强制结束重渲染） -->
-          <div v-else class="agent-md"
-            :key="'md-' + index + '-' + (message.streaming ? 1 : 0)"
-            v-html="renderMarkdown(message.content)" />
-          <!-- 每条 AI 回复的积分消耗：流式中实时估算增长，结束后显示后端换算的权威值 -->
-          <div v-if="message.role === 'assistant' && message.credits" class="agent-token-meta">
-            <v-icon icon="mdi-lightning-bolt" size="11" />
+
+          <div v-if="message.streaming && !message.content" class="typing-dots" :aria-label="$t('chat.thinking')">
+            <i /><i /><i />
+          </div>
+          <div v-else-if="message.role === 'user'" class="agent-text" v-text="message.content" />
+          <div
+            v-else-if="['reminder', 'task_relative_reminder'].includes(message.metadata?.source)"
+            class="agent-text"
+            v-text="message.content"
+          />
+          <div
+            v-else
+            :key="`markdown-${index}-${message.streaming ? 1 : 0}`"
+            class="agent-markdown"
+            v-html="renderMarkdown(message.content)"
+          />
+
+          <div v-if="message.role === 'assistant' && message.credits" class="agent-message-meta">
+            <v-icon icon="mdi-lightning-bolt-outline" size="11" />
             {{ creditLabel(message) }} {{ $t('chat.creditsUnit') }}
           </div>
+          <v-btn
+            v-if="message.failed"
+            size="x-small"
+            variant="tonal"
+            color="primary"
+            prepend-icon="mdi-restore"
+            class="mt-2"
+            @click="restoreFailedDraft(index)"
+          >
+            {{ $t('chat.restoreDraft') }}
+          </v-btn>
         </div>
-      </div>
+      </article>
     </div>
 
     <div v-if="contextLabel" class="agent-context">
@@ -163,46 +191,37 @@
       <span>{{ contextLabel }}</span>
     </div>
 
-    <div
-      class="agent-panel__composer"
-      :class="{ 'agent-panel__composer--drag': dragActive }"
-      @dragover.prevent="onDragOver"
-      @dragenter.prevent="dragActive = true"
-      @dragleave="onDragLeave"
-      @drop.prevent="onDrop"
-    >
-      <!-- 已选图片预览 -->
-      <div v-if="selectedImages.length" class="image-preview-row">
-        <div v-for="(img, idx) in selectedImages" :key="idx" class="image-preview-thumb">
-          <img :src="img.dataUrl" alt="preview" />
-          <button type="button" class="image-remove-btn" @click="removeImage(idx)" aria-label="移除图片">
+    <div class="agent-composer" :class="{ 'agent-composer--drag': dragActive }">
+      <div v-if="selectedImages.length" class="composer-images">
+        <div v-for="(image, index) in selectedImages" :key="index">
+          <img :src="image.dataUrl" :alt="$t('chat.imageNumber', { n: index + 1 })" />
+          <button type="button" :aria-label="$t('chat.removeImage')" @click="removeImage(index)">
             <v-icon icon="mdi-close" size="12" />
           </button>
         </div>
       </div>
-      <div class="composer-row">
-        <input
-          ref="imageInput"
-          type="file"
-          accept="image/*"
-          multiple
-          style="display:none"
-          @change="onImagesSelected"
-        />
+      <div
+        class="agent-composer__row"
+        @dragover.prevent="onDragOver"
+        @dragenter.prevent="dragActive = true"
+        @dragleave="onDragLeave"
+        @drop.prevent="onDrop"
+      >
+        <input ref="imageInput" class="visually-hidden" type="file" accept="image/*" multiple @change="onImagesSelected" />
         <v-btn
           icon="mdi-image-outline"
           variant="text"
           size="small"
+          :aria-label="$t('chat.addImage')"
           :disabled="loading || selectedImages.length >= 5"
-          :color="selectedImages.length ? 'deep-purple' : undefined"
-          @click="$refs.imageInput.click()"
+          @click="imageInput?.click()"
         />
         <v-textarea
           v-model="input"
           :placeholder="$t('agent.placeholder')"
           rows="1"
-          auto-grow
           max-rows="5"
+          auto-grow
           variant="solo-filled"
           flat
           hide-details
@@ -212,158 +231,45 @@
         />
         <v-btn
           :icon="loading ? 'mdi-stop' : 'mdi-arrow-up'"
-          :color="loading ? 'grey' : 'primary'"
-          variant="flat"
+          :color="loading ? undefined : 'primary'"
+          :variant="loading ? 'outlined' : 'flat'"
+          :aria-label="loading ? $t('chat.stop') : $t('chat.send')"
           :disabled="!loading && !input.trim() && !selectedImages.length"
           @click="loading ? stopGeneration() : sendMessage()"
         />
       </div>
+      <small>{{ $t('agent.note') }}</small>
     </div>
-    <div class="agent-panel__note">{{ $t('agent.note') }}</div>
 
-    <!-- 图片大图预览 -->
-    <v-dialog v-model="previewOpen" max-width="85vw" @click:outside="previewOpen = false">
-      <v-img :src="previewUrl" contain max-height="80vh" style="border-radius: 12px;" />
+    <v-dialog v-model="previewOpen" max-width="min(900px, 92vw)" @click:outside="previewOpen = false">
+      <v-card class="agent-image-dialog">
+        <v-btn icon="mdi-close" variant="tonal" :aria-label="$t('common.close')" @click="previewOpen = false" />
+        <v-img :src="previewUrl" contain max-height="82vh" />
+      </v-card>
     </v-dialog>
-  </div>
+  </section>
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { api, authFetch } from '@/stores/auth'
-import { notifyTasksChanged } from '@/services/taskSync'
-import { compressImageFile } from '@/services/imageCompress'
-import { getPreferences } from '@/services/reminders'
-import {
-  messageRoleCardSlug,
-  onRoleCardChanged,
-} from '@/services/roleCardVisuals'
 import RoleCardAvatar from '@/components/RoleCardAvatar.vue'
-import MarkdownIt from 'markdown-it'
-import katex from 'katex'
-import 'katex/dist/katex.min.css'
+import { useChatSession } from '@/composables/useChatSession'
+import { api } from '@/stores/auth'
+import { messageRoleCardSlug } from '@/services/roleCardVisuals'
+import { notifyTasksChanged } from '@/services/taskSync'
 
-// 开启 html 允许 KaTeX 生成的 HTML 嵌入
-const md = new MarkdownIt({ html: true, breaks: true, linkify: true })
-
-/** 将 LaTeX 公式渲染为 KaTeX HTML */
-function renderMath(text) {
-  // 块级 $$...$$
-  text = text.replace(/\$\$([\s\S]+?)\$\$/g, (m, tex) => {
-    try { return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false }) } catch { return m }
-  })
-  // 块级 \[...\]
-  text = text.replace(/\\\[([\s\S]+?)\\\]/g, (m, tex) => {
-    try { return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false }) } catch { return m }
-  })
-  // 行内 \(...\)
-  text = text.replace(/\\\(([\s\S]+?)\\\)/g, (m, tex) => {
-    try { return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false }) } catch { return m }
-  })
-  // 行内 $...$
-  text = text.replace(/(?<!\\)\$([^$\n]+?)\$/g, (m, tex) => {
-    try { return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false }) } catch { return m }
-  })
-  return text
-}
-
-/** Markdown + LaTeX 渲染（剥离末尾 JSON 任务块） */
-function renderMarkdown(text) {
-  try {
-    let clean = text.replace(/```json[\s\S]*?```\s*$/, '').trim()
-    // 修复：LLM 经常在有序列表标记 "1." / "1)" 后换行，
-    // 配合 markdown-it 的 breaks:true 会变成 <br>，导致数字单独一行。
-    clean = clean.replace(/^(\s*\d+[.)])\s*\n/gm, '$1 ')
-    return md.render(renderMath(clean))
-  } catch {
-    return text
-  }
-}
-
-/** 流式中实时估算 token：中文 1 字 ≈ 1 token，其他字符 ≈ 4 字/token（结束时会用 API 真实值替换） */
-function estimateTokens(text) {
-  if (!text) return 0
-  let cjk = 0
-  let other = 0
-  for (const ch of text) {
-    if (/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(ch)) cjk++
-    else other++
-  }
-  return Math.max(1, Math.round(cjk + other / 4))
-}
-
-/** token → 积分：1000 token = 1 积分，向上取整、最少 1（与后端 billing.credits_for_tokens 一致） */
-function tokensToCredits(tokens) {
-  if (!tokens || tokens <= 0) return 0
-  return Math.max(1, Math.ceil(tokens / 1000))
-}
-
-/** 渲染积分标签：流式中显示估算值（≈ 前缀），结束后显示后端下发的权威值 */
-function creditLabel(message) {
-  if (!message || !message.credits) return ''
-  return (message.creditsIsEstimate ? '≈ ' : '') + message.credits.toLocaleString()
-}
-
-const props = defineProps({
-  context: { type: Object, default: null },
-})
-
+const props = defineProps({ context: { type: Object, default: null } })
 const emit = defineEmits(['close'])
-
-const { t } = useI18n()
 const router = useRouter()
-
-/** 提醒消息 → 跳转提醒中心精确定位并关闭抽屉（只用 digest_id，不读 metadata 内的 URL/任务 ID） */
-function goReminderDetail(metadata) {
-  if (!metadata?.digest_id) return
-  emit('close')
-  router.push({ path: '/reminders', query: { tab: 'history', digest: metadata.digest_id } })
-}
-
-/** 任务级提醒消息（task_relative_reminder）→ 跳转任务页高亮对应任务并关闭抽屉 */
-function goTaskReminderDetail(metadata) {
-  if (!metadata?.task_id) return
-  emit('close')
-  router.push({ path: '/tasks', query: { focus: metadata.task_id } })
-}
-const messages = ref([])
-const input = ref('')
-const loading = ref(false)
-const messageContainer = ref(null)
-const activeConversationId = ref(null)
-const conversations = ref([])
-const selectedImages = ref([])  // [{ dataUrl, file }]
-const imageInput = ref(null)
-const dragActive = ref(false)   // 拖拽高亮状态
+const { t } = useI18n()
 const balance = ref(0)
-const previewUrl = ref('')   // 图片大图预览
-const previewOpen = ref(false)
-const activeRoleCard = ref(null)
-let controller = null
-let stopRoleCardListener = null
-
-async function loadActiveRoleCard() {
-  try {
-    const preferences = await getPreferences()
-    activeRoleCard.value = preferences?.role_card || null
-  } catch {
-    activeRoleCard.value = null
-  }
-}
-
-const suggestions = [
-  'agent.suggestion1',
-  'agent.suggestion2',
-  'agent.suggestion3',
-]
+const suggestions = ['agent.suggestion1', 'agent.suggestion2', 'agent.suggestion3']
 
 const contextLabel = computed(() => {
   if (!props.context) return ''
-  return [props.context.category, props.context.subject || props.context.title]
-    .filter(Boolean)
-    .join(' · ')
+  return [props.context.category, props.context.subject || props.context.title].filter(Boolean).join(' · ')
 })
 
 function contextualize(content) {
@@ -374,371 +280,160 @@ function contextualize(content) {
     subject: props.context.subject || null,
     title: props.context.title || null,
   }
-  return `[PROGRESS_CONTEXT]${JSON.stringify(context)}[/PROGRESS_CONTEXT]\n` +
-    `Use this exact timeline context. Only manage milestones, dates, priorities, and completion states; do not provide academic-content advice.\n\n${content}`
+  return `[PROGRESS_CONTEXT]${JSON.stringify(context)}[/PROGRESS_CONTEXT]\n`
+    + 'Use this exact timeline context. Only manage milestones, dates, priorities, and completion states; do not provide academic-content advice.\n\n'
+    + content
 }
 
 function stripContext(content) {
   return String(content || '').replace(/^\[PROGRESS_CONTEXT\][\s\S]*?\[\/PROGRESS_CONTEXT\]\n[^\n]*\n\n/, '')
 }
 
-/** 加载积分余额（头部显示） */
 async function loadBalance() {
   try {
     const data = await api('/api/billing/summary')
     balance.value = data?.balance || 0
   } catch {
-    /* ignore */
+    balance.value = 0
   }
 }
 
-/** 点击余额 → 跳转充值页 */
-function goBilling() {
-  router.push('/billing')
+async function afterMessageComplete() {
+  notifyTasksChanged()
+  await loadBalance()
 }
 
-async function scrollToBottom() {
-  await nextTick()
-  if (messageContainer.value) messageContainer.value.scrollTop = messageContainer.value.scrollHeight
-}
+const {
+  activeConversationId,
+  activeRoleCard,
+  conversations,
+  creditLabel,
+  deleteConversation,
+  dragActive,
+  historyError,
+  historyLoading,
+  imageInput,
+  input,
+  loadConversations,
+  loading,
+  messageContainer,
+  messages,
+  newConversation,
+  onDragLeave,
+  onDragOver,
+  onDrop,
+  onImagesSelected,
+  onPaste,
+  previewImage,
+  previewOpen,
+  previewUrl,
+  removeImage,
+  renderMarkdown,
+  restoreFailedDraft,
+  retryHistory,
+  selectedImages,
+  sendMessage,
+  stopGeneration,
+  switchConversation,
+} = useChatSession({
+  prepareContent: contextualize,
+  sanitizeHistoryContent: stripContext,
+  afterMessageComplete,
+})
 
-function useSuggestion(value) {
-  input.value = t(value)
+function sendSuggestion(key) {
+  input.value = t(key)
   sendMessage()
 }
 
-// ---- 对话窗口管理 ----
-
-async function loadConversations() {
-  try {
-    const data = await api('/api/chat/conversations')
-    conversations.value = data?.conversations || []
-  } catch {
-    conversations.value = []
-  }
+function goBilling() {
+  emit('close')
+  router.push('/billing')
 }
 
-/** 新建对话：清空消息区，下次发送时自动创建 conversation */
-function newConversation() {
-  if (loading.value) return
-  activeConversationId.value = null
-  messages.value = []
-  selectedImages.value = []
+function goReminderDetail(metadata) {
+  if (!metadata?.digest_id) return
+  emit('close')
+  router.push({ path: '/reminders', query: { tab: 'history', digest: metadata.digest_id } })
 }
 
-// ---- 图片上传（选图 / 拖拽 / 粘贴统一入口） ----
-
-/** 只接受图片文件 */
-function isImageFile(file) {
-  return file && file.type && file.type.startsWith('image/')
+function goTaskReminderDetail(metadata) {
+  if (!metadata?.task_id) return
+  emit('close')
+  router.push({ path: '/tasks', query: { focus: metadata.task_id } })
 }
 
-/** 将文件压缩后转 base64 加入待发送列表（最多 5 张） */
-async function addFiles(files) {
-  const imgFiles = Array.from(files || []).filter(isImageFile)
-  const remaining = 5 - selectedImages.value.length
-  if (remaining <= 0) return
-  const batch = imgFiles.slice(0, remaining)
-  // 逐张异步压缩（不阻塞 UI），压缩完成后依次加入
-  for (const file of batch) {
-    try {
-      const dataUrl = await compressImageFile(file)
-      // 并行压缩期间用户可能已移除/添加，这里按剩余容量兜底
-      if (selectedImages.value.length >= 5) break
-      selectedImages.value.push({ dataUrl, file })
-    } catch {
-      // 单张压缩失败静默跳过，不影响其他图片
-    }
-  }
-}
-
-function onImagesSelected(e) {
-  addFiles(e.target.files || [])
-  // 重置 input 以便重复选择同一文件
-  if (imageInput.value) imageInput.value.value = ''
-}
-
-/** 拖拽悬停：保持高亮 */
-function onDragOver() {
-  dragActive.value = true
-}
-
-/** 拖拽离开：真正离开整个输入区才取消高亮（避免子元素间闪烁） */
-function onDragLeave(e) {
-  if (!e.currentTarget.contains(e.relatedTarget)) dragActive.value = false
-}
-
-/** 松开拖拽：将图片加入待发送列表 */
-function onDrop(e) {
-  dragActive.value = false
-  if (loading.value) return
-  if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files)
-}
-
-/** 粘贴图片（如截图）：仅在有图片时拦截，纯文本粘贴不受影响 */
-function onPaste(e) {
-  const files = e.clipboardData?.files
-  if (!files || !files.length) return
-  if (Array.from(files).some(isImageFile)) {
-    e.preventDefault()
-    addFiles(files)
-  }
-}
-
-function removeImage(idx) {
-  selectedImages.value.splice(idx, 1)
-}
-
-/** 点击历史/发送的图片 → 大图预览 */
-function previewImage(url) {
-  previewUrl.value = url
-  previewOpen.value = true
-}
-
-/** 切换对话：加载该对话的历史消息 */
-async function switchConversation(convId) {
-  if (loading.value) return
-  activeConversationId.value = convId
-  messages.value = []
-  try {
-    const data = await api(`/api/chat/history?conversation_id=${convId}`)
-    messages.value = (data?.messages || []).map((item) => ({
-      role: item.role,
-      content: item.role === 'user' ? stripContext(item.content) : item.content,
-      credits: tokensToCredits(item.token),
-      creditsIsEstimate: false,
-      images: item.images || null,
-      metadata: item.metadata || null,
-    }))
-    await scrollToBottom()
-  } catch {
-    messages.value = []
-  }
-}
-
-/** 删除对话 */
-async function deleteConversation(convId) {
-  try {
-    await api(`/api/chat/conversations/${convId}`, { method: 'DELETE' })
-    conversations.value = conversations.value.filter(c => c.id !== convId)
-    if (activeConversationId.value === convId) {
-      activeConversationId.value = null
-      messages.value = []
-    }
-  } catch { /* ignore */ }
-}
-
-async function sendMessage() {
-  const content = input.value.trim()
-  const hasImages = selectedImages.value.length > 0
-  if ((!content && !hasImages) || loading.value) return
-
-  // 先取出待发送图片（挂到用户消息上，气泡里永久显示）
-  const images = selectedImages.value.map(img => img.dataUrl)
-  messages.value.push({ role: 'user', content, images: images.length ? [...images] : null })
-  messages.value.push({
-    role: 'assistant',
-    content: '',
-    streaming: true,
-    metadata: activeRoleCard.value?.slug
-      ? { source: 'main_agent', role_card: { slug: activeRoleCard.value.slug } }
-      : null,
-  })
-  const responseIndex = messages.value.length - 1
-  input.value = ''
-  selectedImages.value = []
-  loading.value = true
-  await scrollToBottom()
-
-  try {
-    // 没有对话时先创建一个（避免每次发送都新建窗口）
-    if (!activeConversationId.value) {
-      const convData = await api('/api/chat/conversations', {
-        method: 'POST',
-      })
-      activeConversationId.value = convData?.id || null
-    }
-    controller = new AbortController()
-    const body = { content: contextualize(content), conversation_id: activeConversationId.value }
-    if (images.length) body.images = images
-    const response = await authFetch('/api/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    })
-    // 余额不足：给出明确提示（特殊错误码，catch 里不覆盖该文案）
-    if (response.status === 402) {
-      messages.value[responseIndex].content = t('billing.insufficient')
-      throw new Error('INSUFFICIENT_BALANCE')
-    }
-    if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        const payload = line.slice(6)
-        if (!payload || payload === '[DONE]') continue
-        try {
-          const parsed = JSON.parse(payload)
-          // 流式结束事件：携带本轮真实 token 与后端换算的积分（权威值替换估算值）
-          if (parsed && typeof parsed === 'object' && parsed.done) {
-            if (parsed.credits || parsed.tokens) {
-              messages.value[responseIndex].credits = parsed.credits || tokensToCredits(parsed.tokens)
-              messages.value[responseIndex].creditsIsEstimate = false
-            }
-            continue
-          }
-          const chunk = typeof parsed === 'string' ? parsed : (parsed.error || '')
-          messages.value[responseIndex].content += chunk
-          // 实时估算积分，让数字随生成过程增长（结束时用后端权威值替换）
-          messages.value[responseIndex].credits = tokensToCredits(estimateTokens(messages.value[responseIndex].content))
-          messages.value[responseIndex].creditsIsEstimate = true
-        } catch {
-          messages.value[responseIndex].content += payload
-          messages.value[responseIndex].credits = tokensToCredits(estimateTokens(messages.value[responseIndex].content))
-          messages.value[responseIndex].creditsIsEstimate = true
-        }
-      }
-      await scrollToBottom()
-    }
-  } catch (error) {
-    if (error.name !== 'AbortError' && error.message !== 'INSUFFICIENT_BALANCE') {
-      messages.value[responseIndex].content = t('agent.connectError')
-    }
-  } finally {
-    // 用新对象替换，强制 Vue 重新渲染 v-html（修复流式结束后 markdown 不重渲染）
-    const old = messages.value[responseIndex]
-    messages.value[responseIndex] = { ...old, streaming: false }
-    loading.value = false
-    controller = null
-    // A read-only refresh is cheap and guarantees timeline pages reflect tool mutations,
-    // including update_task/update_subtask status messages from different providers.
-    notifyTasksChanged()
-    // 刷新对话列表，让新对话出现在历史里
-    await loadConversations()
-    await loadBalance()  // 扣费后刷新余额
-    await scrollToBottom()
-  }
-}
-
-function stopGeneration() {
-  controller?.abort()
-  loading.value = false
-}
-
-async function loadHistory() {
-  await loadConversations()
-  // 自动选中最近一个对话；没有对话则保持空（发消息时自动新建）
-  if (conversations.value.length > 0) {
-    await switchConversation(conversations.value[0].id)
-  } else {
-    messages.value = []
-  }
-}
-
-onMounted(() => {
-  stopRoleCardListener = onRoleCardChanged((roleCard) => {
-    activeRoleCard.value = roleCard
-  })
-  loadActiveRoleCard()
-  loadHistory()
-  loadBalance()
-})
-
-onBeforeUnmount(() => stopRoleCardListener?.())
+onMounted(loadBalance)
 </script>
 
 <style scoped>
-.reminder-banner { display: flex; align-items: center; gap: 6px; padding-bottom: 8px; }
-.reminder-plain-text { white-space: pre-wrap; line-height: 1.7; }
-.agent-panel { height: 100%; display: flex; flex-direction: column; background: #fff; }
-.agent-panel__header { display: flex; align-items: center; justify-content: space-between; padding: 20px; border-bottom: 1px solid #edf0f6; }
-.agent-avatar { box-shadow: 0 8px 18px rgba(50, 101, 245, .25); }
-.agent-status { display: flex; align-items: center; gap: 5px; margin-top: 2px; color: #8b95a8; font-size: 11px; }
-.agent-status span { width: 6px; height: 6px; border-radius: 50%; background: #2bb978; box-shadow: 0 0 0 3px rgba(43,185,120,.12); }
-.agent-status-line { display: flex; align-items: center; gap: 8px; }
-.balance-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  margin-top: 2px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  color: #4169e8;
-  background: #eef2ff;
-  font-size: 10.5px;
-  font-weight: 650;
-  cursor: pointer;
-  transition: background .15s;
-}
-.balance-pill:hover { background: #e2e9ff; }
-.balance-pill--low { color: #d4552e; background: #fff0ea; }
-.balance-pill--low:hover { background: #ffe6dc; }
-.agent-panel__messages { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 18px; background: linear-gradient(180deg, #fafbfe 0, #fff 35%); }
-.agent-context { display: flex; align-items: center; gap: 7px; margin: 8px 14px 0; padding: 8px 11px; border-radius: 11px; color: #4662bd; background: #eef2ff; font-size: 11px; font-weight: 700; }
-.agent-welcome { min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.agent-welcome__icon { width: 62px; height: 62px; display: grid; place-items: center; border-radius: 20px; background: #eef2ff; color: #4169e8; }
-.agent-welcome button { width: 100%; margin-top: 10px; padding: 11px 13px; border: 1px solid #e5e9f2; border-radius: 12px; color: #46516a; background: white; text-align: left; cursor: pointer; font-size: 12px; transition: border .15s, background .15s; }
-.agent-welcome button:first-of-type { margin-top: 22px; }
-.agent-welcome button:hover { border-color: #aab9f4; background: #f7f8ff; }
-.agent-message { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 16px; }
+.agent-panel { height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto auto; overflow: hidden; color: var(--ib-text); background: var(--ib-surface); }
+.agent-header { display: flex; align-items: center; gap: 9px; min-height: 64px; padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--ib-border); }
+.agent-identity { display: grid; min-width: 0; gap: 3px; }
+.agent-identity > strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.agent-identity > div { display: flex; align-items: center; gap: 8px; }
+.agent-status { display: inline-flex; align-items: center; gap: 5px; color: var(--ib-text-muted); font-size: 9px; }
+.agent-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--ib-success); }
+.balance-pill { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border: 1px solid var(--ib-border); border-radius: 999px; color: var(--ib-primary-strong); background: var(--ib-primary-soft); cursor: pointer; font-size: 9px; font-weight: 700; }
+.balance-pill--low { color: var(--ib-warning); background: color-mix(in srgb, var(--ib-warning) 10%, var(--ib-surface)); }
+.agent-alert { margin: 8px 10px 0; }
+.agent-messages { min-height: 0; overflow-y: auto; padding: 18px 16px; }
+.agent-welcome { display: grid; min-height: 100%; place-items: center; align-content: center; gap: 9px; color: var(--ib-text-secondary); text-align: center; }
+.agent-welcome__icon { display: grid; width: 58px; height: 58px; place-items: center; border-radius: 18px; color: var(--ib-primary-strong); background: var(--ib-primary-soft); }
+.agent-welcome strong { margin-top: 4px; color: var(--ib-text); font-size: 15px; }
+.agent-welcome p { max-width: 330px; margin: 0 0 8px; font-size: 10px; line-height: 1.5; }
+.agent-welcome > button { width: min(100%, 360px); display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 11px; border: 1px solid var(--ib-border); border-radius: var(--ib-radius-sm); color: var(--ib-text-secondary); background: var(--ib-surface); cursor: pointer; text-align: left; font-size: 10px; }
+.agent-welcome > button:hover { border-color: var(--ib-primary); color: var(--ib-primary-strong); background: var(--ib-primary-soft); }
+.agent-message { display: flex; align-items: flex-start; gap: 7px; margin-bottom: 13px; }
 .agent-message--user { justify-content: flex-end; }
-.agent-bubble { max-width: 84%; padding: 11px 13px; border-radius: 5px 15px 15px 15px; background: #f0f2f7; color: #28334b; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.55; }
-.agent-message--user .agent-bubble { border-radius: 15px 15px 5px 15px; color: #fff; background: #315fdf; }
-.agent-bubble--md { max-width: 92%; background: transparent; padding: 0; }
-.agent-text { white-space: pre-wrap; word-break: break-word; }
-.agent-images { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-.agent-img { width: 116px; height: 116px; object-fit: cover; border-radius: 10px; cursor: zoom-in; border: 1px solid rgba(0,0,0,.08); }
-.agent-img:hover { opacity: .92; }
-.agent-md { padding: 11px 13px; border-radius: 5px 15px 15px 15px; background: #f0f2f7; color: #28334b; word-break: break-word; font-size: 13px; line-height: 1.55; }
-.agent-token-meta {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 3px;
-  padding: 4px 13px 0;
-  color: #9aa3b5;
-  font-size: 10.5px;
-  font-weight: 500;
+.agent-bubble { max-width: 86%; overflow: hidden; border: 1px solid var(--ib-border); border-radius: var(--ib-radius-md); color: var(--ib-text); background: var(--ib-surface); }
+.agent-message--user .agent-bubble { border-color: color-mix(in srgb, var(--ib-primary) 30%, var(--ib-border)); background: var(--ib-primary-soft); }
+.agent-text, .agent-markdown, .typing-dots { padding: 10px 12px; font-size: 11px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-message-context { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 9px; border-bottom: 1px solid var(--ib-border); color: var(--ib-primary-strong); font-size: 9px; font-weight: 700; }
+.agent-message-context .v-btn { margin-left: auto; }
+.typing-dots { display: flex; gap: 4px; }
+.typing-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--ib-primary); animation: typing 1s ease-in-out infinite; }
+.typing-dots i:nth-child(2) { animation-delay: .14s; }
+.typing-dots i:nth-child(3) { animation-delay: .28s; }
+@keyframes typing { 0%, 60%, 100% { opacity: .35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
+.agent-images { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; padding: 8px 8px 0; }
+.agent-images button { overflow: hidden; padding: 0; border: 1px solid var(--ib-border); border-radius: 8px; background: transparent; cursor: zoom-in; }
+.agent-images img { display: block; width: 105px; height: 78px; object-fit: cover; }
+.agent-message-meta { display: flex; align-items: center; justify-content: flex-end; gap: 3px; padding: 5px 8px; border-top: 1px solid var(--ib-border); color: var(--ib-text-muted); font-size: 8px; }
+.agent-markdown :deep(p) { margin: 0 0 .7em; }
+.agent-markdown :deep(p:last-child) { margin-bottom: 0; }
+.agent-markdown :deep(pre) { max-width: 100%; overflow-x: auto; padding: 9px; border-radius: 7px; background: var(--ib-surface-subtle); }
+.agent-markdown :deep(code) { font-family: 'SFMono-Regular', Consolas, monospace; font-size: .9em; }
+.agent-markdown :deep(a) { color: var(--ib-primary-strong); }
+.agent-markdown :deep(.katex-display) { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+.agent-context { display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-top: 1px solid var(--ib-border); color: var(--ib-primary-strong); background: var(--ib-primary-soft); font-size: 9px; }
+.agent-context span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-composer { padding: 10px 12px 8px; border-top: 1px solid var(--ib-border); background: var(--ib-surface); }
+.agent-composer__row { display: flex; align-items: flex-end; gap: 5px; padding: 5px; border: 1px solid var(--ib-border-strong); border-radius: var(--ib-radius-md); background: var(--ib-surface-subtle); }
+.agent-composer__row:focus-within, .agent-composer--drag .agent-composer__row { border-color: var(--ib-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ib-primary) 14%, transparent); }
+.agent-composer__row :deep(.v-field) { background: transparent !important; box-shadow: none !important; }
+.agent-composer > small { display: block; margin-top: 6px; color: var(--ib-text-muted); font-size: 8px; text-align: center; }
+.composer-images { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 7px; }
+.composer-images > div { position: relative; }
+.composer-images img { display: block; width: 54px; height: 54px; border: 1px solid var(--ib-border); border-radius: 8px; object-fit: cover; }
+.composer-images button { position: absolute; top: -4px; right: -4px; display: grid; width: 18px; height: 18px; place-items: center; padding: 0; border: 1px solid var(--ib-border); border-radius: 50%; color: var(--ib-text); background: var(--ib-surface); cursor: pointer; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.agent-history-menu__title { display: flex; align-items: baseline; justify-content: space-between; padding: 13px 14px; }
+.agent-history-menu__title strong { color: var(--ib-text); font-size: 12px; }
+.agent-history-menu__title small { color: var(--ib-text-muted); font-size: 9px; }
+.agent-history-list { max-height: 320px; overflow-y: auto; padding: 6px; }
+.agent-history-list > button { width: 100%; display: grid; grid-template-columns: 18px minmax(0, 1fr) 28px; align-items: center; gap: 7px; padding: 7px; border: 0; border-radius: 8px; color: var(--ib-text-secondary); background: transparent; cursor: pointer; text-align: left; }
+.agent-history-list > button:hover { background: var(--ib-surface-subtle); }
+.agent-history-list > button.active { color: var(--ib-primary-strong); background: var(--ib-primary-soft); }
+.agent-history-list > button > span { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.agent-history-empty { padding: 30px 16px; color: var(--ib-text-muted); font-size: 10px; text-align: center; }
+.agent-image-dialog { position: relative; overflow: hidden; }
+.agent-image-dialog > .v-btn { position: absolute; z-index: 1; top: 9px; right: 9px; }
+
+@media (max-width: 520px) {
+  .agent-header { padding-left: 12px; }
+  .agent-identity .agent-status { display: none; }
+  .agent-messages { padding: 14px 10px; }
+  .agent-bubble { max-width: 90%; }
 }
-.agent-md :deep(p) { margin-bottom: 6px; }
-.agent-md :deep(p:last-child) { margin-bottom: 0; }
-.agent-md :deep(h1), .agent-md :deep(h2), .agent-md :deep(h3), .agent-md :deep(h4) { margin: 10px 0 6px; font-weight: 700; }
-.agent-md :deep(h1) { font-size: 17px; } .agent-md :deep(h2) { font-size: 15px; } .agent-md :deep(h3) { font-size: 14px; }
-.agent-md :deep(ul), .agent-md :deep(ol) { padding-left: 18px; margin: 4px 0; }
-.agent-md :deep(li) { margin: 2px 0; }
-.agent-md :deep(code) { background: #e8eaf2; padding: 1px 5px; border-radius: 4px; font-size: .88em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.agent-md :deep(pre) { background: #1e2430; color: #e6e9f0; padding: 10px 12px; border-radius: 8px; overflow-x: auto; margin: 6px 0; }
-.agent-md :deep(pre code) { background: transparent; color: inherit; padding: 0; }
-.agent-md :deep(blockquote) { border-left: 3px solid #b9c4e8; margin: 6px 0; padding: 2px 10px; color: #5a6480; background: #f7f8fc; }
-.agent-md :deep(table) { border-collapse: collapse; margin: 6px 0; width: 100%; font-size: 12px; }
-.agent-md :deep(th), .agent-md :deep(td) { border: 1px solid #d8dde8; padding: 5px 8px; text-align: left; }
-.agent-md :deep(th) { background: #eef1f8; font-weight: 600; }
-.agent-md :deep(tr:nth-child(even) td) { background: #f8f9fc; }
-.agent-md :deep(a) { color: #315fdf; }
-.agent-md :deep(.katex) { font-size: 1.05em; }
-.agent-panel__composer { display: flex; flex-direction: column; gap: 0; margin: 12px 14px 6px; padding: 8px; border: 1px solid #dfe4ee; border-radius: 18px; background: #f8f9fc; transition: border-color .15s, background .15s, box-shadow .15s; }
-.agent-panel__composer--drag { border-color: #315fdf; background: #f2f6ff; box-shadow: 0 0 0 3px rgba(49,95,223,.14); }
-.image-preview-row { display: flex; gap: 8px; padding: 0 4px 8px 4px; overflow-x: auto; }
-.image-preview-thumb { position: relative; width: 56px; height: 56px; flex: 0 0 auto; border-radius: 10px; overflow: hidden; border: 1px solid #dfe4ee; }
-.image-preview-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.image-remove-btn { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(0,0,0,.45); color: #fff; cursor: pointer; padding: 0; }
-.composer-row { display: flex; align-items: flex-end; gap: 10px; }
-.agent-panel__note { padding: 0 20px 12px; color: #a0a7b5; text-align: center; font-size: 10px; }
-.typing-dots { display: flex; gap: 4px; padding: 4px 2px; }
-.typing-dots i { width: 6px; height: 6px; border-radius: 50%; background: #8590a6; animation: dotPulse 1s infinite alternate; }
-.typing-dots i:nth-child(2) { animation-delay: .2s; }
-.typing-dots i:nth-child(3) { animation-delay: .4s; }
-@keyframes dotPulse { to { opacity: .25; transform: translateY(-2px); } }
 </style>

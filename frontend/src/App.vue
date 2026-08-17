@@ -155,7 +155,7 @@
         width="370"
         class="workspace-drawer task-drawer"
       >
-        <TaskDrawer @close="taskDrawer = false" />
+        <TaskDrawer v-if="taskDrawer" @close="taskDrawer = false" />
       </v-navigation-drawer>
 
       <v-navigation-drawer
@@ -166,7 +166,7 @@
         :width="agentDrawerWidth"
         class="workspace-drawer agent-drawer"
       >
-        <AgentDrawer :context="agentContext" @close="agentDrawer = false" />
+        <AgentDrawer v-if="agentDrawer" :context="agentContext" @close="agentDrawer = false" />
         <div
           class="agent-resizer"
           role="separator"
@@ -192,17 +192,18 @@
         </router-view>
       </v-main>
 
-      <SettingsDialog v-model="settingsOpen" :initial-section="settingsSection" @logout="handleLogout" />
+      <SettingsDialog v-if="settingsOpen" v-model="settingsOpen" :initial-section="settingsSection" @logout="handleLogout" />
 
       <!-- 顶栏"导入角色卡"直达：打开选择器并自动展开导入区 -->
       <RoleCardPicker
+        v-if="stylePickerOpen"
         v-model="stylePickerOpen"
         :cards="styleCards"
         :selected-id="styleSelectedId"
         open-import
         @select="selectStyle"
         @imported="onStyleImported"
-        @unauthorized="handleLogout"
+        @unauthorized="handleUnauthorized"
       />
     </template>
 
@@ -217,15 +218,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useTheme } from 'vuetify'
 import { api, onUnauthorized, useAuth } from '@/stores/auth'
-import TaskDrawer from '@/components/TaskDrawer.vue'
-import AgentDrawer from '@/components/AgentDrawer.vue'
-import SettingsDialog from '@/components/SettingsDialog.vue'
-import RoleCardPicker from '@/components/RoleCardPicker.vue'
 import WorkspaceNavigation from '@/components/WorkspaceNavigation.vue'
 import GlobalFeedback from '@/components/GlobalFeedback.vue'
 import { onTasksChanged } from '@/services/taskSync'
@@ -236,6 +233,11 @@ import { notifyRoleCardChanged } from '@/services/roleCardVisuals'
 import { initializeTheme } from '@/services/theme'
 import { notify } from '@/services/feedback'
 import { flattenTasks } from '@/utils/tasks'
+
+const TaskDrawer = defineAsyncComponent(() => import('@/components/TaskDrawer.vue'))
+const AgentDrawer = defineAsyncComponent(() => import('@/components/AgentDrawer.vue'))
+const SettingsDialog = defineAsyncComponent(() => import('@/components/SettingsDialog.vue'))
+const RoleCardPicker = defineAsyncComponent(() => import('@/components/RoleCardPicker.vue'))
 
 const router = useRouter()
 const route = useRoute()
@@ -416,7 +418,9 @@ watch(styleMenuOpen, async (open) => {
     notifyRoleCardChanged(prefs?.role_card || null)
     styleLoaded.value = true
   } catch (err) {
-    if (err instanceof ApiError && err.status === 401) handleLogout()
+    if (!(err instanceof ApiError && err.status === 401)) {
+      notify(err?.message || t('reminders.loadFailed'), { type: 'error' })
+    }
   } finally {
     styleLoading.value = false
   }
@@ -437,7 +441,9 @@ async function selectStyle(id) {
     notifyRoleCardChanged(updated?.role_card || null)
     styleMenuOpen.value = false
   } catch (err) {
-    if (err instanceof ApiError && err.status === 401) handleLogout()
+    if (!(err instanceof ApiError && err.status === 401)) {
+      notify(err?.message || t('reminders.saveFailed'), { type: 'error' })
+    }
   } finally {
     styleSaving.value = false
   }
@@ -464,7 +470,9 @@ async function onStyleImported(newId) {
     styleCards.value = Array.isArray(cards) ? cards : cards?.items || []
     if (newId != null) await selectStyle(newId)
   } catch (err) {
-    if (err instanceof ApiError && err.status === 401) handleLogout()
+    if (!(err instanceof ApiError && err.status === 401)) {
+      notify(err?.message || t('reminders.loadFailed'), { type: 'error' })
+    }
   }
 }
 
