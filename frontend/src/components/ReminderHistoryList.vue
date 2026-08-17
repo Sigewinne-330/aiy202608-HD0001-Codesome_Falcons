@@ -297,11 +297,11 @@ onMounted(reload)
 .empty-title {
   font-size: 16px;
   font-weight: 600;
-  color: #3a4254;
+  color: var(--ib-text);
   margin-top: 14px;
 }
 .empty-desc {
-  color: #8c94a3;
+  color: var(--ib-text-muted);
   font-size: 13px;
   margin-top: 6px;
   max-width: 420px;
@@ -312,7 +312,7 @@ onMounted(reload)
   margin-top: 20px;
 }
 .digest-card {
-  border: 1px solid #e8ebf0;
+  border: 1px solid var(--ib-border);
   margin-bottom: 12px;
   transition: border-color 0.2s;
 }
@@ -332,18 +332,18 @@ onMounted(reload)
 }
 .digest-subject {
   font-weight: 600;
-  color: #232a3a;
+  color: var(--ib-text);
   font-size: 14px;
 }
 .digest-meta {
   display: flex;
   gap: 10px;
-  color: #8c94a3;
+  color: var(--ib-text-muted);
   font-size: 12px;
   margin-top: 3px;
 }
 .digest-mode {
-  color: #6c7a96;
+  color: var(--ib-text-secondary);
 }
 .digest-channels {
   display: flex;
@@ -352,18 +352,18 @@ onMounted(reload)
 }
 .digest-body {
   padding: 0 18px 16px;
-  border-top: 1px solid #f0f2f5;
+  border-top: 1px solid var(--ib-border);
 }
 .reminder-plain-text {
   white-space: pre-wrap;
-  color: #3a4254;
+  color: var(--ib-text);
   font-size: 13px;
   line-height: 1.7;
   padding: 14px 0 4px;
 }
 .snapshot-list {
   margin-top: 10px;
-  border-top: 1px dashed #e8ebf0;
+  border-top: 1px dashed var(--ib-border);
   padding-top: 10px;
 }
 .snapshot-item {
@@ -373,16 +373,16 @@ onMounted(reload)
   font-size: 13px;
 }
 .snapshot-title {
-  color: #2e3545;
+  color: var(--ib-text);
 }
 .snapshot-due {
-  color: #8c94a3;
+  color: var(--ib-text-muted);
   font-size: 12px;
   margin-left: 8px;
 }
 .delivery-error {
   margin-top: 8px;
-  color: #b26a00;
+  color: var(--ib-text);
   font-size: 12px;
 }
 .load-more {

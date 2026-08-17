@@ -201,24 +201,24 @@ function removeOffset(m) {
   align-items: center;
   gap: 4px;
   padding: 4px 11px;
-  border: 1px solid #d5dbe6;
+  border: 1px solid var(--ib-border);
   border-radius: 999px;
-  background: #fff;
-  color: #5a6579;
+  background: var(--ib-surface);
+  color: var(--ib-text-secondary);
   font-size: 12.5px;
   font-weight: 550;
   cursor: pointer;
   transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
 .offsets-preset:hover:not(:disabled) {
-  border-color: #9db8f0;
-  color: #3567d6;
+  border-color: var(--ib-border-strong);
+  color: var(--ib-primary);
 }
 .offsets-preset--on,
 .offsets-preset--on:hover:not(:disabled) {
-  background: #3567d6;
-  border-color: #3567d6;
-  color: #fff;
+  background: var(--ib-primary);
+  border-color: var(--ib-primary);
+  color: var(--ib-on-primary);
 }
 .offsets-preset:disabled {
   opacity: 0.45;
@@ -251,13 +251,13 @@ function removeOffset(m) {
   align-items: center;
   gap: 5px;
   padding: 5px 12px;
-  border: 1px solid #d5dbe6;
+  border: 1px solid var(--ib-border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--ib-surface);
   transition: border-color 0.14s ease;
 }
 .offsets-dur:focus-within {
-  border-color: #3567d6;
+  border-color: var(--ib-primary);
 }
 .offsets-dur__field {
   width: 40px;
@@ -266,7 +266,7 @@ function removeOffset(m) {
   background: transparent;
   font-size: 15px;
   font-weight: 700;
-  color: #232a3a;
+  color: var(--ib-text);
   text-align: center;
   -moz-appearance: textfield;
   appearance: textfield;
@@ -277,18 +277,18 @@ function removeOffset(m) {
   margin: 0;
 }
 .offsets-dur__field:disabled {
-  color: #9aa5b5;
+  color: var(--ib-text-muted);
 }
 .offsets-dur__unit {
   font-size: 12px;
-  color: #8c94a3;
+  color: var(--ib-text-muted);
   margin-right: 6px;
 }
 .offsets-dur__unit:last-child {
   margin-right: 0;
 }
 .offsets-error {
-  color: #c04545;
+  color: var(--ib-danger);
   font-size: 12px;
 }
 </style>

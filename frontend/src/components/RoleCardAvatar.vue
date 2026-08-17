@@ -39,8 +39,8 @@ const resolvedTitle = computed(() => props.title || roleCardName(props.slug))
 }
 
 .role-card-avatar--image {
-  border: 1px solid rgba(37, 56, 101, 0.12);
-  background: #fff;
+  border: 1px solid var(--ib-border);
+  background: var(--ib-surface);
 }
 
 .role-card-avatar__image {

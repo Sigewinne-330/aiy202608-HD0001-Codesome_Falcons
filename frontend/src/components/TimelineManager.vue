@@ -433,40 +433,40 @@ function askAgent() {
 </script>
 
 <style scoped>
-.timeline-manager { color: #1e2942; }
+.timeline-manager { color: var(--ib-text); }
 .timeline-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
 .timeline-icon { min-width: 58px; height: 50px; display: grid; place-items: center; padding: 0 12px; border-radius: 15px; font-weight: 850; }
 .timeline-title { flex: 1; min-width: 0; }
 .timeline-title h1 { margin-top: 2px; overflow: hidden; text-overflow: ellipsis; font-size: clamp(25px, 3vw, 36px); letter-spacing: -.035em; white-space: nowrap; }
-.timeline-title p { margin-top: 4px; color: #8993a6; font-size: 12px; }
-.eyebrow { color: #4a6ce2; font-size: 10px; font-weight: 800; letter-spacing: .15em; }
+.timeline-title p { margin-top: 4px; color: var(--ib-text-muted); font-size: 12px; }
+.eyebrow { color: var(--ib-primary); font-size: 10px; font-weight: 800; letter-spacing: .15em; }
 .timeline-actions { display: flex; align-items: center; gap: 8px; }
 .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-.summary-grid .v-card { min-width: 0; padding: 18px; border: 1px solid rgba(39,53,83,.09); background: rgba(255,255,255,.94) !important; }
+.summary-grid .v-card { min-width: 0; padding: 18px; border: 1px solid var(--ib-border); background: var(--ib-surface) !important; }
 .summary-grid span, .summary-grid strong, .summary-grid small { display: block; }
-.summary-grid > .v-card > span { color: #8892a5; font-size: 10px; }
+.summary-grid > .v-card > span { color: var(--ib-text-muted); font-size: 10px; }
 .summary-grid strong { margin: 7px 0 10px; font-size: 22px; }
-.summary-grid small { overflow: hidden; color: #939cad; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.summary-grid small { overflow: hidden; color: var(--ib-text-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .summary-grid .next-date { font-size: 15px; }
-.risk-high { color: #d83d55; }.risk-medium { color: #d88924; }.risk-low { color: #249667; }
-.calendar-sync-note { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin: 12px 4px; color: #738099; font-size: 10px; }
-.milestone-card { overflow: hidden; border: 1px solid rgba(39,53,83,.09); background: rgba(255,255,255,.96) !important; }
-.milestone-card__header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 24px; border-bottom: 1px solid #edf0f5; }
-.milestone-card__header h2 { font-size: 17px; }.milestone-card__header p { margin-top: 3px; color: #929bad; font-size: 10px; }
+.risk-high { color: var(--ib-danger); }.risk-medium { color: var(--ib-warning); }.risk-low { color: var(--ib-text); }
+.calendar-sync-note { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin: 12px 4px; color: var(--ib-text-secondary); font-size: 10px; }
+.milestone-card { overflow: hidden; border: 1px solid var(--ib-border); background: var(--ib-surface) !important; }
+.milestone-card__header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 24px; border-bottom: 1px solid var(--ib-border); }
+.milestone-card__header h2 { font-size: 17px; }.milestone-card__header p { margin-top: 3px; color: var(--ib-text-muted); font-size: 10px; }
 .milestone-list { padding: 6px 0; }
 .milestone-row { position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr) auto auto auto; align-items: center; gap: 12px; min-height: 78px; padding: 10px 20px; }
-.milestone-row:hover { background: #fafbfe; }
-.milestone-row--overdue { background: rgba(223,75,93,.035); }
+.milestone-row:hover { background: var(--ib-primary-soft); }
+.milestone-row--overdue { background: color-mix(in srgb, var(--ib-danger) 4%, var(--ib-surface)); }
 .status-toggle { position: relative; z-index: 2; width: 34px; height: 34px; padding: 0; border: 0; background: transparent; cursor: pointer; }
-.timeline-rail { position: absolute; z-index: 1; left: 36px; top: 50px; bottom: -28px; width: 2px; background: #e6eaf1; }.timeline-rail--last { display: none; }
+.timeline-rail { position: absolute; z-index: 1; left: 36px; top: 50px; bottom: -28px; width: 2px; background: var(--ib-surface-subtle); }.timeline-rail--last { display: none; }
 .milestone-copy { min-width: 0; padding: 5px 0; border: 0; color: inherit; background: transparent; cursor: pointer; text-align: left; }
 .milestone-name { display: block; overflow: hidden; font-size: 13px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
-.milestone-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 7px; color: #8d97a9; font-size: 9px; }
+.milestone-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 7px; color: var(--ib-text-muted); font-size: 9px; }
 .milestone-meta > span { display: inline-flex; align-items: center; gap: 4px; }
-.priority-high, .priority-urgent { color: #ce604b; }.overdue-label { color: #d83d55; font-weight: 750; }
-.empty-timeline { min-height: 330px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 35px; color: #7f899c; text-align: center; }
-.empty-icon { width: 72px; height: 72px; display: grid; place-items: center; border-radius: 22px; color: #5271dc; background: #edf2ff; }
-.empty-timeline h3 { margin-top: 16px; color: #334059; font-size: 17px; }.empty-timeline p { max-width: 390px; margin-top: 6px; font-size: 11px; }
+.priority-high, .priority-urgent { color: var(--ib-danger); }.overdue-label { color: var(--ib-danger); font-weight: 750; }
+.empty-timeline { min-height: 330px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 35px; color: var(--ib-text-secondary); text-align: center; }
+.empty-icon { width: 72px; height: 72px; display: grid; place-items: center; border-radius: 22px; color: var(--ib-primary); background: var(--ib-primary-soft); }
+.empty-timeline h3 { margin-top: 16px; color: var(--ib-text); font-size: 17px; }.empty-timeline p { max-width: 390px; margin-top: 6px; font-size: 11px; }
 .empty-timeline > div { display: flex; gap: 9px; margin-top: 18px; }
 .dialog-title { padding: 22px 24px 8px; font-weight: 750; }.dialog-body { padding: 18px 24px 4px !important; }.dialog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.dialog-actions { padding: 12px 24px 22px; }
 @media (max-width: 900px) { .summary-grid { grid-template-columns: 1fr 1fr; }.timeline-header { align-items: flex-start; flex-wrap: wrap; }.timeline-actions { width: 100%; justify-content: flex-end; }.milestone-row { grid-template-columns: 36px minmax(0, 1fr) auto; }.milestone-row > .v-btn { display: none; } }

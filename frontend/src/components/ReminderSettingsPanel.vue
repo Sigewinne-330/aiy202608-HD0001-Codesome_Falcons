@@ -470,18 +470,18 @@ defineExpose({ save, dirty, saving, dispatchTimeValid, saveMessage, saveIsError 
   justify-content: space-between;
   gap: 24px;
   padding: 16px 0;
-  border-bottom: 1px solid #eff1f4;
+  border-bottom: 1px solid var(--ib-border);
 }
 .setting-row--top {
   align-items: flex-start;
 }
 .setting-label {
-  color: #2e3545;
+  color: var(--ib-text);
   font-size: 14px;
   font-weight: 600;
 }
 .setting-help {
-  color: #8c94a3;
+  color: var(--ib-text-muted);
   font-size: 12px;
   margin-top: 3px;
   max-width: 460px;
@@ -504,17 +504,17 @@ defineExpose({ save, dirty, saving, dispatchTimeValid, saveMessage, saveIsError 
   padding: 10px 12px;
   border-radius: 12px;
 }
-.cadence-zone--before { background: #eef4ff; }
-.cadence-zone--due { background: #fff4e5; }
-.cadence-zone--overdue { background: #fdeeee; }
+.cadence-zone--before { background: var(--ib-primary-soft); }
+.cadence-zone--due { background: color-mix(in srgb, var(--ib-warning) 13%, var(--ib-surface)); }
+.cadence-zone--overdue { background: color-mix(in srgb, var(--ib-danger) 10%, var(--ib-surface)); }
 .cadence-zone__label {
   font-size: 11px;
   font-weight: 700;
   margin-bottom: 7px;
 }
-.cadence-zone--before .cadence-zone__label { color: #3567d6; }
-.cadence-zone--due .cadence-zone__label { color: #c07a1f; }
-.cadence-zone--overdue .cadence-zone__label { color: #c04545; }
+.cadence-zone--before .cadence-zone__label { color: var(--ib-primary); }
+.cadence-zone--due .cadence-zone__label { color: var(--ib-warning); }
+.cadence-zone--overdue .cadence-zone__label { color: var(--ib-danger); }
 .cadence-zone__chips {
   display: flex;
   flex-wrap: wrap;
@@ -526,17 +526,17 @@ defineExpose({ save, dirty, saving, dispatchTimeValid, saveMessage, saveIsError 
   gap: 3px;
   padding: 3px 9px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--ib-surface);
   font-size: 12px;
   font-weight: 600;
-  color: #3a4356;
+  color: var(--ib-text);
   white-space: nowrap;
 }
-.cadence-chip .v-icon { color: #9aa5b5; }
+.cadence-chip .v-icon { color: var(--ib-text-muted); }
 .cadence-chip--custom {
-  background: #fff;
-  border: 1px dashed #e0a3a0;
-  color: #c04545;
+  background: var(--ib-surface);
+  border: 1px dashed var(--ib-danger);
+  color: var(--ib-danger);
 }
 .cadence-chip__remove {
   border: 0;
@@ -544,13 +544,13 @@ defineExpose({ save, dirty, saving, dispatchTimeValid, saveMessage, saveIsError 
   padding: 0 0 0 2px;
   font-size: 14px;
   line-height: 1;
-  color: #c04545;
+  color: var(--ib-danger);
   cursor: pointer;
 }
 .cadence-chip__remove:disabled { opacity: 0.4; cursor: not-allowed; }
 .cadence-arrow {
   align-self: center;
-  color: #b8c0cf;
+  color: var(--ib-text-muted);
   flex: 0 0 auto;
 }
 .cadence-add {
@@ -563,7 +563,7 @@ defineExpose({ save, dirty, saving, dispatchTimeValid, saveMessage, saveIsError 
   max-width: 150px;
 }
 .cadence-error {
-  color: #c04545;
+  color: var(--ib-danger);
   font-size: 12px;
   margin-top: 5px;
 }
@@ -581,10 +581,10 @@ defineExpose({ save, dirty, saving, dispatchTimeValid, saveMessage, saveIsError 
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #299467;
+  color: var(--ib-text);
   font-size: 13px;
 }
 .save-message--error {
-  color: #c04545;
+  color: var(--ib-danger);
 }
 </style>

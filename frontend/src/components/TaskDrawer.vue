@@ -236,31 +236,31 @@ onBeforeUnmount(() => stopTaskSync?.())
 </script>
 
 <style scoped>
-.task-panel { height: 100%; display: flex; flex-direction: column; background: #fff; }
+.task-panel { height: 100%; display: flex; flex-direction: column; background: var(--ib-surface); }
 .task-panel__header { display: flex; align-items: center; justify-content: space-between; padding: 24px 22px 16px; }
-.task-panel__summary { margin: 0 18px 16px; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; border-radius: 18px; color: #fff; background: linear-gradient(135deg, #3265f5, #7251e7); box-shadow: 0 14px 30px rgba(50, 101, 245, 0.22); }
+.task-panel__summary { margin: 0 18px 16px; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; border-radius: 18px; color: var(--ib-on-primary); background: linear-gradient(135deg, var(--ib-primary-strong), var(--ib-primary)); box-shadow: var(--ib-shadow-card); }
 .summary-number { display: block; font-size: 28px; font-weight: 800; line-height: 1; }
 .summary-label { display: block; margin-top: 5px; font-size: 12px; opacity: .78; }
 .task-panel__toolbar { display: flex; gap: 10px; padding: 0 18px 14px; }
 .task-panel__list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px 12px; }
-.drawer-task { width: 100%; display: flex; align-items: center; gap: 11px; border: 0; background: transparent; padding: 13px 10px; border-radius: 14px; cursor: pointer; text-align: left; color: #1e2942; transition: background .16s ease, transform .16s ease; }
-.drawer-task:hover { background: #f4f6fc; transform: translateX(2px); }
+.drawer-task { width: 100%; display: flex; align-items: center; gap: 11px; border: 0; background: transparent; padding: 13px 10px; border-radius: 14px; cursor: pointer; text-align: left; color: var(--ib-text); transition: background .16s ease, transform .16s ease; }
+.drawer-task:hover { background: var(--ib-primary-soft); transform: translateX(2px); }
 .drawer-task--parent { font-weight: 600; }
 .drawer-task--child { padding-left: 26px; border-radius: 10px; }
 .drawer-task--done { opacity: .55; }
 .drawer-task--done .drawer-task__title { text-decoration: line-through; }
 .drawer-task__state { width: 28px; height: 28px; flex: 0 0 28px; border-radius: 9px; display: grid; place-items: center; }
 .drawer-task--child .drawer-task__state { width: 22px; height: 22px; border-radius: 7px; }
-.drawer-subtasks { position: relative; margin-left: 18px; padding-left: 12px; border-left: 2px solid #e8e4f3; }
+.drawer-subtasks { position: relative; margin-left: 18px; padding-left: 12px; border-left: 2px solid var(--ib-border-strong); }
 .drawer-task__state { width: 28px; height: 28px; flex: 0 0 28px; border-radius: 9px; display: grid; place-items: center; }
-.priority-urgent { color: #e54545; background: #fff0f0; }
-.priority-high { color: #ed941c; background: #fff6e9; }
-.priority-medium { color: #4169e8; background: #eef2ff; }
-.priority-low { color: #25a572; background: #eaf9f2; }
+.priority-urgent { color: var(--ib-danger); background: color-mix(in srgb, var(--ib-danger) 10%, var(--ib-surface)); }
+.priority-high { color: var(--ib-warning); background: color-mix(in srgb, var(--ib-warning) 13%, var(--ib-surface)); }
+.priority-medium { color: var(--ib-primary); background: var(--ib-primary-soft); }
+.priority-low { color: var(--ib-success); background: color-mix(in srgb, var(--ib-success) 12%, var(--ib-surface)); }
 .drawer-task__body { flex: 1; min-width: 0; display: block; }
 .drawer-task__title { display: block; font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.drawer-task__meta { display: flex; gap: 8px; margin-top: 4px; color: #8a94a9; font-size: 11px; }
-.drawer-task__subcount { color: #7e6fa4; font-weight: 600; }
-.task-panel__empty { min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #929bad; font-size: 13px; }
-.task-panel__footer { padding: 14px 18px 20px; border-top: 1px solid #edf0f6; }
+.drawer-task__meta { display: flex; gap: 8px; margin-top: 4px; color: var(--ib-text-muted); font-size: 11px; }
+.drawer-task__subcount { color: var(--ib-text-secondary); font-weight: 600; }
+.task-panel__empty { min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--ib-text-muted); font-size: 13px; }
+.task-panel__footer { padding: 14px 18px 20px; border-top: 1px solid var(--ib-border-strong); }
 </style>

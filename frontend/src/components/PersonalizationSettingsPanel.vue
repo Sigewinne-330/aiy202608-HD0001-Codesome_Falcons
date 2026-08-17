@@ -120,17 +120,17 @@ onMounted(load)
 </script>
 
 <style scoped>
-.panel-heading { display: flex; justify-content: space-between; gap: 18px; padding-bottom: 18px; border-bottom: 1px solid #e9ecf2; }
-.panel-heading h2 { margin: 0; font-size: 21px; color: #202633; }
-.panel-heading p, .setting-row p { margin: 5px 0 0; color: #747e90; font-size: 12px; line-height: 1.55; }
-.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 17px 0; border-bottom: 1px solid #eff1f4; }
+.panel-heading { display: flex; justify-content: space-between; gap: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--ib-border); }
+.panel-heading h2 { margin: 0; font-size: 21px; color: var(--ib-text); }
+.panel-heading p, .setting-row p { margin: 5px 0 0; color: var(--ib-text-secondary); font-size: 12px; line-height: 1.55; }
+.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 17px 0; border-bottom: 1px solid var(--ib-border); }
 .setting-row > div:first-child { max-width: 520px; }
 .setting-row--primary { margin-top: 12px; }
 .retention-select { max-width: 210px; }
-.privacy-state { display: flex; flex-wrap: wrap; gap: 14px 24px; margin-top: 18px; padding: 12px 14px; border-radius: 12px; background: #f5f7fb; color: #4e596c; font-size: 12px; }
+.privacy-state { display: flex; flex-wrap: wrap; gap: 14px 24px; margin-top: 18px; padding: 12px 14px; border-radius: 12px; background: var(--ib-primary-soft); color: var(--ib-text); font-size: 12px; }
 .privacy-state span { display: inline-flex; align-items: center; gap: 5px; }
 .actions { display: flex; align-items: center; gap: 10px; margin-top: 22px; }
-.dirty-copy { color: #8a6200; font-size: 12px; }
+.dirty-copy { color: var(--ib-text); font-size: 12px; }
 .inline-action { border: 0; color: inherit; text-decoration: underline; background: none; cursor: pointer; }
 @media (max-width: 600px) { .panel-heading, .setting-row { align-items: flex-start; } .setting-row { gap: 10px; } .retention-select { max-width: 150px; } }
 </style>

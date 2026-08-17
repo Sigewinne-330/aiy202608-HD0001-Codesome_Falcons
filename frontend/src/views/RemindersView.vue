@@ -153,22 +153,22 @@ function handleUnauthorized() {
 }
 .page-header h1 {
   font-size: 26px;
-  color: #202633;
+  color: var(--ib-text);
   margin: 4px 0 6px;
 }
 .page-header p {
-  color: #858d9d;
+  color: var(--ib-text-muted);
   font-size: 13px;
 }
 .eyebrow {
   font-size: 11px;
   letter-spacing: 0.14em;
-  color: #6c7a96;
+  color: var(--ib-text-secondary);
   font-weight: 600;
 }
 .reminders-tabs {
   margin-top: 20px;
-  border-bottom: 1px solid #e8ebf0;
+  border-bottom: 1px solid var(--ib-border);
 }
 .reminders-body {
   padding-top: 22px;

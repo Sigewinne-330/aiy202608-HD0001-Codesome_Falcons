@@ -300,13 +300,13 @@ function confirm() {
   gap: 4px;
   padding: 14px 16px;
   margin-bottom: 10px;
-  border: 1px solid #e3e6ec;
+  border: 1px solid var(--ib-border);
   border-radius: 14px;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
 .role-card:hover {
-  background: #f7f8fb;
+  background: var(--ib-primary-soft);
 }
 .role-card--selected {
   border-color: rgb(var(--v-theme-primary));
@@ -323,12 +323,12 @@ function confirm() {
   border-radius: 12px;
   object-fit: cover;
   object-position: top center;
-  background: #f2f5f9;
-  border: 1px solid #e3e8f0;
+  background: var(--ib-primary-soft);
+  border: 1px solid var(--ib-border-strong);
 }
 .role-card__name {
   font-weight: 600;
-  color: #232a3a;
+  color: var(--ib-text);
   font-size: 14px;
 }
 .role-card__scope {
@@ -336,14 +336,14 @@ function confirm() {
   margin-left: 8px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: #edf3ff;
-  color: #4d70ad;
+  background: var(--ib-primary-soft);
+  color: var(--ib-primary);
   font-size: 10px;
   font-weight: 500;
   vertical-align: 1px;
 }
 .role-card__desc {
-  color: #77808f;
+  color: var(--ib-text-secondary);
   font-size: 12px;
   margin-top: 2px;
 }
@@ -351,9 +351,9 @@ function confirm() {
   margin-top: 8px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: #f4f6fa;
+  background: var(--ib-primary-soft);
   font-size: 12px;
-  color: #4a5262;
+  color: var(--ib-text);
 }
 .detail-row {
   margin-bottom: 6px;
@@ -361,25 +361,25 @@ function confirm() {
 .detail-label {
   font-weight: 600;
   margin-right: 8px;
-  color: #39415a;
+  color: var(--ib-text);
 }
 .example-message {
   margin-top: 6px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: #ffffff;
-  border: 1px solid #e6e9f0;
+  background: var(--ib-surface);
+  border: 1px solid var(--ib-border);
   white-space: pre-wrap;
 }
 .import-box {
   padding: 12px 14px;
   margin-bottom: 12px;
-  border: 1px dashed #c9d2e3;
+  border: 1px dashed var(--ib-border-strong);
   border-radius: 12px;
-  background: #f8fafd;
+  background: var(--ib-primary-soft);
 }
 .import-hint {
-  color: #6b7484;
+  color: var(--ib-text-secondary);
   font-size: 12px;
   margin-bottom: 8px;
 }

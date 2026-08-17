@@ -371,8 +371,8 @@ function scrollToId(selector) {
     radial-gradient(circle at 12% 5%, rgba(76, 111, 255, 0.12), transparent 30%),
     radial-gradient(circle at 88% 22%, rgba(115, 72, 232, 0.10), transparent 30%),
     radial-gradient(circle at 50% 100%, rgba(38, 166, 154, 0.06), transparent 35%),
-    #f7f8fc;
-  color: #1e2942;
+    var(--ib-background);
+  color: var(--ib-text);
   font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
@@ -382,7 +382,7 @@ function scrollToId(selector) {
   top: 0;
   z-index: 50;
   border-bottom: 1px solid rgba(20, 34, 66, 0.08);
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--ib-surface) 92%, transparent);
   backdrop-filter: blur(18px);
 }
 
@@ -402,7 +402,7 @@ function scrollToId(selector) {
   border: 0;
   background: transparent;
   cursor: pointer;
-  color: #17233d;
+  color: var(--ib-text);
   text-align: left;
   padding: 4px 8px;
   text-decoration: none;
@@ -416,7 +416,7 @@ function scrollToId(selector) {
   height: 34px;
   border-radius: 11px;
   background: linear-gradient(135deg, #3265f5, #7348e8);
-  color: white;
+  color: var(--ib-on-primary);
   font-size: 13px;
   font-weight: 800;
   box-shadow: 0 8px 22px rgba(50, 101, 245, 0.24);
@@ -429,7 +429,7 @@ function scrollToId(selector) {
 }
 
 .brand-copy strong { font-size: 17px; }
-.brand-copy small { margin-top: 4px; color: #8790a5; font-size: 10px; }
+.brand-copy small { margin-top: 4px; color: var(--ib-text-muted); font-size: 10px; }
 
 .nav-actions { display: flex; align-items: center; gap: 8px; }
 .nav-register { box-shadow: 0 6px 16px rgba(21, 101, 192, 0.22); }
@@ -468,7 +468,7 @@ function scrollToId(selector) {
 .hero-sub {
   font-size: 17px;
   line-height: 1.75;
-  color: #5a6478;
+  color: var(--ib-text-secondary);
   max-width: 480px;
   margin-bottom: 30px;
 }
@@ -495,7 +495,7 @@ function scrollToId(selector) {
   align-items: center;
   gap: 6px;
   font-size: 13.5px;
-  color: #4a5568;
+  color: var(--ib-text-secondary);
 }
 
 /* ---------- 产品预览卡片 ---------- */
@@ -515,7 +515,7 @@ function scrollToId(selector) {
 .mock-window {
   position: relative;
   z-index: 1;
-  background: #ffffff;
+  background: var(--ib-surface);
   border: 1px solid rgba(20, 34, 66, 0.08);
   border-radius: 20px;
   box-shadow: 0 30px 60px rgba(30, 41, 66, 0.16);
@@ -540,7 +540,7 @@ function scrollToId(selector) {
   margin-left: 8px;
   font-size: 12.5px;
   font-weight: 600;
-  color: #8790a5;
+  color: var(--ib-text-muted);
 }
 
 /* 月历网格 */
@@ -555,7 +555,7 @@ function scrollToId(selector) {
   text-align: center;
   font-size: 11px;
   font-weight: 600;
-  color: #8b95a8;
+  color: var(--ib-text-muted);
   padding: 4px 0;
 }
 
@@ -567,7 +567,7 @@ function scrollToId(selector) {
   align-items: center;
   padding: 3px 2px;
   border-radius: 8px;
-  background: #f4f6fb;
+  background: var(--ib-surface-subtle);
   gap: 2px;
 }
 
@@ -577,14 +577,14 @@ function scrollToId(selector) {
 }
 
 .mock-today .mock-day-num {
-  color: #fff;
+  color: var(--ib-on-primary);
   font-weight: 700;
 }
 
 .mock-day-num {
   font-size: 12px;
   font-weight: 600;
-  color: #3c4a66;
+  color: var(--ib-text);
   line-height: 1;
 }
 
@@ -608,7 +608,7 @@ function scrollToId(selector) {
   padding: 8px 0 0;
   border-top: 1px solid rgba(20, 34, 66, 0.06);
   font-size: 11px;
-  color: #8790a5;
+  color: var(--ib-text-muted);
 }
 
 .mock-legend i {
@@ -631,7 +631,7 @@ function scrollToId(selector) {
   right: -20px;
   bottom: -16px;
   width: 200px;
-  background: #fff;
+  background: var(--ib-surface);
   border-radius: 14px;
   box-shadow: 0 14px 38px rgba(30, 41, 66, 0.2);
   border: 1px solid rgba(20, 34, 66, 0.07);
@@ -649,16 +649,16 @@ function scrollToId(selector) {
   align-items: center;
   gap: 6px;
   padding: 10px 12px;
-  border-bottom: 1px solid #f0f2f6;
+  border-bottom: 1px solid var(--ib-border);
   font-size: 12px;
   font-weight: 600;
-  color: #28334b;
+  color: var(--ib-text);
 }
 
 .mock-chat-body {
   padding: 12px;
   font-size: 12px;
-  color: #5a6478;
+  color: var(--ib-text-secondary);
   line-height: 1.55;
 }
 
@@ -669,10 +669,10 @@ function scrollToId(selector) {
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-top: 1px solid #f0f2f6;
-  background: #f8f9fc;
+  border-top: 1px solid var(--ib-border);
+  background: var(--ib-background);
   font-size: 11px;
-  color: #a0a7b5;
+  color: var(--ib-text-muted);
 }
 
 /* ---------- 通用区块 ---------- */
@@ -693,7 +693,7 @@ function scrollToId(selector) {
   margin-bottom: 10px;
 }
 
-.section-sub { color: #5a6478; font-size: 15.5px; }
+.section-sub { color: var(--ib-text-secondary); font-size: 15.5px; }
 
 /* ---------- 功能卡片 ---------- */
 .feature-card {
@@ -734,7 +734,7 @@ function scrollToId(selector) {
 .feature-card p {
   font-size: 13.8px;
   line-height: 1.75;
-  color: #5a6478;
+  color: var(--ib-text-secondary);
 }
 
 /* ---------- 使用流程 ---------- */
@@ -745,7 +745,7 @@ function scrollToId(selector) {
   position: relative;
   text-align: center;
   padding: 34px 26px;
-  background: #fff;
+  background: var(--ib-surface);
   border: 1px solid rgba(20, 34, 66, 0.06);
   border-radius: 20px;
 }
@@ -776,7 +776,7 @@ function scrollToId(selector) {
 .how-step p {
   font-size: 13.8px;
   line-height: 1.75;
-  color: #5a6478;
+  color: var(--ib-text-secondary);
   margin: 0 auto;
   max-width: 260px;
 }
@@ -793,7 +793,7 @@ function scrollToId(selector) {
 .cta-inner {
   padding: 60px 24px;
   text-align: center;
-  color: #fff;
+  color: var(--ib-on-primary);
 }
 
 .cta-inner h2 {
@@ -809,7 +809,7 @@ function scrollToId(selector) {
 }
 
 .cta-btn {
-  color: #3265f5 !important;
+  color: var(--ib-primary) !important;
   font-weight: 800;
   box-shadow: 0 12px 26px rgba(20, 30, 66, 0.28);
 }
@@ -833,7 +833,7 @@ function scrollToId(selector) {
 
 .landing-footer-inner p {
   font-size: 12.5px;
-  color: #8790a5;
+  color: var(--ib-text-muted);
 }
 
 /* ---------- 响应式 ---------- */
