@@ -50,6 +50,13 @@
       <span>{{ $t('common.loadingTasks') }}</span>
     </div>
 
+    <div v-else-if="loadError" class="task-empty task-empty--error">
+      <v-icon icon="mdi-cloud-alert-outline" size="52" color="error" />
+      <strong>{{ $t('tasks.loadErrorTitle') }}</strong>
+      <span>{{ loadError }}</span>
+      <v-btn color="primary" variant="tonal" prepend-icon="mdi-refresh" @click="loadTasks">{{ $t('common.retry') }}</v-btn>
+    </div>
+
     <div v-else-if="filteredTasks.length" class="task-grid">
       <v-card
         v-for="task in filteredTasks"
@@ -326,8 +333,6 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
-
-    <v-snackbar v-model="errorVisible" color="error" timeout="3500">{{ errorMessage }}</v-snackbar>
   </section>
 </template>
 
@@ -335,16 +340,17 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { authFetch } from '@/stores/auth'
+import { api } from '@/stores/auth'
 import { notifyTasksChanged, onTasksChanged } from '@/services/taskSync'
+import { notify } from '@/services/feedback'
 import ReminderOffsetsEditor from '@/components/ReminderOffsetsEditor.vue'
 
-const API_BASE = '/api'
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 const tasks = ref([])
 const loading = ref(true)
+const loadError = ref('')
 const saving = ref(false)
 const typeFilter = ref('all')
 const statusFilter = ref('all')
@@ -357,8 +363,6 @@ const deleting = ref(false)
 const subtaskDeleteDialog = ref(false)
 const selectedSubtask = ref(null)
 const deletingSubtask = ref(false)
-const errorVisible = ref(false)
-const errorMessage = ref('')
 const focusedTaskId = ref(null)  // 从提醒弹窗跳转后要高亮的任务/子任务 id
 
 const priorityOptions = [
@@ -418,8 +422,7 @@ function displayProgress(task) {
 }
 
 function showError(message) {
-  errorMessage.value = message
-  errorVisible.value = true
+  notify(message, { type: 'error' })
 }
 
 /** 处理提醒弹窗跳转的 focus 参数：定位并高亮对应任务卡片 */
@@ -450,12 +453,12 @@ function handleFocus() {
 
 async function loadTasks() {
   loading.value = true
+  loadError.value = ''
   try {
-    const response = await authFetch(`${API_BASE}/tasks`)
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    tasks.value = await response.json()
+    tasks.value = await api('/api/tasks')
   } catch (error) {
-    showError(t('tasks.loadFail', { msg: error.message }))
+    loadError.value = t('tasks.loadFail', { msg: error.message })
+    showError(loadError.value)
   } finally {
     loading.value = false
     handleFocus()  // 数据就绪后定位提醒跳转的目标
@@ -465,8 +468,8 @@ async function loadTasks() {
 // 已在任务页时再次跳转（同路由不同 query）也能响应 focus
 watch(() => route.query.focus, () => handleFocus())
 
-function openCreate() {
-  form.value = emptyForm()
+function openCreate(initial = {}) {
+  form.value = { ...emptyForm(), ...initial }
   createDialog.value = true
 }
 
@@ -490,11 +493,7 @@ async function confirmDelete() {
   if (!selectedTask.value) return
   deleting.value = true
   try {
-    const response = await authFetch(`${API_BASE}/tasks/${selectedTask.value.id}`, { method: 'DELETE' })
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}))
-      throw new Error(data.detail || `HTTP ${response.status}`)
-    }
+    await api(`/api/tasks/${selectedTask.value.id}`, { method: 'DELETE' })
     deleteDialog.value = false
     selectedTask.value = null
     notifyTasksChanged()
@@ -509,11 +508,7 @@ async function confirmDeleteSubtask() {
   if (!selectedSubtask.value) return
   deletingSubtask.value = true
   try {
-    const response = await authFetch(`${API_BASE}/tasks/sub-tasks/${selectedSubtask.value.id}`, { method: 'DELETE' })
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}))
-      throw new Error(data.detail || `HTTP ${response.status}`)
-    }
+    await api(`/api/tasks/sub-tasks/${selectedSubtask.value.id}`, { method: 'DELETE' })
     subtaskDeleteDialog.value = false
     selectedSubtask.value = null
     notifyTasksChanged()
@@ -525,16 +520,10 @@ async function confirmDeleteSubtask() {
 }
 
 async function postTask(payload) {
-  const response = await authFetch(`${API_BASE}/tasks`, {
+  return api('/api/tasks', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}))
-    throw new Error(data.detail || `HTTP ${response.status}`)
-  }
-  return response.json()
 }
 
 async function createTask() {
@@ -566,9 +555,8 @@ async function createSubtask() {
   if (!selectedParent.value) return
   saving.value = true
   try {
-    const response = await authFetch(`${API_BASE}/tasks/sub-tasks`, {
+    await api('/api/tasks/sub-tasks', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         task_id: selectedParent.value.id,
         name: subtaskForm.value.title,
@@ -578,10 +566,6 @@ async function createSubtask() {
         status: 'pending',
       }),
     })
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}))
-      throw new Error(data.detail || `HTTP ${response.status}`)
-    }
     subtaskDialog.value = false
     notifyTasksChanged()
   } catch (error) {
@@ -594,15 +578,13 @@ async function createSubtask() {
 async function toggleDone(task) {
   const nextStatus = task.status === 'done' ? 'todo' : 'done'
   const endpoint = task.sub_task_source
-    ? `${API_BASE}/tasks/sub-tasks/${task.id}`
-    : `${API_BASE}/tasks/${task.id}`
+    ? `/api/tasks/sub-tasks/${task.id}`
+    : `/api/tasks/${task.id}`
   try {
-    const response = await authFetch(endpoint, {
+    await api(endpoint, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: nextStatus, progress: nextStatus === 'done' ? 100 : 0 }),
     })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
     notifyTasksChanged()
   } catch (error) {
     showError(t('tasks.updateFail', { msg: error.message }))
@@ -610,11 +592,13 @@ async function toggleDone(task) {
 }
 
 let stopTaskSync
-watch(() => route.query.create, (value) => {
-  if (value !== '1') return
-  openCreate()
+watch(() => [route.query.create, route.query.deadline], ([create, deadline]) => {
+  if (create !== '1') return
+  const validDeadline = typeof deadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(deadline) ? deadline : ''
+  openCreate(validDeadline ? { deadline: validDeadline } : {})
   const query = { ...route.query }
   delete query.create
+  delete query.deadline
   router.replace({ query })
 }, { immediate: true })
 

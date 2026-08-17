@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import i18n from '@/i18n'
 
 const TOKEN_KEY = 'ib_auth_token'
 const USER_KEY = 'ib_auth_user'
@@ -75,7 +76,7 @@ export async function api(path, options = {}) {
   try {
     res = await authFetch(path, { ...options, headers })
   } catch (cause) {
-    throw new ApiError('无法连接服务器，请确认后端服务已启动后重试', {
+    throw new ApiError(i18n.global.t('auth.serverUnavailable'), {
       kind: API_ERROR_KIND.TRANSPORT,
       cause,
     })
@@ -89,7 +90,7 @@ export async function api(path, options = {}) {
     data = JSON.parse(text)
   } catch {
     // 响应体不是有效 JSON（比如后端挂了返回空白或 HTML）
-    throw new ApiError(text || `服务器响应异常 (HTTP ${res.status})`, {
+    throw new ApiError(text || i18n.global.t('common.invalidServerResponse', { status: res.status }), {
       kind: API_ERROR_KIND.PROTOCOL,
       status: res.status,
     })
@@ -97,9 +98,9 @@ export async function api(path, options = {}) {
 
   if (!res.ok) {
     const detail = Array.isArray(data.detail)
-      ? data.detail.map((item) => item.msg || '输入信息有误').join('；')
+      ? data.detail.map((item) => item.msg || i18n.global.t('common.invalidInput')).join(i18n.global.t('common.listSeparator'))
       : data.detail
-    throw new ApiError(detail || `请求失败 (HTTP ${res.status})`, {
+    throw new ApiError(detail || i18n.global.t('common.requestFailedStatus', { status: res.status }), {
       kind: API_ERROR_KIND.HTTP,
       status: res.status,
       details: data,

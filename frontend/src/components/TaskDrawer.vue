@@ -40,6 +40,12 @@
         <span>{{ $t('taskDrawer.loading') }}</span>
       </div>
 
+      <div v-else-if="loadError" class="task-panel__empty">
+        <v-icon icon="mdi-cloud-alert-outline" color="error" size="38" />
+        <span>{{ loadError }}</span>
+        <v-btn size="small" color="primary" variant="tonal" @click="loadTasks">{{ $t('common.retry') }}</v-btn>
+      </div>
+
       <template v-for="task in filteredTasks" v-else :key="task.id">
         <!-- 父任务行 -->
         <button
@@ -61,7 +67,7 @@
             <span class="drawer-task__meta">
               <span v-if="task.subject">{{ task.subject }}</span>
               <span v-if="task.deadline">{{ formatDate(task.deadline) }}</span>
-              <span v-if="task.subtasks?.length" class="drawer-task__subcount">{{ task.subtasks.length }} 项子任务</span>
+              <span v-if="task.subtasks?.length" class="drawer-task__subcount">{{ $t('common.items', { n: task.subtasks.length }) }}</span>
             </span>
             <v-progress-linear
               :model-value="task.progress || 0"
@@ -97,7 +103,7 @@
         </div>
       </template>
 
-      <div v-if="!loading && filteredTasks.length === 0" class="task-panel__empty">
+      <div v-if="!loading && !loadError && filteredTasks.length === 0" class="task-panel__empty">
         <v-icon icon="mdi-checkbox-marked-circle-outline" color="success" size="42" />
         <span>{{ search ? $t('taskDrawer.noMatch') : $t('taskDrawer.noPending') }}</span>
       </div>
@@ -133,6 +139,7 @@ const route = useRoute()
 const { t } = useI18n()
 const tasks = ref([])       // 原始树
 const loading = ref(true)
+const loadError = ref('')
 const search = ref('')
 const expanded = ref(new Set())
 const isTasksPage = computed(() => route.path === '/tasks')
@@ -216,10 +223,12 @@ function handleFooterAction() {
 
 async function loadTasks() {
   loading.value = true
+  loadError.value = ''
   try {
     tasks.value = await api('/api/tasks') || []
-  } catch {
+  } catch (error) {
     tasks.value = []
+    loadError.value = error?.message || t('tasks.loadErrorTitle')
   } finally {
     loading.value = false
   }
@@ -263,4 +272,19 @@ onBeforeUnmount(() => stopTaskSync?.())
 .drawer-task__subcount { color: #7e6fa4; font-weight: 600; }
 .task-panel__empty { min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #929bad; font-size: 13px; }
 .task-panel__footer { padding: 14px 18px 20px; border-top: 1px solid #edf0f6; }
+
+/* Mono + One */
+.task-panel { color: var(--ib-text); background: var(--ib-surface); }
+.task-panel__summary { border: 1px solid var(--ib-border); color: var(--ib-text); background: var(--ib-surface-subtle); box-shadow: none; }
+.drawer-task { color: var(--ib-text); }
+.drawer-task:hover { background: var(--ib-surface-subtle); transform: none; }
+.drawer-subtasks { border-color: var(--ib-border); }
+.priority-urgent { color: var(--ib-danger); background: color-mix(in srgb, var(--ib-danger) 10%, var(--ib-surface)); }
+.priority-high { color: var(--ib-warning); background: color-mix(in srgb, var(--ib-warning) 10%, var(--ib-surface)); }
+.priority-medium,
+.priority-low { color: var(--ib-primary-strong); background: var(--ib-primary-soft); }
+.drawer-task__meta,
+.task-panel__empty { color: var(--ib-text-secondary); }
+.drawer-task__subcount { color: var(--ib-primary-strong); }
+.task-panel__footer { border-color: var(--ib-border); }
 </style>

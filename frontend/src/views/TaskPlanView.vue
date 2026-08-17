@@ -8,6 +8,11 @@
       </div>
     </div>
 
+    <v-alert v-if="errorMessage" type="error" variant="tonal" class="plan-error" closable @click:close="errorMessage = ''">
+      <strong>{{ $t('plan.errorTitle') }}</strong>
+      <div>{{ errorMessage }}</div>
+    </v-alert>
+
     <v-row>
       <!-- 左侧：输入表单 -->
       <v-col cols="12" md="5">
@@ -190,7 +195,8 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { authFetch } from '@/stores/auth'
+import { api } from '@/stores/auth'
+import { notify } from '@/services/feedback'
 import { notifyTasksChanged } from '@/services/taskSync'
 
 const { t } = useI18n()
@@ -204,8 +210,7 @@ const form = ref({
 
 const plan = ref(null)
 const loading = ref(false)
-
-const API_BASE = '/api'
+const errorMessage = ref('')
 
 // 跳转到日历的链接（带上截止日期的月份）
 const calendarLink = computed(() => {
@@ -236,11 +241,11 @@ async function generatePlan() {
   if (!form.value.title || !form.value.deadline) return
   loading.value = true
   plan.value = null
+  errorMessage.value = ''
 
   try {
-    const res = await authFetch(`${API_BASE}/tasks/plan`, {
+    plan.value = await api('/api/tasks/plan', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: form.value.title,
         word_count: form.value.word_count || 0,
@@ -248,15 +253,10 @@ async function generatePlan() {
         description: form.value.description || '',
       }),
     })
-    if (res.ok) {
-      plan.value = await res.json()
-      notifyTasksChanged()
-    } else {
-      const err = await res.json()
-      console.error('Plan error:', err)
-    }
-  } catch (e) {
-    console.error('Network error:', e)
+    notifyTasksChanged()
+  } catch (error) {
+    errorMessage.value = error?.message || t('plan.generateFailed')
+    notify(errorMessage.value, { type: 'error' })
   } finally {
     loading.value = false
   }
@@ -267,6 +267,7 @@ async function generatePlan() {
 .gap-1 { gap: 4px; }
 .gap-2 { gap: 8px; }
 .gap-4 { gap: 16px; }
+.plan-error { margin-bottom: 18px; }
 .plan-page > .d-flex:first-child { min-height: 58px; margin-bottom: 24px !important; }
 .plan-page > .d-flex:first-child .text-h6 { color: var(--ib-text); font-size: clamp(26px, 3vw, 36px) !important; letter-spacing: -.035em; }
 .plan-page > .d-flex:first-child .text-caption { color: var(--ib-text-secondary) !important; }

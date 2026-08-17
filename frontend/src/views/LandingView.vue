@@ -12,6 +12,12 @@
         </router-link>
 
         <div class="nav-actions">
+          <v-btn
+            :icon="themeIcon"
+            variant="text"
+            :aria-label="themeLabel"
+            @click="cycleThemeMode"
+          />
           <v-menu>
             <template #activator="{ props }">
               <v-btn
@@ -20,8 +26,10 @@
                 color="primary"
                 rounded="lg"
                 prepend-icon="mdi-translate"
+                class="language-trigger"
+                :aria-label="currentLanguageLabel"
               >
-                {{ currentLanguageLabel }}
+                <span class="language-trigger__label">{{ currentLanguageLabel }}</span>
               </v-btn>
             </template>
             <v-list density="compact" min-width="160">
@@ -40,7 +48,17 @@
             {{ $t('landing.enterApp') }}
           </v-btn>
           <template v-else>
-            <v-btn variant="text" color="primary" rounded="lg" to="/login">{{ $t('landing.login') }}</v-btn>
+            <v-btn
+              variant="text"
+              color="primary"
+              rounded="lg"
+              to="/login"
+              prepend-icon="mdi-login"
+              class="nav-login"
+              :aria-label="$t('landing.login')"
+            >
+              <span class="nav-login__label">{{ $t('landing.login') }}</span>
+            </v-btn>
             <v-btn color="primary" rounded="lg" to="/register" class="nav-register">{{ $t('landing.startFree') }}</v-btn>
           </template>
         </div>
@@ -152,16 +170,16 @@
 
               <!-- 图例 -->
               <div class="mock-legend">
-                <span><i class="l-todo" /> Todo</span>
-                <span><i class="l-process" /> Process</span>
-                <span><i class="l-deadline" /> DDL</span>
+                <span><i class="l-todo" />{{ $t('tasks.todoType') }}</span>
+                <span><i class="l-process" />{{ $t('tasks.processType') }}</span>
+                <span><i class="l-deadline" />{{ $t('urgent.deadline') }}</span>
               </div>
             </div>
 
             <!-- 浮动 AI 对话气泡 -->
             <div class="mock-chat-bubble">
               <div class="mock-chat-header">
-                <v-icon size="14" color="#3265F5">mdi-creation-outline</v-icon>
+                <v-icon size="14" color="primary">mdi-creation-outline</v-icon>
                 <span>IBuddy</span>
               </div>
               <div class="mock-chat-body">
@@ -169,7 +187,7 @@
               </div>
               <div class="mock-chat-input">
                 <span>{{ $t('landing.chatPlaceholder') }}</span>
-                <v-icon size="14" color="#3265F5">mdi-send</v-icon>
+                <v-icon size="14" color="primary">mdi-send</v-icon>
               </div>
             </div>
 
@@ -193,7 +211,7 @@
             <v-col cols="12" sm="6" lg="4">
               <v-card class="feature-card" rounded="xl" elevation="1">
                 <div class="feature-icon icon-blue">
-                  <v-icon size="26" color="#3265F5">mdi-creation-outline</v-icon>
+                  <v-icon size="26" color="primary">mdi-creation-outline</v-icon>
                 </div>
                 <h3>{{ $t('landing.f1Title') }}</h3>
                 <p>{{ $t('landing.f1Desc') }}</p>
@@ -203,7 +221,7 @@
             <v-col cols="12" sm="6" lg="4">
               <v-card class="feature-card" rounded="xl" elevation="1">
                 <div class="feature-icon icon-purple">
-                  <v-icon size="26" color="#7348E8">mdi-sitemap-outline</v-icon>
+                  <v-icon size="26" color="primary">mdi-sitemap-outline</v-icon>
                 </div>
                 <h3>{{ $t('landing.f2Title') }}</h3>
                 <p>{{ $t('landing.f2Desc') }}</p>
@@ -213,7 +231,7 @@
             <v-col cols="12" sm="6" lg="4">
               <v-card class="feature-card" rounded="xl" elevation="1">
                 <div class="feature-icon icon-teal">
-                  <v-icon size="26" color="#26A69A">mdi-lightning-bolt-outline</v-icon>
+                  <v-icon size="26" color="primary">mdi-lightning-bolt-outline</v-icon>
                 </div>
                 <h3>{{ $t('landing.f3Title') }}</h3>
                 <p>{{ $t('landing.f3Desc') }}</p>
@@ -223,7 +241,7 @@
             <v-col cols="12" sm="6" lg="4">
               <v-card class="feature-card" rounded="xl" elevation="1">
                 <div class="feature-icon icon-orange">
-                  <v-icon size="26" color="#FF7043">mdi-calendar-month-outline</v-icon>
+                  <v-icon size="26" color="primary">mdi-calendar-month-outline</v-icon>
                 </div>
                 <h3>{{ $t('landing.f4Title') }}</h3>
                 <p>{{ $t('landing.f4Desc') }}</p>
@@ -233,7 +251,7 @@
             <v-col cols="12" sm="6" lg="4">
               <v-card class="feature-card" rounded="xl" elevation="1">
                 <div class="feature-icon icon-pink">
-                  <v-icon size="26" color="#E91E63">mdi-bell-outline</v-icon>
+                  <v-icon size="26" color="primary">mdi-bell-outline</v-icon>
                 </div>
                 <h3>{{ $t('landing.f5Title') }}</h3>
                 <p>{{ $t('landing.f5Desc') }}</p>
@@ -243,7 +261,7 @@
             <v-col cols="12" sm="6" lg="4">
               <v-card class="feature-card" rounded="xl" elevation="1">
                 <div class="feature-icon icon-cyan">
-                  <v-icon size="26" color="#00BCD4">mdi-scale-balance</v-icon>
+                  <v-icon size="26" color="primary">mdi-scale-balance</v-icon>
                 </div>
                 <h3>{{ $t('landing.f6Title') }}</h3>
                 <p>{{ $t('landing.f6Desc') }}</p>
@@ -345,15 +363,18 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { setLocale, LOCALE_NAMES, SUPPORTED_LOCALES } from '@/i18n'
 import { useAuth } from '@/stores/auth'
+import { useAppTheme } from '@/services/theme'
 
-const { locale } = useI18n()
+const { locale, t } = useI18n()
 const { isAuthenticated } = useAuth()
+const { mode, cycleThemeMode } = useAppTheme()
 
 const currentLocale = computed(() => locale.value)
-const currentLanguageLabel = computed(() => LOCALE_NAMES[locale.value] || '简体中文')
+const currentLanguageLabel = computed(() => LOCALE_NAMES[locale.value] || LOCALE_NAMES['zh-CN'])
 const languageOptions = SUPPORTED_LOCALES.map((code) => ({ title: LOCALE_NAMES[code], value: code }))
-
-const mockWeekDays = ['一', '二', '三', '四', '五', '六', '日']
+const mockWeekDays = computed(() => ['weekMon', 'weekTue', 'weekWed', 'weekThu', 'weekFri', 'weekSat', 'weekSun'].map((key) => t(`calendar.${key}`)))
+const themeIcon = computed(() => ({ system: 'mdi-theme-light-dark', light: 'mdi-white-balance-sunny', dark: 'mdi-weather-night' }[mode.value]))
+const themeLabel = computed(() => t(`app.theme${mode.value[0].toUpperCase()}${mode.value.slice(1)}`))
 
 function changeLanguage(code) {
   setLocale(code)
@@ -850,5 +871,73 @@ function scrollToId(selector) {
   .hero-actions .v-btn { width: 100%; }
   .nav-actions .v-btn--size-large { padding: 0 10px; }
   .landing-footer-inner { justify-content: center; text-align: center; }
+}
+
+/* Mono + One */
+.landing-page { color: var(--ib-text); background: var(--ib-background); }
+.landing-nav { border-bottom: 1px solid var(--ib-border); background: color-mix(in srgb, var(--ib-surface) 92%, transparent); box-shadow: none; backdrop-filter: blur(16px); }
+.brand-mark { color: var(--ib-on-primary); background: var(--ib-primary); box-shadow: none; }
+.brand-copy strong,
+.hero-title,
+.section-title,
+.feature-card h3,
+.how-step h3 { color: var(--ib-text); }
+.brand-copy small,
+.hero-sub,
+.hero-point,
+.section-sub,
+.feature-card p,
+.how-step p,
+.landing-footer-inner p { color: var(--ib-text-secondary); }
+.hero { background: var(--ib-background); }
+.hero::before,
+.hero::after,
+.hero-visual-glow { display: none; }
+.gradient-text { color: var(--ib-primary-strong); background: none; -webkit-text-fill-color: currentColor; }
+.hero-cta { box-shadow: none !important; }
+.mock-window,
+.mock-chat-bubble,
+.feature-card { border: 1px solid var(--ib-border); background: var(--ib-surface) !important; box-shadow: var(--ib-shadow-card) !important; }
+.mock-window-bar,
+.mock-chat-header,
+.mock-chat-input { border-color: var(--ib-border); background: var(--ib-surface-subtle); }
+.mock-window-title,
+.mock-weekday,
+.mock-legend,
+.mock-chat-input { color: var(--ib-text-muted); }
+.mock-day-cell { border-color: var(--ib-border); color: var(--ib-text-secondary); background: var(--ib-surface); }
+.mock-day-cell.mock-today { color: var(--ib-primary-strong); background: var(--ib-primary-soft); box-shadow: none; }
+.mock-today .mock-day-num { color: var(--ib-primary-strong); }
+.mock-pill-blue,
+.mock-pill-teal,
+.l-todo,
+.l-process { background: var(--ib-primary); }
+.mock-pill-deadline,
+.l-deadline { background: var(--ib-warning); }
+.mock-chat-header,
+.mock-chat-body { color: var(--ib-text); }
+.section-alt { background: var(--ib-surface-subtle); }
+.feature-icon,
+.icon-blue,
+.icon-purple,
+.icon-teal,
+.icon-orange,
+.icon-pink,
+.icon-cyan { color: var(--ib-primary-strong); background: var(--ib-primary-soft); }
+.how-step-num { color: color-mix(in srgb, var(--ib-primary) 18%, transparent); }
+.how-icon { background: var(--ib-primary); box-shadow: none; }
+.cta-card { color: var(--ib-on-primary); background: var(--ib-primary) !important; box-shadow: none !important; }
+.cta-btn { color: var(--ib-primary-strong) !important; background: var(--ib-surface) !important; box-shadow: none; }
+.landing-footer { border-color: var(--ib-border); background: var(--ib-surface); }
+
+@media (max-width: 600px) {
+  .nav-actions { gap: 0; }
+  .nav-actions .v-btn { min-width: 40px; padding-inline: 8px; }
+  .language-trigger__label { display: none; }
+  .language-trigger :deep(.v-btn__prepend) { margin: 0; }
+  .nav-login__label { display: none; }
+  .nav-login :deep(.v-btn__prepend) { margin: 0; }
+  .hero { padding-top: 34px; }
+  .hero-title { font-size: clamp(38px, 12vw, 54px); }
 }
 </style>

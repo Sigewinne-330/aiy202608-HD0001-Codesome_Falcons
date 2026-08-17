@@ -22,8 +22,8 @@
           <div>{{ demoResult.message }}</div>
           <div class="demo-subject">{{ demoResult.subject }}</div>
           <div class="demo-outcomes">
-            <span>{{ $t('reminders.demoChat') }}：{{ demoStatus(demoResult.chat.status) }}</span>
-            <span>{{ $t('reminders.demoEmail') }}：{{ demoStatus(demoResult.email.status) }}</span>
+            <span>{{ $t('reminders.demoChat') }}{{ $t('common.labelSeparator') }}{{ demoStatus(demoResult.chat.status) }}</span>
+            <span>{{ $t('reminders.demoEmail') }}{{ $t('common.labelSeparator') }}{{ demoStatus(demoResult.email.status) }}</span>
           </div>
         </v-alert>
         <v-btn
@@ -206,4 +206,8 @@ function handleUnauthorized() {
 .eyebrow { color: var(--ib-primary-strong); font-weight: 800; }
 .reminders-tabs { border-color: var(--ib-border); }
 .demo-card { border-color: var(--ib-border); background: var(--ib-surface) !important; }
+@media (max-width: 640px) {
+  .reminders-page { padding-inline: 14px; }
+  .reminders-tabs :deep(.v-tab) { min-width: 0; flex: 1; padding-inline: 8px; }
+}
 </style>

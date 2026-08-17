@@ -1,5 +1,12 @@
 <template>
   <section class="progress-page">
+    <v-alert v-if="loadError && !loading" type="error" variant="tonal" class="progress-alert" :title="$t('progress.loadErrorTitle')">
+      {{ loadError }}
+      <template #append>
+        <v-btn color="error" variant="text" @click="loadTasks">{{ $t('common.retry') }}</v-btn>
+      </template>
+    </v-alert>
+
     <template v-if="detailTimeline && selectedCategoryMeta">
       <TimelineManager
         :timeline="detailTimeline"
@@ -162,7 +169,6 @@
     </v-dialog>
 
     <div v-if="loading" class="page-loading"><v-progress-circular indeterminate color="primary" size="42" /></div>
-    <v-snackbar v-model="errorVisible" color="error" timeout="3500">{{ errorMessage }}</v-snackbar>
   </section>
 </template>
 
@@ -170,8 +176,9 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { authFetch } from '@/stores/auth'
+import { api } from '@/stores/auth'
 import TimelineManager from '@/components/TimelineManager.vue'
+import { notify } from '@/services/feedback'
 import { notifyTasksChanged, onTasksChanged } from '@/services/taskSync'
 import { openAgent } from '@/services/agentContext'
 import { aggregateRisk } from '@/utils/tasks'
@@ -183,15 +190,14 @@ const tasks = ref([])
 const loading = ref(true)
 const saving = ref(false)
 const createDialog = ref(false)
-const errorVisible = ref(false)
-const errorMessage = ref('')
+const loadError = ref('')
 const activeGroup = ref('')
 
 const categoryDefinitions = [
-  { key: 'IA', color: '#3f6ee8', softColor: '#edf2ff', vuetifyColor: 'primary', groups: null },
-  { key: 'EE', color: '#7c55d9', softColor: '#f2edff', vuetifyColor: 'deep-purple', groups: null },
-  { key: 'TOK', color: '#d48124', softColor: '#fff4e6', vuetifyColor: 'warning', groups: ['Essay', 'Exhibition'] },
-  { key: 'CAS', color: '#22986b', softColor: '#e9f8f1', vuetifyColor: 'success', groups: ['Experience', 'Project', 'Reflection', 'Evidence'] },
+  { key: 'IA', color: 'var(--ib-primary-strong)', softColor: 'var(--ib-primary-soft)', vuetifyColor: 'primary', groups: null },
+  { key: 'EE', color: 'var(--ib-primary-strong)', softColor: 'var(--ib-primary-soft)', vuetifyColor: 'primary', groups: null },
+  { key: 'TOK', color: 'var(--ib-primary-strong)', softColor: 'var(--ib-primary-soft)', vuetifyColor: 'primary', groups: ['Essay', 'Exhibition'] },
+  { key: 'CAS', color: 'var(--ib-primary-strong)', softColor: 'var(--ib-primary-soft)', vuetifyColor: 'primary', groups: ['Experience', 'Project', 'Reflection', 'Evidence'] },
 ]
 
 const emptyTimelineForm = () => ({ title: '', subject: '', deadline: '', priority: 'medium', useTemplate: true })
@@ -358,22 +364,13 @@ function distributedDate(index, total, deadline) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
-async function apiRequest(path, options = {}) {
-  const response = await authFetch(path, options)
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}))
-    throw new Error(body.detail || `HTTP ${response.status}`)
-  }
-  return response.json().catch(() => ({}))
-}
-
 async function createTimeline() {
   saving.value = true
   let created = null
   try {
     const title = timelineForm.value.title.trim() || defaultTimelineTitle()
-    created = await apiRequest('/api/tasks', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    created = await api('/api/tasks', {
+      method: 'POST', body: JSON.stringify({
         task_type: 'process', title, description: '', category: selectedCategoryMeta.value.key,
         subject: timelineForm.value.subject || null, deadline: timelineForm.value.deadline || null,
         priority: timelineForm.value.priority, estimated_hours: 0,
@@ -382,8 +379,8 @@ async function createTimeline() {
     if (timelineForm.value.useTemplate) {
       const nodes = templateFor(selectedCategoryMeta.value.key, timelineForm.value.subject)
       for (let index = 0; index < nodes.length; index += 1) {
-        await apiRequest('/api/tasks/sub-tasks', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        await api('/api/tasks/sub-tasks', {
+          method: 'POST', body: JSON.stringify({
             task_id: created.id, name: nodes[index], notice_time: distributedDate(index, nodes.length, timelineForm.value.deadline),
             level: index === nodes.length - 1 ? 'high' : 'medium', status: 'pending',
           }),
@@ -395,9 +392,8 @@ async function createTimeline() {
     await loadTasks()
     if (selectedCategoryMeta.value.key !== 'EE') await router.push(`/progress/${selectedCategoryMeta.value.key.toLowerCase()}/${created.id}`)
   } catch (error) {
-    if (created?.id) await authFetch(`/api/tasks/${created.id}`, { method: 'DELETE' }).catch(() => {})
-    errorMessage.value = error.message
-    errorVisible.value = true
+    if (created?.id) await api(`/api/tasks/${created.id}`, { method: 'DELETE' }).catch(() => {})
+    notify(error?.message || t('progress.createFailed'), { type: 'error' })
   } finally {
     saving.value = false
   }
@@ -410,13 +406,13 @@ function askAgentForCategory() { openAgent({ category: selectedCategoryMeta.valu
 
 async function loadTasks() {
   loading.value = true
+  loadError.value = ''
   try {
-    const response = await authFetch('/api/tasks')
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    tasks.value = await response.json()
+    const data = await api('/api/tasks')
+    tasks.value = Array.isArray(data) ? data : []
   } catch (error) {
-    errorMessage.value = error.message
-    errorVisible.value = true
+    loadError.value = error?.message || t('progress.loadFailed')
+    notify(loadError.value, { type: 'error' })
   } finally {
     loading.value = false
   }
@@ -430,6 +426,7 @@ onBeforeUnmount(() => stopTaskSync?.())
 
 <style scoped>
 .progress-page { position: relative; min-height: calc(100vh - 64px); padding: 28px clamp(22px, 5vw, 70px) 110px; color: #1e2942; }
+.progress-alert { margin-bottom: 18px; }
 .page-header, .category-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 .category-header { align-items: center; }.category-header__copy { flex: 1; }.header-actions { display: flex; gap: 9px; }
 .eyebrow { color: #4a6ce2; font-size: 10px; font-weight: 800; letter-spacing: .16em; }

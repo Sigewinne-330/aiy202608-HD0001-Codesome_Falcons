@@ -12,6 +12,11 @@
       </div>
     </header>
 
+    <v-alert v-if="loadError" type="error" variant="tonal" density="compact" class="calendar-error">
+      {{ loadError }}
+      <template #append><v-btn size="small" variant="text" @click="loadCalendar">{{ $t('common.retry') }}</v-btn></template>
+    </v-alert>
+
     <v-card class="calendar-card" elevation="0" rounded="xl">
       <div class="calendar-toolbar">
         <div class="month-navigation">
@@ -33,7 +38,7 @@
         <div v-for="day in weekDayKeys" :key="day">{{ $t(`calendar.${day}`) }}</div>
       </div>
 
-      <div class="month-grid" :class="{ 'month-grid--loading': loading }">
+      <div class="month-grid calendar-month-grid" :class="{ 'month-grid--loading': loading }">
         <article
           v-for="day in calendarDays"
           :key="day.date"
@@ -72,9 +77,51 @@
             >
               {{ $t('calendar.moreItems', { n: day.items.length - 3 }) }}
             </button>
+            <button
+              v-if="day.currentMonth && !day.items.length"
+              type="button"
+              class="empty-day-action"
+              :aria-label="$t('calendar.addTaskForDate', { date: day.date })"
+              :title="$t('calendar.emptyDateHint')"
+              @click="openCreateForDay(day.date)"
+            >
+              <v-icon icon="mdi-plus" size="14" />
+              <span>{{ $t('calendar.addTask') }}</span>
+            </button>
           </div>
         </article>
 
+        <div v-if="loading" class="calendar-loading">
+          <v-progress-circular indeterminate color="primary" size="38" />
+          <span>{{ $t('calendar.syncing') }}</span>
+        </div>
+      </div>
+
+      <div class="mobile-agenda" :class="{ 'mobile-agenda--loading': loading }" :aria-label="$t('calendar.mobileAgenda')">
+        <article v-for="day in mobileDays" :key="`mobile-${day.date}`" class="mobile-day" :class="{ 'mobile-day--today': day.today }">
+          <div class="mobile-day__date">
+            <strong>{{ day.number }}</strong>
+            <span>{{ $t(`calendar.${weekDayKeys[(new Date(`${day.date}T00:00:00`).getDay() + 6) % 7]}`) }}</span>
+            <v-chip v-if="day.today" size="x-small" color="primary" variant="tonal">{{ $t('calendar.todayLabel') }}</v-chip>
+            <small v-else-if="day.items.length">{{ $t('common.items', { n: day.items.length }) }}</small>
+          </div>
+          <div class="mobile-day__items">
+            <button
+              v-for="item in day.items"
+              :key="`mobile-${item.type}-${item.id}-${item.deadline_kind || 'main'}`"
+              type="button"
+              class="mobile-schedule-item"
+              @click="openItem(item)"
+            >
+              <i :style="{ background: pillColor(item).dot }" />
+              <span><strong>{{ item.title }}</strong><small>{{ item.subject || $t('common.uncategorized') }}</small></span>
+              <v-icon icon="mdi-chevron-right" size="16" />
+            </button>
+            <button type="button" class="mobile-add-task" @click="openCreateForDay(day.date)">
+              <v-icon icon="mdi-plus" size="15" />{{ $t('calendar.addTask') }}
+            </button>
+          </div>
+        </article>
         <div v-if="loading" class="calendar-loading">
           <v-progress-circular indeterminate color="primary" size="38" />
           <span>{{ $t('calendar.syncing') }}</span>
@@ -114,18 +161,22 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { api } from '@/stores/auth'
 import { onTasksChanged } from '@/services/taskSync'
+import { notify } from '@/services/feedback'
 import { priorityWeight } from '@/utils/tasks'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const now = new Date()
 
 const currentYear = ref(Number(route.query.year) || now.getFullYear())
 const currentMonth = ref(Number(route.query.month) || now.getMonth() + 1)
 const monthData = ref({})
 const loading = ref(false)
+const loadError = ref('')
 // 单日详情弹窗：选中天的完整 items 列表
 const dayDialog = ref(false)
 const selectedDay = ref(null)
@@ -166,6 +217,7 @@ const calendarDays = computed(() => {
     }
   })
 })
+const mobileDays = computed(() => calendarDays.value.filter((day) => day.currentMonth))
 
 function dateKey(date) {
   const year = date.getFullYear()
@@ -176,23 +228,17 @@ function dateKey(date) {
 
 // Process 任务调色板（按 parent_task_id 分组循环）
 const PROCESS_PALETTE = [
-  { bg: '#e8f5e9', dot: '#43a047', text: '#2e5a30' },
-  { bg: '#f3e5f5', dot: '#8e24aa', text: '#5c2d6e' },
-  { bg: '#fff3e0', dot: '#fb8c00', text: '#6b3a00' },
-  { bg: '#fce4ec', dot: '#e91e63', text: '#6e1b3a' },
-  { bg: '#e0f2f1', dot: '#00897b', text: '#004d40' },
-  { bg: '#ede7f6', dot: '#5e35b1', text: '#311b6e' },
-  { bg: '#fff8e1', dot: '#f9a825', text: '#5c4a00' },
-  { bg: '#e3f2fd', dot: '#1565c0', text: '#0d3b66' },
+  { bg: 'var(--ib-primary-soft)', dot: 'var(--ib-primary)', text: 'var(--ib-text)' },
+  { bg: 'var(--ib-surface-subtle)', dot: 'var(--ib-primary-strong)', text: 'var(--ib-text)' },
 ]
 
 function pillColor(item) {
-  if (item.type === 'deadline') return { bg: '#fff5e9', dot: '#ee8b36', text: '#84501e' }
+  if (item.type === 'deadline') return { bg: 'var(--ib-surface-subtle)', dot: 'var(--ib-warning)', text: 'var(--ib-text)' }
   if (item.type === 'subtask' || item.task_type === 'process') {
     const groupId = item.type === 'subtask' ? item.parent_task_id : item.id
     return PROCESS_PALETTE[groupId % PROCESS_PALETTE.length]
   }
-  return { bg: '#f0f3ff', dot: '#4e70e6', text: '#3b4a67' }
+  return { bg: 'var(--ib-primary-soft)', dot: 'var(--ib-primary)', text: 'var(--ib-text)' }
 }
 
 function pillShape(item) {
@@ -207,14 +253,14 @@ function pillShape(item) {
 
 async function loadCalendar() {
   loading.value = true
+  loadError.value = ''
   try {
     const data = await api(`/api/calendar?year=${currentYear.value}&month=${currentMonth.value}`)
     monthData.value = Object.fromEntries((data.days || []).map((day) => [day.date, day]))
-    const totalCount = Object.values(monthData.value).reduce((sum, d) => sum + (d.count || 0), 0)
-    console.log(`[Calendar] Loaded ${Object.keys(monthData.value).length} days, ${totalCount} items for ${currentYear.value}-${currentMonth.value}`)
   } catch (err) {
-    console.error('[Calendar] Failed to load calendar data:', err)
     monthData.value = {}
+    loadError.value = err?.message || t('calendar.loadFailed')
+    notify(loadError.value, { type: 'error' })
   } finally {
     loading.value = false
   }
@@ -258,6 +304,10 @@ function openItem(item) {
 function openDay(day) {
   selectedDay.value = day
   dayDialog.value = true
+}
+
+function openCreateForDay(date) {
+  router.push({ path: '/tasks', query: { create: '1', deadline: date } })
 }
 
 // 弹窗内点击条目：先关弹窗再走与月历一致的跳转逻辑
@@ -530,5 +580,46 @@ onBeforeUnmount(() => stopTaskSync?.())
 :global([data-theme='dark']) .schedule-pill:not(.schedule-pill--todo):not(.schedule-pill--personal-todo) {
   background: color-mix(in srgb, var(--pill-dot) 16%, var(--ib-surface));
   color: var(--ib-text);
+}
+.calendar-error { width: min(100%, var(--ib-content-max)); margin: 0 auto 14px; }
+.legend-todo,
+.legend-process { background: var(--ib-primary); }
+.legend-personal { border-color: var(--ib-primary); }
+.legend-deadline { border-color: var(--ib-warning); }
+.legend-deadline::after { color: var(--ib-warning); }
+.legend-urgent { border-color: var(--ib-danger); }
+.empty-day-action { width: 100%; min-height: 38px; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 5px; border: 1px dashed transparent; border-radius: 7px; color: transparent; background: transparent; cursor: pointer; font-size: 9px; }
+.calendar-day:hover .empty-day-action,
+.empty-day-action:focus-visible { border-color: var(--ib-border-strong); color: var(--ib-primary-strong); background: var(--ib-surface-subtle); }
+.mobile-agenda { position: relative; display: none; }
+.mobile-day { display: grid; grid-template-columns: 74px minmax(0, 1fr); min-height: 76px; border-bottom: 1px solid var(--ib-border); }
+.mobile-day:last-child { border-bottom: 0; }
+.mobile-day--today { background: var(--ib-primary-soft); }
+.mobile-day__date { display: flex; align-items: center; align-content: center; flex-wrap: wrap; gap: 4px; padding: 12px; border-right: 1px solid var(--ib-border); }
+.mobile-day__date strong { color: var(--ib-text); font-size: 20px; line-height: 1; }
+.mobile-day__date > span { color: var(--ib-text-secondary); font-size: 10px; }
+.mobile-day__date small { width: 100%; color: var(--ib-text-muted); font-size: 9px; }
+.mobile-day__items { display: grid; align-content: center; gap: 5px; padding: 9px; }
+.mobile-schedule-item { width: 100%; display: grid; grid-template-columns: 5px minmax(0, 1fr) 16px; align-items: center; gap: 8px; padding: 7px 6px; border: 0; border-radius: 7px; color: var(--ib-text); background: var(--ib-surface); cursor: pointer; text-align: left; }
+.mobile-schedule-item:hover { background: var(--ib-surface-subtle); }
+.mobile-schedule-item > i { width: 4px; height: 28px; border-radius: 999px; }
+.mobile-schedule-item > span { display: grid; min-width: 0; gap: 2px; }
+.mobile-schedule-item strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-schedule-item small { color: var(--ib-text-muted); font-size: 9px; }
+.mobile-add-task { width: 100%; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 7px; border: 1px dashed var(--ib-border-strong); border-radius: 7px; color: var(--ib-primary-strong); background: transparent; cursor: pointer; font-size: 10px; }
+.mobile-add-task:hover { border-color: var(--ib-primary); background: var(--ib-primary-soft); }
+
+@media (max-width: 700px) {
+  .calendar-workspace { overflow-x: visible; padding-inline: 12px; }
+  .calendar-card { min-width: 0; }
+  .calendar-toolbar { align-items: stretch; flex-direction: column; gap: 10px; }
+  .month-navigation { justify-content: space-between; }
+  .month-title { min-width: 0; }
+  .calendar-legend > span { display: none; }
+  .calendar-legend { justify-content: flex-end; }
+  .weekday-grid,
+  .calendar-month-grid { display: none; }
+  .mobile-agenda { display: block; }
+  .calendar-loading { min-height: 320px; }
 }
 </style>

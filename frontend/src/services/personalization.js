@@ -1,4 +1,4 @@
-import { api, authFetch } from '@/stores/auth'
+import { api } from '@/stores/auth'
 
 export const CONSENT_POLICY_VERSION = 'scheduling-personalization-consent.v1'
 
@@ -53,11 +53,7 @@ export const personalizationApi = {
     method: 'PUT', body: JSON.stringify(value),
   }),
   deleteMemory: (id) => api(`/api/scheduling/memory/${id}`, { method: 'DELETE' }),
-  exportMemory: async () => {
-    const response = await authFetch('/api/scheduling/memory/export')
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    return response.json()
-  },
+  exportMemory: () => api('/api/scheduling/memory/export'),
   reset: (settings, rebuild) => api('/api/scheduling/personalization/reset', {
     method: 'POST',
     body: JSON.stringify({

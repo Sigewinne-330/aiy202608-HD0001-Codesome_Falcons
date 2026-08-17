@@ -12,6 +12,19 @@
       <v-progress-circular indeterminate color="primary" size="42" />
     </div>
 
+    <v-alert
+      v-else-if="loadError"
+      type="error"
+      variant="tonal"
+      class="page-error"
+      :title="$t('billing.loadErrorTitle')"
+    >
+      <p>{{ loadError }}</p>
+      <template #append>
+        <v-btn variant="text" color="error" @click="loadAll">{{ $t('common.retry') }}</v-btn>
+      </template>
+    </v-alert>
+
     <template v-else>
       <!-- 余额总览 -->
       <v-card class="balance-card" rounded="xl" elevation="0">
@@ -42,7 +55,7 @@
       <!-- 用量柱状图 -->
       <v-card class="usage-card" rounded="xl" elevation="0">
         <div class="card-title">{{ $t('billing.usageTitle') }}</div>
-        <div class="usage-chart">
+        <div v-if="usageDays.length" class="usage-chart" :aria-label="$t('billing.usageTitle')">
           <div v-for="item in usageDays" :key="item.date" class="usage-col" :title="`${item.date}: ${item.spent}`">
             <div class="usage-bar-wrap">
               <div class="usage-bar" :style="{ height: barHeight(item.spent) + '%' }" :class="{ 'is-zero': item.spent === 0 }" />
@@ -50,6 +63,7 @@
             <span class="usage-label">{{ shortDate(item.date) }}</span>
           </div>
         </div>
+        <div v-else class="ledger-empty">{{ $t('billing.usageEmpty') }}</div>
       </v-card>
 
       <!-- 充值档位 -->
@@ -70,6 +84,7 @@
             <v-icon size="20" color="white" class="plan-check">mdi-check-circle</v-icon>
           </button>
         </div>
+        <div v-if="!plans.length" class="ledger-empty plan-empty">{{ $t('billing.plansEmpty') }}</div>
         <p class="demo-note">{{ $t('billing.demoNote') }}</p>
       </div>
 
@@ -114,19 +129,18 @@
       </v-card>
     </v-dialog>
 
-    <v-snackbar v-model="paySuccess" color="success" timeout="3000">
-      {{ $t('billing.paySuccess') }}
-    </v-snackbar>
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { authFetch } from '@/stores/auth'
+import { api } from '@/stores/auth'
+import { notify } from '@/services/feedback'
 
 const { t } = useI18n()
 const loading = ref(true)
+const loadError = ref('')
 const summary = ref({ balance: 0, today_spent: 0, month_spent: 0, estimated_days_left: null })
 const usageDays = ref([])
 const plans = ref([])
@@ -134,7 +148,6 @@ const ledger = ref([])
 const selectedPlan = ref(null)
 const payDialog = ref(false)
 const paying = ref(false)
-const paySuccess = ref(false)
 
 const maxSpent = computed(() => Math.max(...usageDays.value.map((d) => d.spent), 1))
 
@@ -165,19 +178,21 @@ function ledgerDate(value) {
 
 async function loadAll() {
   loading.value = true
+  loadError.value = ''
   try {
-    const [summaryRes, usageRes, plansRes, ledgerRes] = await Promise.all([
-      authFetch('/api/billing/summary'),
-      authFetch('/api/billing/usage?days=7'),
-      authFetch('/api/billing/plans'),
-      authFetch('/api/billing/ledger?limit=30'),
+    const [summaryData, usageData, plansData, ledgerData] = await Promise.all([
+      api('/api/billing/summary'),
+      api('/api/billing/usage?days=7'),
+      api('/api/billing/plans'),
+      api('/api/billing/ledger?limit=30'),
     ])
-    if (summaryRes.ok) summary.value = await summaryRes.json()
-    if (usageRes.ok) usageDays.value = (await usageRes.json()).days || []
-    if (plansRes.ok) plans.value = (await plansRes.json()).plans || []
-    if (ledgerRes.ok) ledger.value = (await ledgerRes.json()).items || []
-  } catch {
-    /* ignore */
+    summary.value = summaryData || summary.value
+    usageDays.value = usageData?.days || []
+    plans.value = plansData?.plans || []
+    ledger.value = ledgerData?.items || []
+  } catch (error) {
+    loadError.value = error?.message || t('billing.loadFailed')
+    notify(loadError.value, { type: 'error' })
   } finally {
     loading.value = false
   }
@@ -192,16 +207,13 @@ async function confirmPay() {
   if (!selectedPlan.value) return
   paying.value = true
   try {
-    const createRes = await authFetch(`/api/billing/orders?plan_code=${selectedPlan.value.code}`, { method: 'POST' })
-    if (!createRes.ok) throw new Error('create order failed')
-    const order = await createRes.json()
-    const payRes = await authFetch(`/api/billing/orders/${order.id}/pay`, { method: 'POST' })
-    if (!payRes.ok) throw new Error('pay failed')
+    const order = await api(`/api/billing/orders?plan_code=${encodeURIComponent(selectedPlan.value.code)}`, { method: 'POST' })
+    await api(`/api/billing/orders/${order.id}/pay`, { method: 'POST' })
     payDialog.value = false
-    paySuccess.value = true
+    notify(t('billing.paySuccess'), { type: 'success' })
     await loadAll()
-  } catch {
-    /* ignore */
+  } catch (error) {
+    notify(error?.message || t('billing.payFailed'), { type: 'error' })
   } finally {
     paying.value = false
   }
@@ -220,6 +232,8 @@ onMounted(loadAll)
 .page-header h1 { margin-top: 4px; font-size: clamp(28px, 3vw, 39px); letter-spacing: -.04em; }
 .page-header p { margin-top: 8px; color: #7f899d; font-size: 13px; }
 .page-loading { min-height: 60vh; display: grid; place-items: center; }
+.page-error { margin-top: 20px; }
+.page-error p { margin: 0; }
 
 .balance-card {
   display: flex; align-items: center; justify-content: space-between; gap: 30px; flex-wrap: wrap;
@@ -274,6 +288,7 @@ onMounted(loadAll)
 .ledger-amount--recharge, .ledger-amount--gift { color: #25a572; }
 .ledger-amount--consume { color: #de4555; }
 .ledger-empty { padding: 36px; text-align: center; color: #9aa2b1; font-size: 12px; }
+.plan-empty { border: 1px dashed var(--ib-border); border-radius: var(--ib-radius-md); }
 
 .pay-summary { display: flex; align-items: center; justify-content: center; gap: 18px; padding: 22px 0; }
 .pay-amount { font-size: 30px; font-weight: 800; color: #2e4fd8; }

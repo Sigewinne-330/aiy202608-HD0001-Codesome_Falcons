@@ -23,6 +23,7 @@ export const progressMessages = {
     eeTopic: 'Topic', eeQuestion: 'Research question', eeSources: 'Source collection', eeWriting: 'Writing', eeReflection: 'Reflection', eeSubmission: 'Final submission',
     tokPlan: 'Planning', tokDraft: 'Draft', tokRevise: 'Revision', tokPrepare: 'Preparation', tokComplete: 'Complete',
     casStart: 'Start', casProgress: 'In progress', casComplete: 'Complete',
+    loadErrorTitle: 'Progress is unavailable right now', loadFailed: 'Unable to load progress data.', createFailed: 'Unable to create this timeline.', actionFailed: 'The change could not be saved.',
   },
   'zh-CN': {
     refresh: '刷新', backCategory: '返回分类', timelineManager: '时间轴管理', noGroup: '未分组',
@@ -48,6 +49,7 @@ export const progressMessages = {
     eeTopic: '选题', eeQuestion: '研究问题', eeSources: '资料收集', eeWriting: '写作', eeReflection: '反思', eeSubmission: '最终提交',
     tokPlan: '规划', tokDraft: '初稿', tokRevise: '修改', tokPrepare: '准备', tokComplete: '完成',
     casStart: '开始', casProgress: '进行', casComplete: '完成',
+    loadErrorTitle: '暂时无法加载进度', loadFailed: '无法加载进度数据。', createFailed: '无法创建这条时间轴。', actionFailed: '本次更改未能保存。',
   },
   'zh-TW': {
     refresh: '重新整理', backCategory: '返回分類', timelineManager: '時間軸管理', noGroup: '未分組',
@@ -73,5 +75,6 @@ export const progressMessages = {
     eeTopic: '選題', eeQuestion: '研究問題', eeSources: '資料收集', eeWriting: '寫作', eeReflection: '反思', eeSubmission: '最終提交',
     tokPlan: '規劃', tokDraft: '初稿', tokRevise: '修改', tokPrepare: '準備', tokComplete: '完成',
     casStart: '開始', casProgress: '進行', casComplete: '完成',
+    loadErrorTitle: '暫時無法載入進度', loadFailed: '無法載入進度資料。', createFailed: '無法建立這條時間軸。', actionFailed: '本次變更未能儲存。',
   },
 }

@@ -151,7 +151,14 @@
 
           <template v-else-if="activeSection === 'subscription'">
             <SettingsHeading :title="$t('settingsBilling.balanceTitle')" :subtitle="$t('settingsBilling.balanceDesc')" />
-            <div class="subscription-card">
+            <v-progress-linear v-if="balanceLoading" indeterminate color="primary" class="mb-4" />
+            <v-alert v-else-if="balanceError" type="error" variant="tonal" class="mb-4">
+              {{ balanceError }}
+              <template #append>
+                <v-btn color="error" variant="text" @click="loadBalance">{{ $t('common.retry') }}</v-btn>
+              </template>
+            </v-alert>
+            <div v-else class="subscription-card">
               <div>
                 <div class="subscription-badge">{{ $t('billing.balance') }}</div>
                 <div class="text-h5 font-weight-bold mt-3">
@@ -162,14 +169,14 @@
               </div>
               <v-icon icon="mdi-wallet-outline" size="50" color="primary" />
             </div>
-            <div class="feature-list">
+            <div v-if="!balanceLoading && !balanceError" class="feature-list">
               <div>
                 <v-icon icon="mdi-chart-line" color="success" size="20" />
-                <span>{{ $t('billing.todaySpent') }}: -{{ summary.today_spent.toLocaleString() }}</span>
+                <span>{{ $t('billing.todaySpent') }}{{ $t('common.labelSeparator') }}-{{ summary.today_spent.toLocaleString() }}</span>
               </div>
               <div>
                 <v-icon icon="mdi-calendar-month" color="success" size="20" />
-                <span>{{ $t('billing.monthSpent') }}: -{{ summary.month_spent.toLocaleString() }}</span>
+                <span>{{ $t('billing.monthSpent') }}{{ $t('common.labelSeparator') }}-{{ summary.month_spent.toLocaleString() }}</span>
               </div>
             </div>
             <v-btn color="primary" size="large" block class="mt-6" prepend-icon="mdi-cash-plus" @click="goBilling">
@@ -219,18 +226,24 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue', 'logout'])
 const { user, logout } = useAuth()
-const { locale } = useI18n()
+const { locale, t } = useI18n()
 const router = useRouter()
 const balance = ref(0)
 const summary = ref({ today_spent: 0, month_spent: 0 })
+const balanceLoading = ref(false)
+const balanceError = ref('')
 
 async function loadBalance() {
+  balanceLoading.value = true
+  balanceError.value = ''
   try {
     const data = await api('/api/billing/summary')
     balance.value = data?.balance || 0
     summary.value = data || summary.value
-  } catch {
-    /* ignore */
+  } catch (error) {
+    balanceError.value = error?.message || t('billing.loadFailed')
+  } finally {
+    balanceLoading.value = false
   }
 }
 
@@ -332,10 +345,12 @@ const connections = [
   { key: 'wechat', titleKey: 'settings.wechat', descKey: 'settings.wechatDesc', icon: 'mdi-wechat', color: 'success' },
 ]
 
-const weekDays = [
-  { label: '一', value: 1 }, { label: '二', value: 2 }, { label: '三', value: 3 },
-  { label: '四', value: 4 }, { label: '五', value: 5 }, { label: '六', value: 6 }, { label: '日', value: 0 },
-]
+const weekDays = computed(() => [
+  { label: t('calendar.weekMon'), value: 1 }, { label: t('calendar.weekTue'), value: 2 },
+  { label: t('calendar.weekWed'), value: 3 }, { label: t('calendar.weekThu'), value: 4 },
+  { label: t('calendar.weekFri'), value: 5 }, { label: t('calendar.weekSat'), value: 6 },
+  { label: t('calendar.weekSun'), value: 0 },
+])
 
 const userInitial = computed(() => (user.value?.username || 'I').charAt(0).toUpperCase())
 
@@ -404,5 +419,39 @@ watch(dialogOpen, (isOpen) => {
   .time-grid, .feature-list { grid-template-columns: 1fr; }
   .connection-card { flex-wrap: wrap; }
   .connection-field { flex-basis: 100%; }
+}
+
+/* Mono + One */
+:global(.settings-overlay .v-overlay__scrim) { background: color-mix(in srgb, var(--ib-text) 24%, transparent) !important; }
+.settings-card { border-color: var(--ib-border); background: var(--ib-surface) !important; box-shadow: var(--ib-shadow-overlay) !important; }
+.settings-nav { border-color: var(--ib-border); background: var(--ib-surface-subtle); }
+.settings-nav__title,
+.settings-nav > button.active,
+:deep(.settings-heading h2),
+.setting-label { color: var(--ib-text); }
+.settings-nav > button { color: var(--ib-text-secondary); }
+.settings-nav > button:hover { background: color-mix(in srgb, var(--ib-primary) 7%, var(--ib-surface-subtle)); }
+.settings-nav > button.active { color: var(--ib-primary-strong); background: var(--ib-primary-soft); }
+:deep(.settings-heading),
+.setting-row,
+.connection-card,
+.settings-actions { border-color: var(--ib-border); }
+:deep(.settings-heading p),
+.setting-help,
+.time-fields span { color: var(--ib-text-secondary); }
+.profile-row { border: 1px solid var(--ib-border); background: var(--ib-surface-subtle); }
+.subscription-card { border: 1px solid var(--ib-border); color: var(--ib-text); background: var(--ib-surface-subtle); box-shadow: none; }
+.subscription-badge { color: var(--ib-primary-strong); background: var(--ib-primary-soft); }
+.settings-actions { background: color-mix(in srgb, var(--ib-surface) 94%, transparent); }
+.saved-hint { color: var(--ib-success); }
+.saved-hint--error { color: var(--ib-danger); }
+
+@media (max-width: 520px) {
+  .settings-card { height: 100dvh; border-radius: 0 !important; }
+  .settings-layout { grid-template-columns: 58px minmax(0, 1fr); }
+  .settings-nav { padding-inline: 5px; }
+  .settings-nav > button { padding-inline: 8px; }
+  .settings-content__scroll { padding: 20px 14px; }
+  .settings-actions { padding-inline: 12px; }
 }
 </style>

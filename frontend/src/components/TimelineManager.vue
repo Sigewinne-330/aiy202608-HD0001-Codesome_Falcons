@@ -150,14 +150,14 @@
       </v-card>
     </v-dialog>
 
-    <v-snackbar v-model="errorVisible" color="error" timeout="3500">{{ errorMessage }}</v-snackbar>
   </section>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { authFetch } from '@/stores/auth'
+import { api } from '@/stores/auth'
+import { notify } from '@/services/feedback'
 import { notifyTasksChanged } from '@/services/taskSync'
 import { openAgent } from '@/services/agentContext'
 import { aggregateRisk } from '@/utils/tasks'
@@ -178,8 +178,6 @@ const editingMilestone = ref(null)
 const selectedMilestone = ref(null)
 const saving = ref(false)
 const applyingTemplate = ref(false)
-const errorVisible = ref(false)
-const errorMessage = ref('')
 
 const emptyMilestone = () => ({ name: '', notice_time: '', level: 'medium', status: 'pending' })
 const milestoneForm = ref(emptyMilestone())
@@ -254,17 +252,11 @@ function statusColor(value) {
 }
 
 function showError(error) {
-  errorMessage.value = error?.message || String(error)
-  errorVisible.value = true
+  notify(error?.message || t('progress.actionFailed'), { type: 'error' })
 }
 
-async function request(path, options = {}) {
-  const response = await authFetch(path, options)
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}))
-    throw new Error(body.detail || `HTTP ${response.status}`)
-  }
-  return response.json().catch(() => ({}))
+function request(path, options = {}) {
+  return api(path, options)
 }
 
 function openAdd() {
@@ -471,4 +463,31 @@ function askAgent() {
 .dialog-title { padding: 22px 24px 8px; font-weight: 750; }.dialog-body { padding: 18px 24px 4px !important; }.dialog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.dialog-actions { padding: 12px 24px 22px; }
 @media (max-width: 900px) { .summary-grid { grid-template-columns: 1fr 1fr; }.timeline-header { align-items: flex-start; flex-wrap: wrap; }.timeline-actions { width: 100%; justify-content: flex-end; }.milestone-row { grid-template-columns: 36px minmax(0, 1fr) auto; }.milestone-row > .v-btn { display: none; } }
 @media (max-width: 560px) { .summary-grid { grid-template-columns: 1fr; }.timeline-title h1 { white-space: normal; }.timeline-actions { justify-content: stretch; }.timeline-actions .v-btn { flex: 1; }.timeline-actions .v-btn:nth-child(2) { flex: 0 0 auto; }.milestone-row { padding: 10px 12px; }.timeline-rail { left: 28px; }.dialog-grid { grid-template-columns: 1fr; } }
+
+/* Mono Workspace visual layer */
+.timeline-manager,
+.timeline-title h1,
+.milestone-name,
+.empty-timeline h3 { color: var(--ib-text); }
+.timeline-title p,
+.summary-grid > .v-card > span,
+.summary-grid small,
+.calendar-sync-note,
+.milestone-card__header p,
+.milestone-meta,
+.empty-timeline { color: var(--ib-text-secondary); }
+.eyebrow { color: var(--ib-primary-strong); }
+.summary-grid .v-card,
+.milestone-card { border-color: var(--ib-border); background: var(--ib-surface) !important; box-shadow: var(--ib-shadow-card) !important; }
+.milestone-card__header { border-color: var(--ib-border); }
+.milestone-row:hover { background: var(--ib-surface-hover); }
+.milestone-row--overdue { background: color-mix(in srgb, var(--ib-danger) 6%, var(--ib-surface)); }
+.timeline-rail { background: var(--ib-border-strong); }
+.empty-icon { color: var(--ib-primary-strong); background: var(--ib-primary-soft); }
+.priority-high,
+.priority-urgent,
+.overdue-label { color: var(--ib-danger); }
+.risk-high { color: var(--ib-danger); }
+.risk-medium { color: var(--ib-warning); }
+.risk-low { color: var(--ib-success); }
 </style>

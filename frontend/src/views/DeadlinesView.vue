@@ -23,7 +23,15 @@
       {{ collision.suggestion }}
     </v-alert>
 
-    <v-row>
+    <div v-if="loading" class="ib-empty deadline-state">
+      <div><v-progress-circular indeterminate color="primary" /><p>{{ $t('common.loading') }}</p></div>
+    </div>
+    <v-alert v-else-if="loadError" type="error" variant="tonal" class="mb-4">
+      {{ loadError }}
+      <template #append><v-btn variant="text" @click="loadDeadlines">{{ $t('common.retry') }}</v-btn></template>
+    </v-alert>
+
+    <v-row v-else>
       <v-col cols="12" md="8">
         <v-card>
           <v-card-title class="d-flex align-center">
@@ -43,16 +51,17 @@
               :key="d.id"
               :id="`deadline-item-${d.id}`"
               :value="d.id"
-              :class="{ 'bg-red-lighten-5': d.status === 'overdue', 'deadline-item--focused': focusedDeadlineId === d.id }"
+              :class="{ 'deadline-item--overdue': d.status === 'overdue', 'deadline-item--focused': focusedDeadlineId === d.id }"
             >
               <template v-slot:prepend>
-                <v-icon
+                <v-btn
+                  :icon="d.status === 'done' ? 'mdi-check-circle' : 'mdi-circle-outline'"
                   :color="statusColor(d.status)"
+                  variant="text"
+                  size="small"
+                  :aria-label="$t('deadlines.toggleStatus')"
                   @click="markDone(d)"
-                  style="cursor: pointer;"
-                >
-                  {{ d.status === 'done' ? 'mdi-check-circle' : 'mdi-circle-outline' }}
-                </v-icon>
+                />
               </template>
 
               <v-list-item-title class="font-weight-medium">
@@ -79,6 +88,7 @@
           <v-card-text v-else class="text-center py-8">
             <v-icon size="48" color="grey-lighten-1">mdi-calendar-check-outline</v-icon>
             <div class="text-h6 text-grey-darken-1 mt-2">{{ $t('deadlines.empty') }}</div>
+            <v-btn color="primary" variant="tonal" class="mt-3" @click="openCreate">{{ $t('deadlines.add') }}</v-btn>
           </v-card-text>
         </v-card>
       </v-col>
@@ -113,7 +123,7 @@
               class="mb-2"
               @keydown.enter="checkCollision"
             />
-            <v-btn block variant="tonal" color="primary" @click="checkCollision" size="small">
+            <v-btn block variant="tonal" color="primary" :loading="checking" :disabled="!checkDate" @click="checkCollision" size="small">
               {{ $t('deadlines.check') }}
             </v-btn>
             <div v-if="collision" class="mt-2">
@@ -135,14 +145,14 @@
           <v-text-field v-model="form.title" :label="$t('deadlines.titleField')" variant="outlined" density="comfortable" class="mb-2" />
           <v-text-field v-model="form.source" :label="$t('deadlines.source')" variant="outlined" density="comfortable" class="mb-2" />
           <v-text-field v-model="form.subject" :label="$t('deadlines.subject')" variant="outlined" density="comfortable" class="mb-2" />
-          <v-text-field v-model="form.due_date" :label="$t('deadlines.dueDate')" variant="outlined" density="comfortable" class="mb-2" />
-          <v-select v-model="form.priority" :label="$t('deadlines.priority')" :items="['low','medium','high','urgent']" variant="outlined" density="comfortable" class="mb-2" />
+          <v-text-field v-model="form.due_date" :label="$t('deadlines.dueDate')" type="date" variant="outlined" density="comfortable" class="mb-2" />
+          <v-select v-model="form.priority" :label="$t('deadlines.priority')" :items="priorityOptions" item-title="title" item-value="value" variant="outlined" density="comfortable" class="mb-2" />
           <v-textarea v-model="form.description" :label="$t('deadlines.note')" variant="outlined" density="comfortable" rows="2" />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="dialog = false">{{ $t('common.cancel') }}</v-btn>
-          <v-btn color="primary" @click="createDeadline" :disabled="!form.title || !form.due_date">{{ $t('common.add') }}</v-btn>
+          <v-btn color="primary" :loading="saving" @click="createDeadline" :disabled="!form.title || !form.due_date">{{ $t('common.add') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -153,12 +163,17 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { authFetch } from '@/stores/auth'
+import { api } from '@/stores/auth'
+import { notify } from '@/services/feedback'
 
 const { t } = useI18n()
 const route = useRoute()
 const deadlines = ref([])
 const upcoming = ref([])
+const loading = ref(true)
+const loadError = ref('')
+const saving = ref(false)
+const checking = ref(false)
 const collision = ref(null)
 const statusFilter = ref('all')
 const checkDate = ref('')
@@ -168,7 +183,10 @@ const form = ref({
   title: '', source: '', subject: '', due_date: '', priority: 'medium', description: '',
 })
 
-const API_BASE = '/api'
+const priorityOptions = computed(() => ['low', 'medium', 'high', 'urgent'].map((value) => ({
+  value,
+  title: t(`common.${value}`),
+})))
 
 const filteredDeadlines = computed(() => {
   if (statusFilter.value === 'all') return deadlines.value
@@ -211,14 +229,22 @@ function handleFocus() {
 }
 
 async function loadDeadlines() {
+  loading.value = true
+  loadError.value = ''
   try {
     const [all, up] = await Promise.all([
-      authFetch(`${API_BASE}/deadlines`).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
-      authFetch(`${API_BASE}/deadlines/upcoming?days=7`).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
+      api('/api/deadlines'),
+      api('/api/deadlines/upcoming?days=7'),
     ])
     deadlines.value = all
     upcoming.value = up
-  } catch { /* ignore */ } finally {
+  } catch (error) {
+    deadlines.value = []
+    upcoming.value = []
+    loadError.value = error?.message || t('deadlines.loadFailed')
+    notify(loadError.value, { type: 'error' })
+  } finally {
+    loading.value = false
     handleFocus()  // 数据就绪后定位提醒跳转的目标
   }
 }
@@ -232,37 +258,45 @@ function openCreate() {
 }
 
 async function createDeadline() {
+  saving.value = true
   try {
-    const res = await authFetch(`${API_BASE}/deadlines`, {
+    await api('/api/deadlines', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form.value),
     })
-    if (res.ok) {
-      dialog.value = false
-      await loadDeadlines()
-    }
-  } catch { /* ignore */ }
+    dialog.value = false
+    notify(t('deadlines.created'), { type: 'success' })
+    await loadDeadlines()
+  } catch (error) {
+    notify(error?.message || t('deadlines.createFailed'), { type: 'error' })
+  } finally {
+    saving.value = false
+  }
 }
 
 async function markDone(d) {
   const newStatus = d.status === 'done' ? 'pending' : 'done'
   try {
-    await authFetch(`${API_BASE}/deadlines/${d.id}`, {
+    await api(`/api/deadlines/${d.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: newStatus }),
     })
     await loadDeadlines()
-  } catch { /* ignore */ }
+  } catch (error) {
+    notify(error?.message || t('deadlines.updateFailed'), { type: 'error' })
+  }
 }
 
 async function checkCollision() {
   if (!checkDate.value) return
+  checking.value = true
   try {
-    const res = await authFetch(`${API_BASE}/deadlines/check/collisions?date=${checkDate.value}`)
-    collision.value = await res.json()
-  } catch { /* ignore */ }
+    collision.value = await api(`/api/deadlines/check/collisions?date=${encodeURIComponent(checkDate.value)}`)
+  } catch (error) {
+    notify(error?.message || t('deadlines.checkFailed'), { type: 'error' })
+  } finally {
+    checking.value = false
+  }
 }
 
 onMounted(loadDeadlines)
@@ -274,6 +308,13 @@ onMounted(loadDeadlines)
   border-left: 3px solid var(--ib-primary);
   border-radius: 8px;
 }
+.deadline-item--overdue { background: color-mix(in srgb, var(--ib-danger) 7%, var(--ib-surface)); }
+.deadline-state { border: 1px solid var(--ib-border); border-radius: var(--ib-radius-lg); background: var(--ib-surface); }
+.deadline-state > div { display: grid; justify-items: center; gap: 10px; }
+.deadlines-page .text-grey,
+.deadlines-page .text-grey-darken-1 { color: var(--ib-text-secondary) !important; }
+.deadlines-page .v-card-title,
+.deadlines-page .v-list-item-title { color: var(--ib-text); }
 .deadlines-page > .d-flex:first-child { min-height: 58px; margin-bottom: 24px !important; }
 .deadlines-page > .d-flex:first-child .text-h6 { color: var(--ib-text); font-size: clamp(26px, 3vw, 36px) !important; letter-spacing: -.035em; }
 .deadlines-page > .d-flex:first-child .text-caption { color: var(--ib-text-secondary) !important; }

@@ -75,9 +75,6 @@
         />
       </div>
 
-      <!-- 每日汇总提醒（cadence）设置项已按需求暂时移除；
-           脚本中的 cadence 数据流与编辑逻辑完整保留，恢复时只需还原此区块 -->
-
       <!-- 任务级默认提醒（分钟偏移） -->
       <div class="setting-row setting-row--top">
         <div>
@@ -155,6 +152,7 @@
     </template>
 
     <RoleCardPicker
+      v-if="pickerOpen"
       v-model="pickerOpen"
       :cards="roleCards"
       :selected-id="form.role_card_id"
@@ -172,6 +170,7 @@ import { getPreferences, updatePreferences, listRoleCards, ApiError } from '@/se
 import RoleCardPicker from '@/components/RoleCardPicker.vue'
 import ReminderOffsetsEditor from '@/components/ReminderOffsetsEditor.vue'
 import { notifyRoleCardChanged, roleCardDisplayName } from '@/services/roleCardVisuals'
+import { LOCALE_NAMES, SUPPORTED_LOCALES } from '@/i18n'
 
 defineProps({
   // true 时隐藏面板自带保存栏，由父容器（如 SettingsDialog 底部按钮）调 save() 统一保存
@@ -193,7 +192,6 @@ const form = reactive({
   timezone: 'Asia/Shanghai',
   daily_dispatch_time: '09:00',
   default_task_reminder_offsets_minutes: [5, 1440],
-  cadence_offsets: [2, 1, 0, -1, -3, -7],
   email_enabled: true,
   chat_enabled: true,
   role_card_id: null,
@@ -204,11 +202,7 @@ const snapshot = ref(null)
 const preferences = ref(null)
 const roleCards = ref([])
 
-const languageOptions = [
-  { title: '简体中文', value: 'zh-CN' },
-  { title: '繁體中文', value: 'zh-TW' },
-  { title: 'English', value: 'en' },
-]
+const languageOptions = SUPPORTED_LOCALES.map((value) => ({ title: LOCALE_NAMES[value], value }))
 
 // ---- 时区选项：优先 Intl.supportedValuesOf，缺失时用内置常用列表 ----
 const COMMON_TIMEZONES = [
@@ -234,74 +228,6 @@ const timezoneOptions = computed(() => {
   if (form.timezone && !merged.includes(form.timezone)) merged.unshift(form.timezone)
   return merged
 })
-
-// ---- 每日汇总提醒节奏：提前(锁) + 当天(锁) + 逾期(基础锁+自定义可删) ----
-// cadence_offsets 语义：正数=截止前 N 天，0=当天，负数=逾期 N 天
-const BASE_CADENCE = [2, 1, 0, -1, -3, -7]
-
-// 提前段：正数 offset，降序展示（前 2 天 → 前 1 天）
-const beforeDays = computed(() =>
-  BASE_CADENCE.filter((o) => o > 0 && form.cadence_offsets.includes(o)).sort((a, b) => b - a),
-)
-// 逾期基础段：负数 offset 转天数，升序（第 1 天 → 第 7 天）
-const overdueBaseDays = computed(() =>
-  BASE_CADENCE.filter((o) => o < 0 && form.cadence_offsets.includes(o)).map((o) => -o).sort((a, b) => a - b),
-)
-// 逾期自定义段：可增删
-const overdueCustomDays = computed(() =>
-  form.cadence_offsets.filter((o) => !BASE_CADENCE.includes(o)).map((o) => -o).sort((a, b) => a - b),
-)
-
-function beforeDayLabel(d) {
-  return t('reminders.cadenceBeforeDay', { n: d }, d)
-}
-function overdueDayLabel(d) {
-  return t('reminders.cadenceOverdueDay', { n: d }, d)
-}
-
-// 人话总结：随配置实时变化，如"截止前 2 天、前 1 天和当天提醒你；逾期后第 1、3、7 天继续追催"
-const cadenceSummary = computed(() => {
-  const before = beforeDays.value.map(beforeDayLabel).join(t('reminders.cadenceListSep'))
-  const overdue = [...overdueBaseDays.value, ...overdueCustomDays.value]
-    .sort((a, b) => a - b)
-    .map((d) => String(d))
-    .join(t('reminders.cadenceListSep'))
-  return t('reminders.cadenceSummary', { before, overdue })
-})
-
-const cadenceInput = ref('')
-const cadenceError = ref('')
-
-const cadenceInputDays = computed(() => {
-  const n = Number(cadenceInput.value)
-  return Number.isInteger(n) ? n : null
-})
-const canAddCadence = computed(() => {
-  const d = cadenceInputDays.value
-  if (d == null || d < 2 || d > 365) return false
-  return !form.cadence_offsets.includes(-d)
-})
-
-function addCustomCadence() {
-  const d = cadenceInputDays.value
-  if (d == null || d < 2 || d > 365) {
-    cadenceError.value = t('reminders.cadenceRangeError')
-    return
-  }
-  if (form.cadence_offsets.includes(-d)) {
-    cadenceError.value = t('reminders.cadenceDuplicate')
-    return
-  }
-  form.cadence_offsets = [...form.cadence_offsets, -d]
-  cadenceInput.value = ''
-  cadenceError.value = ''
-}
-
-function removeCustomCadence(offset) {
-  if (BASE_CADENCE.includes(offset)) return
-  form.cadence_offsets = form.cadence_offsets.filter((o) => o !== offset)
-  cadenceError.value = ''
-}
 
 // 每日派发时间：严格 HH:MM（零填充）
 const DISPATCH_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
@@ -330,21 +256,15 @@ function applyPreferences(prefs) {
     Array.isArray(prefs.default_task_reminder_offsets_minutes)
       ? [...prefs.default_task_reminder_offsets_minutes]
       : [5, 1440]
-  form.cadence_offsets = Array.isArray(prefs.cadence_offsets)
-    ? [...prefs.cadence_offsets]
-    : [...BASE_CADENCE]
   form.email_enabled = prefs.email_enabled
   form.chat_enabled = prefs.chat_enabled
   form.role_card_id = prefs.role_card?.id ?? null
-  cadenceInput.value = ''
-  cadenceError.value = ''
   snapshot.value = {
     enabled: form.enabled,
     language: form.language,
     timezone: form.timezone,
     daily_dispatch_time: form.daily_dispatch_time,
     default_task_reminder_offsets_minutes: [...form.default_task_reminder_offsets_minutes],
-    cadence_offsets: [...form.cadence_offsets],
     email_enabled: form.email_enabled,
     chat_enabled: form.chat_enabled,
     role_card_id: form.role_card_id,
@@ -367,7 +287,6 @@ function buildPatch() {
   const patch = {}
   for (const key of Object.keys(snapshot.value)) {
     if (!fieldEquals(key)) {
-      // cadence_offsets 语义为完整集合：有变化时整体提交
       patch[key] = Array.isArray(form[key]) ? [...form[key]] : form[key]
     }
   }
@@ -425,7 +344,7 @@ async function onRoleCardImported(newId) {
     if (newId != null) form.role_card_id = newId
     showSaveMessage(t('reminders.importSuccess'), false)
   } catch (err) {
-    handleAuthError(err)
+    if (!handleAuthError(err)) showSaveMessage(friendlyError(err, t('reminders.importFailed')), true)
   }
 }
 
@@ -492,85 +411,6 @@ defineExpose({ save, dirty, saving, dispatchTimeValid, saveMessage, saveIsError 
 .cadence-editor {
   max-width: 460px;
 }
-/* 三段式时间线：提前(蓝) → 当天(橙) → 逾期(红) */
-.cadence-timeline {
-  display: flex;
-  align-items: stretch;
-  gap: 4px;
-}
-.cadence-zone {
-  flex: 1;
-  min-width: 0;
-  padding: 10px 12px;
-  border-radius: 12px;
-}
-.cadence-zone--before { background: #eef4ff; }
-.cadence-zone--due { background: #fff4e5; }
-.cadence-zone--overdue { background: #fdeeee; }
-.cadence-zone__label {
-  font-size: 11px;
-  font-weight: 700;
-  margin-bottom: 7px;
-}
-.cadence-zone--before .cadence-zone__label { color: #3567d6; }
-.cadence-zone--due .cadence-zone__label { color: #c07a1f; }
-.cadence-zone--overdue .cadence-zone__label { color: #c04545; }
-.cadence-zone__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-.cadence-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.85);
-  font-size: 12px;
-  font-weight: 600;
-  color: #3a4356;
-  white-space: nowrap;
-}
-.cadence-chip .v-icon { color: #9aa5b5; }
-.cadence-chip--custom {
-  background: #fff;
-  border: 1px dashed #e0a3a0;
-  color: #c04545;
-}
-.cadence-chip__remove {
-  border: 0;
-  background: none;
-  padding: 0 0 0 2px;
-  font-size: 14px;
-  line-height: 1;
-  color: #c04545;
-  cursor: pointer;
-}
-.cadence-chip__remove:disabled { opacity: 0.4; cursor: not-allowed; }
-.cadence-arrow {
-  align-self: center;
-  color: #b8c0cf;
-  flex: 0 0 auto;
-}
-.cadence-add {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 8px;
-}
-.cadence-input {
-  max-width: 150px;
-}
-.cadence-error {
-  color: #c04545;
-  font-size: 12px;
-  margin-top: 5px;
-}
-@media (max-width: 640px) {
-  .cadence-timeline { flex-direction: column; }
-  .cadence-arrow { transform: rotate(90deg); align-self: flex-start; margin-left: 12px; }
-}
 .save-bar {
   display: flex;
   align-items: center;
@@ -586,5 +426,16 @@ defineExpose({ save, dirty, saving, dispatchTimeValid, saveMessage, saveIsError 
 }
 .save-message--error {
   color: #c04545;
+}
+
+/* Mono Workspace visual layer */
+.setting-row { border-color: var(--ib-border); }
+.setting-label { color: var(--ib-text); }
+.setting-help { color: var(--ib-text-secondary); }
+.save-message { color: var(--ib-success); }
+.save-message--error { color: var(--ib-danger); }
+@media (max-width: 640px) {
+  .setting-row { align-items: stretch; flex-direction: column; gap: 10px; }
+  .field-160, .field-220, .field-280 { width: 100%; max-width: none; }
 }
 </style>

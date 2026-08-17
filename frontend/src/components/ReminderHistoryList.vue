@@ -38,7 +38,12 @@
         rounded="xl"
         elevation="0"
       >
-        <div class="digest-head" @click="toggleExpand(item.id)">
+        <button
+          type="button"
+          class="digest-head"
+          :aria-expanded="expandedIds.has(item.id)"
+          @click="toggleExpand(item.id)"
+        >
           <div class="digest-head__main">
             <div class="digest-subject" v-text="item.subject || $t('reminders.noSubject')" />
             <div class="digest-meta">
@@ -61,7 +66,7 @@
             </v-chip>
           </div>
           <v-icon :icon="expandedIds.has(item.id) ? 'mdi-chevron-up' : 'mdi-chevron-down'" color="grey" />
-        </div>
+        </button>
 
         <div v-if="expandedIds.has(item.id)" class="digest-body">
           <div v-if="item.body_text" v-text="item.body_text" class="reminder-plain-text" />
@@ -78,7 +83,7 @@
           </div>
 
           <div v-for="d in errorDeliveries(item)" :key="d.channel" class="delivery-error">
-            {{ channelName(d.channel) }}：{{ friendlyErrorText(d.last_error_code) }}
+            {{ channelName(d.channel) }}{{ $t('common.labelSeparator') }}{{ friendlyErrorText(d.last_error_code) }}
           </div>
         </div>
       </v-card>
@@ -97,6 +102,7 @@ import { nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getHistory, ApiError } from '@/services/reminders'
+import { notify } from '@/services/feedback'
 
 const PAGE_SIZE = 20
 
@@ -228,7 +234,7 @@ async function loadMore() {
     await resolveAnchor()
   } catch (err) {
     if (handleAuthError(err)) return
-    // 失败不改变 offset，下次重试同一页
+    notify(err instanceof ApiError && err.kind === 'transport' ? t('reminders.networkError') : t('reminders.loadFailed'), { type: 'error' })
   } finally {
     loadingMore.value = false
   }
@@ -320,11 +326,16 @@ onMounted(reload)
   border-color: rgb(var(--v-theme-primary));
 }
 .digest-head {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 14px;
   padding: 16px 18px;
   cursor: pointer;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
 }
 .digest-head__main {
   flex: 1;
@@ -389,5 +400,29 @@ onMounted(reload)
   display: flex;
   justify-content: center;
   padding: 12px 0 24px;
+}
+
+/* Mono Workspace visual layer */
+.empty-title,
+.digest-subject,
+.snapshot-title,
+.reminder-plain-text { color: var(--ib-text); }
+.empty-desc,
+.digest-meta,
+.digest-mode,
+.snapshot-due { color: var(--ib-text-secondary); }
+.digest-card { border-color: var(--ib-border); background: var(--ib-surface) !important; box-shadow: none !important; }
+.digest-card--anchored { border-color: var(--ib-primary); box-shadow: 0 0 0 3px var(--ib-primary-soft) !important; }
+.digest-head:focus-within,
+.digest-head:hover { background: var(--ib-surface-hover); }
+.digest-body,
+.snapshot-list { border-color: var(--ib-border); }
+.delivery-error { color: var(--ib-warning); }
+@media (max-width: 640px) {
+  .empty-actions { width: 100%; flex-direction: column; }
+  .digest-head { align-items: flex-start; flex-wrap: wrap; padding: 14px; }
+  .digest-channels { width: 100%; padding-left: 0; }
+  .digest-body { padding-inline: 14px; }
+  .snapshot-item { align-items: flex-start; flex-wrap: wrap; gap: 4px; }
 }
 </style>

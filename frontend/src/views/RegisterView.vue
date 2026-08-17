@@ -4,7 +4,7 @@
       <div class="text-center mb-6">
         <router-link
           to="/"
-          class="text-body-2 text-decoration-none text-grey d-inline-flex align-center mb-3"
+          class="text-body-2 text-decoration-none text-grey d-flex justify-center align-center mb-3"
         >
           <v-icon size="16" class="mr-1">mdi-arrow-left</v-icon>
           {{ $t('auth.backToLanding') }}
@@ -52,6 +52,7 @@
           :rules="usernameRules"
           variant="outlined"
           density="comfortable"
+          persistent-placeholder
           class="mb-3"
           autocomplete="username"
           clearable
@@ -65,6 +66,7 @@
           :rules="emailRules"
           variant="outlined"
           density="comfortable"
+          persistent-placeholder
           class="mb-3"
           autocomplete="email"
           clearable
@@ -80,6 +82,7 @@
           :rules="passwordRules"
           variant="outlined"
           density="comfortable"
+          persistent-placeholder
           class="mb-3"
           autocomplete="new-password"
         />
@@ -94,6 +97,7 @@
           :rules="confirmPasswordRules"
           variant="outlined"
           density="comfortable"
+          persistent-placeholder
           class="mb-4"
           autocomplete="new-password"
         />
@@ -134,6 +138,7 @@
           :rules="codeRules"
           variant="outlined"
           density="comfortable"
+          persistent-placeholder
           class="mb-3"
           autocomplete="one-time-code"
           inputmode="numeric"
@@ -382,4 +387,9 @@ onBeforeUnmount(clearCountdown)
 .auth-card h2 { color: var(--ib-text); }
 .auth-card p,
 .auth-card .text-grey { color: var(--ib-text-secondary) !important; }
+.auth-card :deep(input:-webkit-autofill) {
+  -webkit-box-shadow: 0 0 0 1000px var(--ib-surface) inset !important;
+  -webkit-text-fill-color: var(--ib-text) !important;
+  caret-color: var(--ib-text);
+}
 </style>

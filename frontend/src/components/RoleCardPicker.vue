@@ -16,7 +16,7 @@
         <v-btn icon="mdi-close" variant="text" size="small" :aria-label="$t('common.close')" @click="close" />
       </v-card-title>
 
-      <v-card-text class="px-6 pb-2">
+      <v-card-text class="px-6 pb-2" role="radiogroup" :aria-label="$t('reminders.roleCardPickerTitle')">
         <!-- 导入角色卡：粘贴 JSON → 当前账号的私有角色卡 -->
         <v-expand-transition>
           <div v-if="importOpen" class="import-box">
@@ -136,6 +136,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getRoleCard, importRoleCard, ApiError } from '@/services/reminders'
 import { roleCardDisplayName } from '@/services/roleCardVisuals'
+import { notify } from '@/services/feedback'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -277,6 +278,7 @@ async function toggleDetail(card) {
       return
     }
     expandedId.value = null
+    notify(t('reminders.roleCardDetailFailed'), { type: 'error' })
   } finally {
     detailLoadingId.value = null
   }
@@ -391,5 +393,23 @@ function confirm() {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
+}
+
+/* Mono Workspace visual layer */
+.role-card { border-color: var(--ib-border); color: var(--ib-text); background: var(--ib-surface); }
+.role-card:hover { border-color: var(--ib-border-strong); background: var(--ib-surface-hover); }
+.role-card--selected { border-color: var(--ib-primary); background: var(--ib-primary-soft); }
+.role-card__avatar { border-color: var(--ib-border); background: var(--ib-surface-muted); }
+.role-card__name,
+.detail-label { color: var(--ib-text); }
+.role-card__desc,
+.import-hint { color: var(--ib-text-secondary); }
+.role-card__scope { color: var(--ib-primary-strong); background: var(--ib-primary-soft); }
+.role-card__detail,
+.import-box { border-color: var(--ib-border); background: var(--ib-surface-muted); color: var(--ib-text-secondary); }
+.example-message { border-color: var(--ib-border); background: var(--ib-surface); }
+@media (max-width: 520px) {
+  .role-card { padding-inline: 12px; }
+  .role-card__scope { display: table; margin: 4px 0 0; }
 }
 </style>

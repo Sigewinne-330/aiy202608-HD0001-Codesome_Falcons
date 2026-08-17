@@ -30,32 +30,46 @@
         <span>{{ $t('urgent.checking') }}</span>
       </div>
 
-      <div v-else-if="filteredItems.length" class="urgent-list">
-        <button
-          v-for="(item, index) in filteredItems"
-          :key="`${item.type}-${item.id}`"
-          type="button"
-          class="urgent-item"
-          @click="openItem(item)"
-        >
-          <span class="rank">{{ String(index + 1).padStart(2, '0') }}</span>
-          <span class="priority-marker" :class="`priority-marker--${item.priority}`">
-            <v-icon :icon="item.type === 'deadline' ? 'mdi-calendar-alert' : 'mdi-checkbox-blank-circle-outline'" size="20" />
-          </span>
-          <span class="urgent-item__body">
-            <span class="urgent-item__title">{{ item.title }}</span>
-            <span class="urgent-item__meta">
-              <span>{{ item.subject || $t('common.uncategorized') }}</span>
-              <span>{{ item.type === 'deadline' ? $t('urgent.deadline') : $t('urgent.task') }}</span>
-            </span>
-          </span>
-          <v-chip :color="priorityColor(item.priority)" variant="tonal" size="small">{{ priorityLabel(item.priority) }}</v-chip>
-          <span class="due-block" :class="{ overdue: item.daysLeft < 0 }">
-            <strong>{{ dueLabel(item.daysLeft) }}</strong>
-            <small>{{ formatDate(item.date) }}</small>
-          </span>
-          <v-icon icon="mdi-chevron-right" color="grey-lighten-1" />
-        </button>
+      <div v-else-if="loadError" class="urgent-empty">
+        <v-icon icon="mdi-cloud-alert-outline" color="error" size="52" />
+        <strong>{{ loadError }}</strong>
+        <v-btn color="primary" variant="tonal" prepend-icon="mdi-refresh" @click="loadItems">{{ $t('common.retry') }}</v-btn>
+      </div>
+
+      <div v-else-if="groupedItems.length" class="urgent-groups">
+        <section v-for="group in groupedItems" :key="group.key" class="urgent-group">
+          <header class="urgent-group__header">
+            <span>{{ $t(group.titleKey) }}</span>
+            <small>{{ $t('urgent.groupCount', { n: group.items.length }) }}</small>
+          </header>
+          <div class="urgent-list">
+            <button
+              v-for="(item, index) in group.items"
+              :key="`${item.type}-${item.id}`"
+              type="button"
+              class="urgent-item"
+              @click="openItem(item)"
+            >
+              <span class="rank">{{ String(index + 1).padStart(2, '0') }}</span>
+              <span class="priority-marker" :class="`priority-marker--${item.priority}`">
+                <v-icon :icon="item.type === 'deadline' ? 'mdi-calendar-alert' : 'mdi-checkbox-blank-circle-outline'" size="20" />
+              </span>
+              <span class="urgent-item__body">
+                <span class="urgent-item__title">{{ item.title }}</span>
+                <span class="urgent-item__meta">
+                  <span>{{ item.subject || $t('common.uncategorized') }}</span>
+                  <span>{{ item.type === 'deadline' ? $t('urgent.deadline') : $t('urgent.task') }}</span>
+                </span>
+              </span>
+              <v-chip :color="priorityColor(item.priority)" variant="tonal" size="small">{{ priorityLabel(item.priority) }}</v-chip>
+              <span class="due-block" :class="{ overdue: item.daysLeft < 0 }">
+                <strong>{{ dueLabel(item.daysLeft) }}</strong>
+                <small>{{ formatDate(item.date) }}</small>
+              </span>
+              <v-icon icon="mdi-chevron-right" color="grey-lighten-1" />
+            </button>
+          </div>
+        </section>
       </div>
 
       <div v-else class="urgent-empty">
@@ -68,16 +82,19 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/stores/auth'
+import { notify } from '@/services/feedback'
+import { onTasksChanged } from '@/services/taskSync'
 import { daysUntil, flattenTasks, priorityColor, priorityWeight } from '@/utils/tasks'
 
 const router = useRouter()
 const { t } = useI18n()
 const items = ref([])
 const loading = ref(true)
+const loadError = ref('')
 const filter = ref('all')
 
 const urgentItems = computed(() => items.value
@@ -87,6 +104,14 @@ const urgentItems = computed(() => items.value
 const filteredItems = computed(() => filter.value === 'all'
   ? urgentItems.value
   : urgentItems.value.filter((item) => item.priority === filter.value))
+
+const groupedItems = computed(() => [
+  { key: 'overdue', titleKey: 'urgent.groupOverdue', items: filteredItems.value.filter((item) => item.daysLeft < 0) },
+  { key: 'today', titleKey: 'urgent.groupToday', items: filteredItems.value.filter((item) => item.daysLeft === 0) },
+  { key: 'next-three', titleKey: 'urgent.groupNextThree', items: filteredItems.value.filter((item) => item.daysLeft >= 1 && item.daysLeft <= 3) },
+  { key: 'this-week', titleKey: 'urgent.groupThisWeek', items: filteredItems.value.filter((item) => item.daysLeft >= 4 && item.daysLeft <= 7) },
+  { key: 'later', titleKey: 'urgent.groupLater', items: filteredItems.value.filter((item) => item.daysLeft >= 8 && item.daysLeft <= 14) },
+].filter((group) => group.items.length))
 
 const overdueCount = computed(() => urgentItems.value.filter((item) => item.daysLeft < 0).length)
 
@@ -113,6 +138,7 @@ function openItem(item) {
 
 async function loadItems() {
   loading.value = true
+  loadError.value = ''
   try {
     const [taskData, deadlineData] = await Promise.all([
       api('/api/tasks'),
@@ -129,14 +155,21 @@ async function loadItems() {
       .filter((item) => !['done', 'completed'].includes(item.status))
       .map((item) => ({ ...item, type: 'deadline', date: item.due_date, daysLeft: daysUntil(item.due_date) }))
     items.value = [...taskItems, ...deadlineItems]
-  } catch {
+  } catch (error) {
     items.value = []
+    loadError.value = error?.message || t('urgent.loadFailed')
+    notify(loadError.value, { type: 'error' })
   } finally {
     loading.value = false
   }
 }
 
-onMounted(loadItems)
+let stopTaskSync
+onMounted(() => {
+  loadItems()
+  stopTaskSync = onTasksChanged(loadItems)
+})
+onBeforeUnmount(() => stopTaskSync?.())
 </script>
 
 <style scoped>
@@ -154,6 +187,11 @@ onMounted(loadItems)
 .urgent-list-card { overflow: hidden; border: 1px solid rgba(28,42,71,.09); background: rgba(255,255,255,.94) !important; box-shadow: 0 18px 50px rgba(31,44,75,.07) !important; }
 .list-toolbar { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px 22px; border-bottom: 1px solid #edf0f5; }
 .urgent-list { padding: 8px 12px; }
+.urgent-groups { padding: 4px 12px 12px; }
+.urgent-group { padding-top: 8px; }
+.urgent-group__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px 7px; color: var(--ib-text); font-size: 11px; font-weight: 750; letter-spacing: .02em; }
+.urgent-group__header small { color: var(--ib-text-muted); font-size: 9px; font-weight: 550; }
+.urgent-group .urgent-list { overflow: hidden; padding: 0; border: 1px solid var(--ib-border); border-radius: var(--ib-radius-md); }
 .urgent-item { width: 100%; min-height: 76px; display: flex; align-items: center; gap: 14px; padding: 10px 12px; border: 0; border-bottom: 1px solid #f0f2f6; color: #27334c; background: transparent; cursor: pointer; text-align: left; transition: background .15s, transform .15s; }
 .urgent-item:last-child { border-bottom: 0; }
 .urgent-item:hover { background: #fafbfe; transform: translateX(2px); }
@@ -178,6 +216,8 @@ onMounted(loadItems)
   .urgent-item { gap: 9px; }
   .rank, .urgent-item .v-chip { display: none; }
   .due-block { min-width: 72px; }
+  .urgent-groups { padding-inline: 8px; }
+  .urgent-group__header { padding-inline: 8px; }
 }
 
 /* Mono Workspace visual layer */

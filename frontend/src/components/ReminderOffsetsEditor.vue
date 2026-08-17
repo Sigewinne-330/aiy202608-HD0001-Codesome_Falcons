@@ -291,4 +291,21 @@ function removeOffset(m) {
   color: #c04545;
   font-size: 12px;
 }
+
+/* Mono Workspace visual layer */
+.offsets-preset,
+.offsets-dur { border-color: var(--ib-border-strong); background: var(--ib-surface); color: var(--ib-text-secondary); }
+.offsets-preset:hover:not(:disabled) { border-color: var(--ib-primary); color: var(--ib-primary-strong); }
+.offsets-preset--on,
+.offsets-preset--on:hover:not(:disabled) { border-color: var(--ib-primary); background: var(--ib-primary); color: white; }
+.offsets-dur:focus-within { border-color: var(--ib-primary); }
+.offsets-dur__field { color: var(--ib-text); }
+.offsets-dur__unit { color: var(--ib-text-secondary); }
+.offsets-error { color: var(--ib-danger); }
+@media (max-width: 640px) {
+  .offsets-editor,
+  .offsets-custom { width: 100%; }
+  .offsets-custom { align-items: stretch; flex-direction: column; }
+  .offsets-dur { justify-content: space-between; }
+}
 </style>
