@@ -6,6 +6,7 @@ from database import get_db
 from models.app_user import AppUser as User
 from models.task_new import Task as TaskModel, TaskCategory, TaskStatus, TaskType
 from models.sub_task import SubTask as SubTaskModel
+from models.managebac import ManageBacConnection, ManageBacTaskLink
 from schemas.task import (
     SubTaskCreate,
     SubTaskUpdate,
@@ -36,6 +37,31 @@ def _normalize_category(value):
 def _build_task_tree(tasks: List[TaskModel]) -> List[TaskResponse]:
     """构建任务树 —— 纯平铺，子任务由 sub_task 表单独合并"""
     return [TaskResponse.model_validate(t) for t in tasks]
+
+
+def _attach_external_sources(
+    db: Session,
+    user_id: int,
+    tasks: List[TaskResponse],
+) -> None:
+    task_ids = [task.id for task in tasks if not task.sub_task_source]
+    if not task_ids:
+        return
+    rows = db.query(ManageBacTaskLink).join(
+        ManageBacConnection,
+        ManageBacConnection.id == ManageBacTaskLink.connection_id,
+    ).filter(
+        ManageBacConnection.user_id == user_id,
+        ManageBacTaskLink.task_id.in_(task_ids),
+    ).all()
+    response_by_id = {task.id: task for task in tasks}
+    for link in rows:
+        response = response_by_id.get(link.task_id)
+        if response is None:
+            continue
+        response.external_source = "managebac"
+        response.external_source_url = link.source_url
+        response.external_source_status = link.remote_state
 
 
 @router.get("", response_model=List[TaskResponse])
@@ -95,6 +121,8 @@ def list_tasks(
         if root.id in _process_ids:
             root.task_type = "process"
 
+    _attach_external_sources(db, current_user.id, tree)
+
     return tree
 
 
@@ -143,6 +171,7 @@ def get_task(
         raise HTTPException(status_code=404, detail="任务不存在")
 
     resp = TaskResponse.model_validate(task)
+    _attach_external_sources(db, current_user.id, [resp])
 
     # 从 sub_task 表获取子任务
     sub_tasks = db.query(SubTaskModel).filter(

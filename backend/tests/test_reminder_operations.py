@@ -68,7 +68,7 @@ class ReminderOperationsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(now, orchestrator.calls[0][1]["now_utc"])
         self.assertTrue(orchestrator.calls[0][1]["deliver"])
 
-    def test_daemon_registers_single_job_and_graceful_signals(self):
+    def test_daemon_registers_reminder_and_managebac_jobs_and_graceful_signals(self):
         scheduler = FakeScheduler()
         handlers = {}
 
@@ -78,9 +78,10 @@ class ReminderOperationsTests(unittest.IsolatedAsyncioTestCase):
         with patch("reminder_worker.signal.signal", side_effect=register):
             run_daemon(scheduler=scheduler, job=lambda: None)
         self.assertTrue(scheduler.started)
-        self.assertEqual(1, len(scheduler.jobs))
-        self.assertEqual(1, scheduler.jobs[0][1]["max_instances"])
-        self.assertTrue(scheduler.jobs[0][1]["coalesce"])
+        self.assertEqual(2, len(scheduler.jobs))
+        for _args, kwargs in scheduler.jobs:
+            self.assertEqual(1, kwargs["max_instances"])
+            self.assertTrue(kwargs["coalesce"])
         self.assertEqual(2, len(handlers))
         next(iter(handlers.values()))()
         self.assertFalse(scheduler.shutdown_wait)

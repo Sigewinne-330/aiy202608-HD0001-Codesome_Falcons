@@ -137,6 +137,11 @@
             <ReminderSettingsPanel ref="reminderPanel" external-save @unauthorized="handleReminderUnauthorized" />
           </template>
 
+          <template v-else-if="activeSection === 'managebac'">
+            <SettingsHeading :title="$t('managebac.title')" :subtitle="$t('managebac.subtitle')" />
+            <ManageBacIntegrationPanel @unauthorized="handleReminderUnauthorized" />
+          </template>
+
           <template v-else-if="activeSection === 'personalization'">
             <PersonalizationSettingsPanel />
           </template>
@@ -178,7 +183,7 @@
           </template>
           </div>
 
-          <div v-if="!['personalization', 'memory', 'learning-dashboard'].includes(activeSection)" class="settings-actions">
+          <div v-if="!['personalization', 'memory', 'learning-dashboard', 'managebac'].includes(activeSection)" class="settings-actions">
             <span v-if="activeSection === 'reminders' && reminderPanel?.saveMessage" class="saved-hint" :class="{ 'saved-hint--error': reminderPanel.saveIsError }">
               <v-icon :icon="reminderPanel.saveIsError ? 'mdi-alert-circle-outline' : 'mdi-check-circle'" size="17" />
               {{ reminderPanel.saveMessage }}
@@ -211,6 +216,7 @@ import ReminderSettingsPanel from '@/components/ReminderSettingsPanel.vue'
 import PersonalizationSettingsPanel from '@/components/PersonalizationSettingsPanel.vue'
 import SchedulingMemoryCenter from '@/components/SchedulingMemoryCenter.vue'
 import PersonalizationDashboard from '@/components/PersonalizationDashboard.vue'
+import ManageBacIntegrationPanel from '@/components/ManageBacIntegrationPanel.vue'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -325,6 +331,7 @@ watch(() => settings.language, (lang) => {
 const sections = [
   { value: 'account', titleKey: 'settings.account', icon: 'mdi-account-circle-outline' },
   { value: 'connections', titleKey: 'settings.connections', icon: 'mdi-link-variant' },
+  { value: 'managebac', titleKey: 'managebac.navTitle', icon: 'mdi-calendar-sync-outline' },
   { value: 'time', titleKey: 'settings.time', icon: 'mdi-clock-outline' },
   { value: 'reminders', titleKey: 'reminders.tabSettings', icon: 'mdi-bell-cog-outline' },
   { value: 'personalization', titleKey: 'settings.personalization', icon: 'mdi-tune-variant' },

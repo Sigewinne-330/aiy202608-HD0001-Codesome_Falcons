@@ -1,0 +1,33 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//ManageBac Test Fixture//EN
+X-WR-CALNAME:Student Calendar
+BEGIN:VEVENT
+UID:task-physics-101@example.managebac.com
+DTSTART;VALUE=DATE:20260910
+SUMMARY:Physics IA First Draft
+DESCRIPTION:<p>Task: Submit the first draft on ManageBac.</p>
+CATEGORIES:Physics,Task
+URL:https://school.managebac.com/student/classes/1/tasks/101
+SEQUENCE:1
+LAST-MODIFIED:20260818T081500Z
+END:VEVENT
+BEGIN:VEVENT
+UID:deadline-economics-202@example.managebac.com
+DTSTART;TZID=Asia/Shanghai:20260912T160000
+SUMMARY:Economics Commentary Deadline
+DESCRIPTION:Deadline for the economics commentary.
+CATEGORIES:Economics,Deadline
+URL:https://school.managebac.com/student/classes/2/deadlines/202
+SEQUENCE:2
+LAST-MODIFIED:20260818T091500Z
+END:VEVENT
+BEGIN:VEVENT
+UID:event-assembly-303@example.managebac.com
+DTSTART;TZID=Asia/Shanghai:20260913T090000
+SUMMARY:School Assembly
+DESCRIPTION:Weekly school event.
+CATEGORIES:Event
+URL:https://school.managebac.com/student/events/303
+END:VEVENT
+END:VCALENDAR

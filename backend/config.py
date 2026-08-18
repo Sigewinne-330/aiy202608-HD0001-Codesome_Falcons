@@ -4,6 +4,7 @@ from pathlib import Path
 # 自动加载 .env 文件
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
+load_dotenv(Path(__file__).parent / ".env.local", override=True)
 
 
 class Settings:
@@ -45,6 +46,26 @@ class Settings:
     DEMO_REMINDER_ENABLED: bool = os.getenv(
         "DEMO_REMINDER_ENABLED", "false"
     ).strip().lower() in {"1", "true", "yes", "on"}
+
+    # Personal ManageBac iCalendar synchronization.  The credential key must
+    # be a Fernet key and is intentionally independent from JWT SECRET_KEY.
+    INTEGRATION_CREDENTIAL_KEY: str = os.getenv("INTEGRATION_CREDENTIAL_KEY", "")
+    MANAGEBAC_SYNC_INTERVAL_MINUTES: int = max(
+        5, int(os.getenv("MANAGEBAC_SYNC_INTERVAL_MINUTES", "10"))
+    )
+    MANAGEBAC_HTTP_TIMEOUT_SECONDS: int = max(
+        3, int(os.getenv("MANAGEBAC_HTTP_TIMEOUT_SECONDS", "15"))
+    )
+    MANAGEBAC_MAX_FEED_BYTES: int = max(
+        65536, int(os.getenv("MANAGEBAC_MAX_FEED_BYTES", str(5 * 1024 * 1024)))
+    )
+    MANAGEBAC_ALLOWED_HOST_SUFFIXES: tuple[str, ...] = tuple(
+        item.strip().lower().lstrip(".")
+        for item in os.getenv(
+            "MANAGEBAC_ALLOWED_HOST_SUFFIXES", "managebac.com,managebac.cn"
+        ).split(",")
+        if item.strip()
+    )
 
     @property
     def database_url(self) -> str:

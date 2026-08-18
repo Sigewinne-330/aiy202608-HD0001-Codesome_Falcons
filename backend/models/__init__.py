@@ -42,6 +42,7 @@ from .schedule_personalization import (
     SchedulingModelPrediction,
     SchedulingGovernanceJob,
 )
+from .managebac import ManageBacConnection, ManageBacSyncRun, ManageBacTaskLink
 
 __all__ = [
     "Deadline", "EmailVerification",
@@ -56,4 +57,5 @@ __all__ = [
     "SchedulingDecisionEvent", "SchedulingWorkSession", "SchedulingWorkEvent",
     "SchedulingOutcomeLabel", "SchedulingMemoryEntry", "SchedulingFeatureSnapshot",
     "SchedulingModelRegistry", "SchedulingModelPrediction", "SchedulingGovernanceJob",
+    "ManageBacConnection", "ManageBacTaskLink", "ManageBacSyncRun",
 ]

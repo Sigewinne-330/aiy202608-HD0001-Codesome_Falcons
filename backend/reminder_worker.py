@@ -12,6 +12,7 @@ from config import settings
 from database import SessionLocal
 from services.reminder_orchestrator import ReminderOrchestrator, ReminderRunSummary
 from services.schedule_policy import scheduling_enabled
+from services.managebac_sync import sync_due_managebac_connections
 
 
 logger = logging.getLogger(__name__)
@@ -62,12 +63,34 @@ def _run_job() -> None:
         logger.exception("Reminder worker tick failed")
 
 
+def _run_managebac_job() -> None:
+    try:
+        summary = asyncio.run(sync_due_managebac_connections(SessionLocal))
+        if summary["evaluated"]:
+            logger.info(
+                "ManageBac sync tick evaluated=%s succeeded=%s failed=%s",
+                summary["evaluated"],
+                summary["succeeded"],
+                summary["failed"],
+            )
+    except Exception:
+        logger.exception("ManageBac sync worker tick failed")
+
+
 def run_daemon(scheduler=None, job=_run_job) -> None:
     scheduler = scheduler or BlockingScheduler(timezone="UTC")
     scheduler.add_job(
         job,
         "interval",
         seconds=max(10, settings.REMINDER_WORKER_INTERVAL_SECONDS),
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+    scheduler.add_job(
+        _run_managebac_job,
+        "interval",
+        seconds=60,
         max_instances=1,
         coalesce=True,
         next_run_time=datetime.now(timezone.utc),

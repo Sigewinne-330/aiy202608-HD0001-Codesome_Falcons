@@ -42,7 +42,59 @@ services:
       DB_SOCKET: ""
       # JWT
       SECRET_KEY: ${SECRET_KEY}
+      INTEGRATION_CREDENTIAL_KEY: ${INTEGRATION_CREDENTIAL_KEY}
+      MANAGEBAC_SYNC_INTERVAL_MINUTES: ${MANAGEBAC_SYNC_INTERVAL_MINUTES:-10}
+      MANAGEBAC_HTTP_TIMEOUT_SECONDS: ${MANAGEBAC_HTTP_TIMEOUT_SECONDS:-15}
+      MANAGEBAC_MAX_FEED_BYTES: ${MANAGEBAC_MAX_FEED_BYTES:-5242880}
+      MANAGEBAC_ALLOWED_HOST_SUFFIXES: ${MANAGEBAC_ALLOWED_HOST_SUFFIXES:-managebac.com,managebac.cn}
       # AI 引擎
+      ARK_API_KEY: ${ARK_API_KEY}
+      ARK_BASE_URL: ${ARK_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}
+      ARK_MODEL: ${ARK_MODEL:-doubao-seed-2-1-pro-260628}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+
+  # ===== 后台任务（提醒 + ManageBac iCal 同步）=====
+  worker:
+    build:
+      context: ./backend
+    container_name: ib_worker
+    restart: unless-stopped
+    command: ["python", "reminder_worker.py"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    healthcheck:
+      disable: true
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-ib_assistant}
+      DB_SOCKET: ""
+      SECRET_KEY: ${SECRET_KEY}
+      INTEGRATION_CREDENTIAL_KEY: ${INTEGRATION_CREDENTIAL_KEY}
+      MANAGEBAC_SYNC_INTERVAL_MINUTES: ${MANAGEBAC_SYNC_INTERVAL_MINUTES:-10}
+      MANAGEBAC_HTTP_TIMEOUT_SECONDS: ${MANAGEBAC_HTTP_TIMEOUT_SECONDS:-15}
+      MANAGEBAC_MAX_FEED_BYTES: ${MANAGEBAC_MAX_FEED_BYTES:-5242880}
+      MANAGEBAC_ALLOWED_HOST_SUFFIXES: ${MANAGEBAC_ALLOWED_HOST_SUFFIXES:-managebac.com,managebac.cn}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
+      REMINDER_WORKER_INTERVAL_SECONDS: ${REMINDER_WORKER_INTERVAL_SECONDS:-60}
+      LLM_MONTHLY_TOKEN_QUOTA: ${LLM_MONTHLY_TOKEN_QUOTA:-0}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-IBuddy}
+      SMTP_USE_STARTTLS: ${SMTP_USE_STARTTLS:-true}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
       ARK_API_KEY: ${ARK_API_KEY}
       ARK_BASE_URL: ${ARK_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}
       ARK_MODEL: ${ARK_MODEL:-doubao-seed-2-1-pro-260628}

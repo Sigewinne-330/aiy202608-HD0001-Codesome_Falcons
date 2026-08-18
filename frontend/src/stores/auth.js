@@ -10,11 +10,12 @@ export const API_ERROR_KIND = Object.freeze({
 })
 
 export class ApiError extends Error {
-  constructor(message, { kind, status = null, cause } = {}) {
+  constructor(message, { kind, status = null, code = null, cause } = {}) {
     super(message, cause ? { cause } : undefined)
     this.name = 'ApiError'
     this.kind = kind
     this.status = status
+    this.code = code
   }
 }
 
@@ -66,12 +67,18 @@ export async function api(path, options = {}) {
   }
 
   if (!res.ok) {
+    const errorCode = data.detail && typeof data.detail === 'object' && !Array.isArray(data.detail)
+      ? data.detail.code || null
+      : null
     const detail = Array.isArray(data.detail)
       ? data.detail.map((item) => item.msg || '输入信息有误').join('；')
-      : data.detail
+      : (data.detail && typeof data.detail === 'object'
+          ? data.detail.message || data.detail.code
+          : data.detail)
     throw new ApiError(detail || `请求失败 (HTTP ${res.status})`, {
       kind: API_ERROR_KIND.HTTP,
       status: res.status,
+      code: errorCode,
     })
   }
   return data

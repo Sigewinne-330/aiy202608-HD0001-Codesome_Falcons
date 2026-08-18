@@ -82,6 +82,19 @@
               >
                 {{ task.task_type === 'process' ? $t('tasks.processType') : $t('tasks.todoType') }}
               </v-chip>
+              <v-chip
+                v-if="task.external_source === 'managebac'"
+                size="x-small"
+                color="indigo"
+                variant="tonal"
+                prepend-icon="mdi-school-outline"
+                :href="task.external_source_url || undefined"
+                :target="task.external_source_url ? '_blank' : undefined"
+                rel="noopener noreferrer"
+                @click.stop
+              >
+                {{ $t('managebac.taskSource') }}
+              </v-chip>
             </div>
             <p v-if="task.description">{{ task.description }}</p>
           </div>
