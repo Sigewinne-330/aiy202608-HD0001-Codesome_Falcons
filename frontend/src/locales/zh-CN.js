@@ -316,6 +316,10 @@ export default {
     dayDetail: '{month}月{day}日共有 {n} 项日程，可点击具体项目查看。',
     dayDialogTitle: '{month}月{day}日',
     dayDialogCount: '共 {n} 项',
+    addTodoOnDate: '在 {date} 新建待办事项',
+    addTodoHint: '新建待办',
+    newTodoTitle: '新建待办事项',
+    todoCreated: '待办事项已创建',
   },
   calendarPanel: {
     today: '今天',

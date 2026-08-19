@@ -316,6 +316,10 @@ export default {
     dayDetail: '{month}/{day} has {n} items. Click an item to view details.',
     dayDialogTitle: '{month}/{day}',
     dayDialogCount: '{n} items',
+    addTodoOnDate: 'Create a to-do on {date}',
+    addTodoHint: 'New to-do',
+    newTodoTitle: 'New to-do',
+    todoCreated: 'To-do created',
   },
   calendarPanel: {
     today: 'Today',

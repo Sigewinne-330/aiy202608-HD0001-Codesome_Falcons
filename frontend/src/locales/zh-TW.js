@@ -316,6 +316,10 @@ export default {
     dayDetail: '{month}月{day}日共有 {n} 項行程，可點擊具體項目查看。',
     dayDialogTitle: '{month}月{day}日',
     dayDialogCount: '共 {n} 項',
+    addTodoOnDate: '在 {date} 新建待辦事項',
+    addTodoHint: '新建待辦',
+    newTodoTitle: '新建待辦事項',
+    todoCreated: '待辦事項已建立',
   },
   calendarPanel: {
     today: '今天',
