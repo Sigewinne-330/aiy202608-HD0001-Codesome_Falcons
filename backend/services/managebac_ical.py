@@ -180,7 +180,12 @@ def _classification(component, categories: list[str], source_url: Optional[str])
         return "deadline"
     if any(marker in tokens or marker in evidence for marker in _TASK_MARKERS):
         return "task"
-    return None
+    # ManageBac's personal student iCal feed can flatten teacher-published
+    # tasks into bare VEVENT records containing only UID, SUMMARY, DTSTART and
+    # DTEND.  There is no reliable metadata left to distinguish those records
+    # from ordinary events, so the personal-feed contract imports every valid
+    # timed item.  Explicit deadline evidence above is still preserved.
+    return "task"
 
 
 def _decoded_datetime(component, name: str):

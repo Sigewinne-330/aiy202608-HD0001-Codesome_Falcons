@@ -450,10 +450,14 @@ async def sync_managebac_connection(
     db.refresh(run)
     try:
         feed_url = decrypt_feed_url(connection.encrypted_feed_url)
+        # A user-triggered sync must re-parse the complete personal calendar.
+        # This also lets parser improvements backfill items that an older
+        # version skipped even when ManageBac's ETag has not changed.
+        use_conditional_cache = trigger != "manual"
         fetched = await fetch_calendar(
             feed_url,
-            etag=connection.etag,
-            last_modified=connection.last_modified,
+            etag=connection.etag if use_conditional_cache else None,
+            last_modified=connection.last_modified if use_conditional_cache else None,
             transport=transport,
             resolve_addresses=resolve_addresses,
         )

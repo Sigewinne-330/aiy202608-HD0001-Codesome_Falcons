@@ -36,7 +36,8 @@ PUBLIC_RESOLVER = lambda _host: ["8.8.8.8"]
 
 
 def response_transport(state):
-    def handler(_request: httpx.Request):
+    def handler(request: httpx.Request):
+        state.setdefault("requests", []).append(request)
         return httpx.Response(200, headers={"ETag": state.get("etag", '"v1"')}, content=state["content"])
 
     return httpx.MockTransport(handler)
@@ -109,9 +110,9 @@ class ManageBacSyncTests(unittest.TestCase):
     def test_initial_sync_encrypts_url_creates_tasks_and_is_idempotent_100_times(self):
         with self.SessionLocal() as db:
             (connection, validated, summary), state = self.connect(db)
-            self.assertEqual(2, summary["added_count"])
-            self.assertEqual(2, db.query(Task).count())
-            self.assertEqual(2, db.query(ManageBacTaskLink).count())
+            self.assertEqual(3, summary["added_count"])
+            self.assertEqual(3, db.query(Task).count())
+            self.assertEqual(3, db.query(ManageBacTaskLink).count())
             self.assertNotIn("test-only", connection.encrypted_feed_url)
 
             physics = db.query(Task).filter(Task.subject == "Physics").one()
@@ -130,8 +131,28 @@ class ManageBacSyncTests(unittest.TestCase):
                     )
                 )
                 self.assertEqual("success", result["status"])
-            self.assertEqual(2, db.query(Task).count())
-            self.assertEqual(2, db.query(ManageBacTaskLink).count())
+            self.assertEqual(3, db.query(Task).count())
+            self.assertEqual(3, db.query(ManageBacTaskLink).count())
+
+    def test_manual_sync_forces_full_feed_without_conditional_headers(self):
+        with self.SessionLocal() as db:
+            (_, _, _), state = self.connect(db, single_task_feed())
+            connection = db.query(ManageBacConnection).one()
+            state["requests"] = []
+            result = asyncio.run(
+                sync_managebac_connection(
+                    db,
+                    connection,
+                    trigger="manual",
+                    transport=response_transport(state),
+                    resolve_addresses=PUBLIC_RESOLVER,
+                )
+            )
+            self.assertEqual(200, result["http_status"])
+            self.assertEqual(1, len(state["requests"]))
+            request = state["requests"][0]
+            self.assertNotIn("if-none-match", request.headers)
+            self.assertNotIn("if-modified-since", request.headers)
 
     def test_remote_update_preserves_local_fields_and_invalidates_old_reminder(self):
         with self.SessionLocal() as db:

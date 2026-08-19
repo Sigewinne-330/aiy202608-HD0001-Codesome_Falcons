@@ -17,12 +17,12 @@ FIXTURE = Path(__file__).parent / "fixtures" / "managebac_calendar.ics"
 
 
 class ManageBacICalendarTests(unittest.TestCase):
-    def test_parses_tasks_deadlines_and_skips_plain_events(self):
+    def test_parses_every_timed_personal_calendar_item(self):
         result = parse_managebac_calendar(FIXTURE.read_bytes(), timezone_name="Asia/Shanghai")
         self.assertEqual("Student Calendar", result.calendar_name)
         self.assertEqual(3, result.total_items)
-        self.assertEqual(2, len(result.items))
-        self.assertEqual(1, result.skipped_items)
+        self.assertEqual(3, len(result.items))
+        self.assertEqual(0, result.skipped_items)
 
         physics = next(item for item in result.items if item.subject == "Physics")
         self.assertEqual("task", physics.kind)
@@ -33,6 +33,10 @@ class ManageBacICalendarTests(unittest.TestCase):
         economics = next(item for item in result.items if item.subject == "Economics")
         self.assertEqual("deadline", economics.kind)
         self.assertEqual(datetime(2026, 9, 12, 16, 0), economics.deadline)
+
+        assembly = next(item for item in result.items if item.title == "School Assembly")
+        self.assertEqual("task", assembly.kind)
+        self.assertEqual(datetime(2026, 9, 13, 9, 0), assembly.deadline)
 
     def test_duplicate_uid_uses_newest_sequence(self):
         content = b"""BEGIN:VCALENDAR\r

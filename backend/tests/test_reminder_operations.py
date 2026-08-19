@@ -9,7 +9,8 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from reminder_worker import run_daemon, run_once  # noqa: E402
+from reminder_worker import _run_managebac_job, run_daemon, run_once  # noqa: E402
+from services.managebac_security import ManageBacCredentialReadiness  # noqa: E402
 from services.registration_readiness import CheckResult  # noqa: E402
 from services.reminder_orchestrator import ReminderRunSummary  # noqa: E402
 from services.reminder_readiness import (  # noqa: E402
@@ -85,6 +86,17 @@ class ReminderOperationsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(2, len(handlers))
         next(iter(handlers.values()))()
         self.assertFalse(scheduler.shutdown_wait)
+
+    def test_managebac_job_skips_when_credential_key_is_not_ready(self):
+        with patch(
+            "reminder_worker.managebac_credential_readiness",
+            return_value=ManageBacCredentialReadiness(
+                configured=False,
+                code="credential_key_missing",
+            ),
+        ), patch("reminder_worker.sync_due_managebac_connections") as sync_due:
+            _run_managebac_job()
+        sync_due.assert_not_called()
 
     def test_readiness_checks_are_isolated_and_sanitized(self):
         self.assertTrue(

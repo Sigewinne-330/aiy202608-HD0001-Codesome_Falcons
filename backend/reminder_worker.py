@@ -12,6 +12,10 @@ from config import settings
 from database import SessionLocal
 from services.reminder_orchestrator import ReminderOrchestrator, ReminderRunSummary
 from services.schedule_policy import scheduling_enabled
+from services.managebac_security import (
+    log_managebac_credential_readiness,
+    managebac_credential_readiness,
+)
 from services.managebac_sync import sync_due_managebac_connections
 
 
@@ -64,6 +68,8 @@ def _run_job() -> None:
 
 
 def _run_managebac_job() -> None:
+    if not managebac_credential_readiness().configured:
+        return
     try:
         summary = asyncio.run(sync_due_managebac_connections(SessionLocal))
         if summary["evaluated"]:
@@ -112,6 +118,7 @@ def main() -> int:
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+    log_managebac_credential_readiness("reminder-worker")
     if args.once:
         summary = asyncio.run(run_once())
         print(

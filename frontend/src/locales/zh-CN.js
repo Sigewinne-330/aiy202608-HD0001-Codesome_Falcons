@@ -257,7 +257,7 @@ export default {
       network: '暂时无法读取 ManageBac 日历，请稍后重试。',
       feedTooLarge: 'ManageBac 日历过大，无法安全导入。',
       invalidCalendar: '该地址没有返回有效的 ManageBac iCal 日历。',
-      serverConfiguration: '服务器尚未配置 ManageBac 凭据加密。',
+      serverConfiguration: '服务器未加载 ManageBac 凭据加密密钥。请在 backend/.env.local 中配置后，重启后端和同步服务。',
       providerDenied: 'ManageBac 拒绝了本次日历客户端请求；订阅地址不一定失效，请稍后重试或联系 ManageBac 支持。',
       reconnect: '订阅凭据已失效，请生成新地址并重新连接。',
       inProgress: '同步正在进行或刚刚完成，请稍后再试。',

@@ -257,7 +257,7 @@ export default {
       network: '暫時無法讀取 ManageBac 行事曆，請稍後再試。',
       feedTooLarge: 'ManageBac 行事曆過大，無法安全匯入。',
       invalidCalendar: '該地址沒有傳回有效的 ManageBac iCal 行事曆。',
-      serverConfiguration: '伺服器尚未設定 ManageBac 憑據加密。',
+      serverConfiguration: '伺服器未載入 ManageBac 憑據加密金鑰。請在 backend/.env.local 設定後，重新啟動後端與同步服務。',
       providerDenied: 'ManageBac 拒絕了本次行事曆客戶端請求；訂閱地址不一定失效，請稍後重試或聯絡 ManageBac 支援。',
       reconnect: '訂閱憑據已失效，請產生新地址並重新連接。',
       inProgress: '同步正在進行或剛剛完成，請稍後再試。',

@@ -2,7 +2,7 @@
 
 ## 1. 部署前配置
 
-在项目根目录的 `.env` 中配置独立的 Fernet 密钥。该密钥不能复用 JWT `SECRET_KEY`：
+手动启动后端时，在 `backend/.env.local` 中配置独立的 Fernet 密钥。该密钥不能复用 JWT `SECRET_KEY`：
 
 ```bash
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -19,6 +19,8 @@ MANAGEBAC_SYNC_INTERVAL_MINUTES=10
 
 - 不要把 `.env`、密钥或个人 iCal URL 提交到 Git。
 - 已有用户连接后不能直接更换或丢失密钥，否则旧连接无法解密，需要用户重新连接。
+- 修改 `backend/.env` 或 `backend/.env.local` 后，必须同时重启后端 API 和 `reminder_worker.py`；运行中的进程不会重新读取密钥。
+- Docker Compose 部署改为在项目根目录 `.env` 配置同名变量，由 `docker-compose.yml` 传给后端和 worker。
 - iCal URL 是 bearer credential，应像密码一样管理；曾在聊天、截图或日志中暴露过的 URL 应先在 ManageBac 中重新生成。
 
 其余可选网络限制见根目录 `.env.example`。
@@ -62,12 +64,12 @@ python reminder_worker.py
 
 1. 登录 IBuddy，打开“设置 → ManageBac 同步”。
 2. 粘贴个人 `webcal://` 或 `https://` URL，先点击“验证地址”。
-3. 确认预览只包含 Task/Deadline，不包含普通校园活动。
+3. 确认预览包含个人 iCal Feed 中所有带标题和时间的项目；ManageBac 可能不会提供可区分 Task 与普通 Event 的类型字段。
 4. 点击“连接并首次同步”。
 5. 在任务页确认 ManageBac 来源标签、标题、科目和官方截止时间。
 6. 在日历中确认该任务出现在对应日期。
 7. 在提醒设置中保留默认偏移，确认任务继承默认提醒。
-8. 在 ManageBac 修改测试任务的标题或截止时间，等待一个轮询周期或点击“立即同步”。
+8. 在 ManageBac 修改测试任务的标题或截止时间，等待一个轮询周期或点击“立即同步”；手动同步会忽略条件缓存并重新读取完整 Feed。
 9. 确认远端字段被更新，而本地优先级、个人截止时间、提醒覆盖和进度没有被覆盖。
 10. 暂停、恢复和断开连接各验证一次；断开时分别验证“保留导入任务”和“删除导入任务”。
 

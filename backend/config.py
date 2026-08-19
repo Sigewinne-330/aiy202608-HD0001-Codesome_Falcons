@@ -3,8 +3,21 @@ from pathlib import Path
 
 # 自动加载 .env 文件
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).parent / ".env")
-load_dotenv(Path(__file__).parent / ".env.local", override=True)
+
+
+def load_backend_environment(backend_dir: Path | None = None) -> None:
+    """Load backend-local configuration regardless of the process cwd.
+
+    Local secrets intentionally override values inherited from a parent shell.
+    A running process still needs to be restarted after either file changes.
+    """
+
+    config_dir = backend_dir or Path(__file__).resolve().parent
+    load_dotenv(config_dir / ".env")
+    load_dotenv(config_dir / ".env.local", override=True)
+
+
+load_backend_environment()
 
 
 class Settings:

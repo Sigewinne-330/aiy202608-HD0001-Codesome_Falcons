@@ -32,7 +32,7 @@ ManageBac 官方确认日历订阅属于从 ManageBac 到外部日历的持续�
 - 同步作业提交状态、成绩或附件。
 - 保存 ManageBac 登录密码。
 - 单个用户同时绑定多个 ManageBac 账号。
-- 将所有普通校园活动导入任务；默认只导入可识别的 Task 和 Deadline。
+- 不提供严格筛选模式；个人 iCal 中所有具备 UID、标题和时间的项目统一导入任务。
 
 ## 3. 整体架构
 
@@ -64,7 +64,7 @@ VEVENT 标准化、分类、去重、比对
 需要确认：
 
 - 老师发布的 Task 是否生成 `VEVENT`。
-- Task、Deadline 和普通 Event 如何区分。
+- Feed 是否提供 Task、Deadline 与普通 Event 的类型字段；若未提供，则全部按任务导入。
 - 截止日期使用 `DTSTART`、`DTEND` 还是自定义字段。
 - 全天任务的 `DTEND` 是否采用 iCalendar 的排他日期规则。
 - 是否包含稳定的 `UID`。
@@ -203,7 +203,7 @@ ManageBacCalendarItem(
 - HTML 描述清理为安全文本。
 - 没有稳定 UID 的项目默认跳过并记录原因。
 - 未能确认截止日期的事件不创建任务。
-- 无法确认是 Task 或 Deadline 的普通 Event 默认不导入。
+- ManageBac 未提供类型元数据时，普通 `VEVENT` 也按任务导入。
 - 重复 UID 采用确定性规则保留最新版本。
 - 不保存完整原始 ICS。
 

@@ -19,6 +19,10 @@ from database import (
 from routers import auth, billing, calendar, chat, deadlines, managebac, reminders, scheduling, scheduling_personalization, tasks
 import models  # noqa: F401 - register every ORM model before startup create_all
 from services.image_storage import UPLOAD_DIR
+from services.managebac_security import (
+    log_managebac_credential_readiness,
+    managebac_credential_readiness,
+)
 from services.reminder_seeds import seed_builtin_role_cards
 from services.schedule_policy import scheduling_enabled
 
@@ -46,6 +50,7 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     """Create/sync tables and seed role cards once across multiple workers."""
+    log_managebac_credential_readiness("api")
     lock_file = os.path.join(tempfile.gettempdir(), "ibuddy_startup.lock")
     with open(lock_file, "a+b") as file_obj:
         if not _try_acquire_file_lock(file_obj):
@@ -89,6 +94,9 @@ def health_check():
             "scheduling_balancer": scheduling_enabled(),
             "scheduling_agent_tools": _scheduling_agent_tools_registered(),
             "automatic_scheduling_default": False,
+            "managebac_credential_encryption": (
+                managebac_credential_readiness().configured
+            ),
         },
     }
 

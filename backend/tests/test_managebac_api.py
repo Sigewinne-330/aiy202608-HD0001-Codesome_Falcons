@@ -139,19 +139,19 @@ class ManageBacApiTests(unittest.TestCase):
 
         self.assertEqual(200, response.status_code, response.text)
         body = response.json()
-        self.assertEqual(2, body["sync"]["added_count"])
-        self.assertEqual(2, body["validation"]["importable_items"])
+        self.assertEqual(3, body["sync"]["added_count"])
+        self.assertEqual(3, body["validation"]["importable_items"])
         self.assertNotIn("private-token", response.text)
         self.assertEqual(200, reconnected.status_code, reconnected.text)
         self.assertEqual(0, reconnected.json()["sync"]["added_count"])
-        self.assertEqual(2, reconnected.json()["sync"]["unchanged_count"])
+        self.assertEqual(3, reconnected.json()["sync"]["unchanged_count"])
         self.assertNotIn("replacement-token", reconnected.text)
         with self.SessionLocal() as db:
             connection = db.query(ManageBacConnection).one()
             self.assertNotEqual(secret_url, connection.encrypted_feed_url)
             self.assertEqual(1, db.query(ManageBacConnection).count())
-            self.assertEqual(2, db.query(Task).count())
-            self.assertEqual(2, db.query(ManageBacTaskLink).count())
+            self.assertEqual(3, db.query(Task).count())
+            self.assertEqual(3, db.query(ManageBacTaskLink).count())
 
     def test_pause_resume_reconnect_guard_and_user_scoped_runs(self):
         owner_connection = self.add_connection()
@@ -257,7 +257,7 @@ class ManageBacApiTests(unittest.TestCase):
                 "/api/integrations/managebac/disconnect?delete_imported_tasks=true"
             )
         self.assertEqual(200, response.status_code, response.text)
-        self.assertEqual(2, response.json()["deleted_tasks"])
+        self.assertEqual(3, response.json()["deleted_tasks"])
         with self.SessionLocal() as db:
             self.assertEqual(0, db.query(ManageBacConnection).count())
             self.assertEqual(0, db.query(ManageBacTaskLink).count())

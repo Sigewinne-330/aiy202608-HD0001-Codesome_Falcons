@@ -77,6 +77,12 @@ class FetchedCalendar:
     retry_after_seconds: Optional[int] = None
 
 
+@dataclass(frozen=True)
+class ManageBacCredentialReadiness:
+    configured: bool
+    code: Optional[str] = None
+
+
 def _allowed_host(host: str, suffixes: Iterable[str]) -> bool:
     normalized = host.lower().rstrip(".")
     return any(normalized == suffix or normalized.endswith(f".{suffix}") for suffix in suffixes)
@@ -163,6 +169,38 @@ def _cipher(key: Optional[str] = None) -> Fernet:
             "credential_key_invalid",
             "服务器的 ManageBac 凭据加密密钥无效",
         ) from exc
+
+
+def managebac_credential_readiness(
+    *, key: Optional[str] = None
+) -> ManageBacCredentialReadiness:
+    """Return a secret-free readiness result for API and worker startup checks."""
+
+    try:
+        _cipher(key)
+    except ManageBacConfigurationError as error:
+        return ManageBacCredentialReadiness(False, error.code)
+    return ManageBacCredentialReadiness(True)
+
+
+def log_managebac_credential_readiness(component: str) -> bool:
+    """Log an actionable configuration result without exposing key material."""
+
+    readiness = managebac_credential_readiness()
+    if readiness.configured:
+        logger.info(
+            "ManageBac credential encryption ready component=%s",
+            component,
+        )
+        return True
+    logger.error(
+        "ManageBac credential encryption unavailable component=%s code=%s; "
+        "set INTEGRATION_CREDENTIAL_KEY in backend/.env.local and restart "
+        "the API and reminder worker",
+        component,
+        readiness.code,
+    )
+    return False
 
 
 def encrypt_feed_url(feed_url: str, *, key: Optional[str] = None) -> str:

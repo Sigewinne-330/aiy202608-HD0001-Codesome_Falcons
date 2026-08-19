@@ -257,7 +257,7 @@ export default {
       network: 'The ManageBac calendar is temporarily unavailable. Please try again later.',
       feedTooLarge: 'The ManageBac calendar is too large to import safely.',
       invalidCalendar: 'The URL did not return a valid ManageBac iCal calendar.',
-      serverConfiguration: 'ManageBac credential encryption is not configured on this server.',
+      serverConfiguration: 'The server did not load the ManageBac credential key. Configure backend/.env.local, then restart the API and sync worker.',
       providerDenied: 'ManageBac rejected this calendar client request. The subscription URL may still be valid; retry later or contact ManageBac support.',
       reconnect: 'The subscription credential is no longer valid. Generate a new URL and reconnect.',
       inProgress: 'A sync is already running or just finished. Please wait a moment and try again.',
