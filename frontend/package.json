@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:personalization": "node --test tests/personalization-state.test.mjs"
+    "test": "npm run test:personalization && npm run test:managebac && npm run test:calendar",
+    "test:personalization": "node --test tests/personalization-state.test.mjs",
+    "test:managebac": "node --test tests/managebac-state.test.mjs",
+    "test:calendar": "node --test tests/calendar-todo.test.mjs"
   },
   "dependencies": {
     "@mdi/font": "^7.4.0",

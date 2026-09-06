@@ -18,6 +18,7 @@ from database import Base, get_db  # noqa: E402
 import models  # noqa: F401,E402
 from main import app  # noqa: E402
 from models.app_user import AppUser  # noqa: E402
+from models.sub_task import SubTask  # noqa: E402
 from models.task_new import Task, TaskType  # noqa: E402
 from models.scheduling import ScheduleAllocation  # noqa: E402
 from services.auth import get_current_user  # noqa: E402
@@ -158,6 +159,37 @@ class ScheduleApiTests(unittest.TestCase):
         source_items = [item for day in days for item in day["tasks"] if item["title"] == "split-source"]
         self.assertEqual(1, len(source_items))
         self.assertEqual("allocation", source_items[0]["type"])
+
+    def test_calendar_serializes_date_backed_subtask_notice_time(self):
+        target = date.today() + timedelta(days=2)
+        with self.SessionLocal() as db:
+            parent = Task(
+                user_id=1,
+                task_type=TaskType.process,
+                id_name="dated-subtask-parent",
+                title="dated-subtask-parent",
+                status="todo",
+            )
+            db.add(parent)
+            db.flush()
+            db.add(SubTask(
+                task_id=parent.id,
+                name="dated-subtask",
+                notice_time=target,
+                status="pending",
+            ))
+            db.commit()
+
+        response = self.client.get(
+            f"/api/calendar?year={target.year}&month={target.month}"
+        )
+
+        self.assertEqual(200, response.status_code, response.text)
+        target_day = next(
+            day for day in response.json()["days"] if day["date"] == target.isoformat()
+        )
+        subtask = next(item for item in target_day["tasks"] if item["title"] == "dated-subtask")
+        self.assertEqual("subtask", subtask["type"])
 
     def test_calendar_suppresses_cross_month_source_and_groups_same_day_chunks(self):
         source_date = date.today() + timedelta(days=2)

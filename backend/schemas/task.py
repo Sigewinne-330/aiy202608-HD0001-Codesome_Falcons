@@ -68,6 +68,9 @@ class TaskResponse(BaseModel):
     is_schedule_locked: bool = False
     schedule_version: int = 1
     schedule_kind: Optional[str] = None
+    external_source: Optional[str] = None
+    external_source_url: Optional[str] = None
+    external_source_status: Optional[str] = None
 
     class Config:
         from_attributes = True

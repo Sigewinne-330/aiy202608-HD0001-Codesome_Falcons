@@ -38,11 +38,16 @@
           v-for="day in calendarDays"
           :key="day.date"
           class="calendar-day"
+          :tabindex="loading ? -1 : 0"
+          :aria-label="$t('calendar.addTodoOnDate', { date: day.date })"
           :class="{
             'calendar-day--muted': !day.currentMonth,
             'calendar-day--today': day.today,
             'calendar-day--weekend': day.weekend,
           }"
+          @click="handleDayCellClick(day, $event)"
+          @keydown.enter.self="openTodoForDay(day)"
+          @keydown.space.prevent.self="openTodoForDay(day)"
         >
           <div class="calendar-day__top">
             <span class="calendar-day__number">{{ day.number }}</span>
@@ -59,7 +64,7 @@
               :class="[`schedule-pill--${pillShape(item)}`, { 'schedule-pill--urgent': item.priority === 'urgent' }]"
               :style="{ '--pill-bg': pillColor(item).bg, '--pill-dot': pillColor(item).dot, '--pill-text': pillColor(item).text }"
               :title="item.deadline_kind === 'personal' ? `${item.title} (${$t('calendar.personalDeadline')})` : item.title"
-              @click="openItem(item)"
+              @click.stop="openItem(item)"
             >
               <i />
               <span>{{ item.title }}</span>
@@ -68,11 +73,15 @@
               v-if="day.items.length > 3"
               type="button"
               class="more-items"
-              @click="openDay(day)"
+              @click.stop="openDay(day)"
             >
               {{ $t('calendar.moreItems', { n: day.items.length - 3 }) }}
             </button>
           </div>
+          <span class="calendar-day__add-hint" aria-hidden="true">
+            <v-icon icon="mdi-plus" size="13" />
+            {{ $t('calendar.addTodoHint') }}
+          </span>
         </article>
 
         <div v-if="loading" class="calendar-loading">
@@ -108,17 +117,98 @@
         </v-card-text>
       </v-card>
     </v-dialog>
+
+    <v-dialog v-model="createTodoDialog" max-width="580">
+      <v-card rounded="xl">
+        <v-card-title class="pt-5 px-6">{{ $t('calendar.newTodoTitle') }}</v-card-title>
+        <v-card-text class="pt-4">
+          <div class="calendar-todo-context">
+            <v-icon icon="mdi-checkbox-marked-circle-outline" color="primary" size="24" />
+            <div>
+              <strong>{{ $t('tasks.todoType') }}</strong>
+              <span>{{ selectedTodoDateLabel }}</span>
+            </div>
+          </div>
+
+          <v-text-field v-model="todoForm.title" :label="$t('tasks.taskName')" variant="outlined" density="comfortable" class="mb-2" autofocus />
+          <v-textarea v-model="todoForm.description" :label="$t('tasks.description')" variant="outlined" density="comfortable" rows="2" class="mb-2" />
+          <v-text-field v-model="todoForm.subject" :label="$t('tasks.subject')" variant="outlined" density="comfortable" class="mb-2" />
+          <v-row dense>
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="todoForm.priority"
+                :label="$t('tasks.priority')"
+                :items="priorityOptions"
+                :item-title="priorityTitle"
+                item-value="value"
+                variant="outlined"
+                density="comfortable"
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model="todoForm.deadline" :label="$t('tasks.deadline')" type="date" variant="outlined" density="comfortable" />
+            </v-col>
+          </v-row>
+          <v-row dense>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="todoForm.deadline_time"
+                :label="$t('tasks.deadlineTime')"
+                type="time"
+                variant="outlined"
+                density="comfortable"
+                :disabled="!todoForm.deadline"
+                :hint="$t('tasks.deadlineTimeHint')"
+                persistent-hint
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="todoForm.reminder_mode"
+                :label="$t('tasks.reminderMode')"
+                :items="reminderModeOptions"
+                item-title="title"
+                item-value="value"
+                variant="outlined"
+                density="comfortable"
+                :disabled="!todoForm.deadline"
+              />
+            </v-col>
+          </v-row>
+          <div v-if="todoForm.deadline && todoForm.reminder_mode === 'custom'" class="reminder-offsets-box">
+            <ReminderOffsetsEditor v-model="todoForm.reminder_offsets" />
+          </div>
+          <v-text-field v-model="todoForm.estimated_hours" :label="$t('tasks.estimatedHours')" type="number" min="0" variant="outlined" density="comfortable" />
+        </v-card-text>
+        <v-card-actions class="px-6 pb-5">
+          <v-spacer />
+          <v-btn variant="text" @click="createTodoDialog = false">{{ $t('common.cancel') }}</v-btn>
+          <v-btn color="primary" :loading="savingTodo" :disabled="!canCreateTodo" @click="createTodo">{{ $t('common.create') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-snackbar v-model="todoErrorVisible" color="error" timeout="3500">{{ todoErrorMessage }}</v-snackbar>
+    <v-snackbar v-model="todoSuccessVisible" color="success" timeout="2500">{{ $t('calendar.todoCreated') }}</v-snackbar>
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuth } from '@/stores/auth'
-import { onTasksChanged } from '@/services/taskSync'
+import { useI18n } from 'vue-i18n'
+import { authFetch, useAuth } from '@/stores/auth'
+import { notifyTasksChanged, onTasksChanged } from '@/services/taskSync'
+import ReminderOffsetsEditor from '@/components/ReminderOffsetsEditor.vue'
+import {
+  buildCalendarTodoPayload,
+  createCalendarTodoForm,
+  isCalendarCellBlankClick,
+} from '@/services/calendarTodo'
 
 const route = useRoute()
 const router = useRouter()
+const { t, locale } = useI18n()
 const { token } = useAuth()
 const now = new Date()
 
@@ -129,11 +219,37 @@ const loading = ref(false)
 // 单日详情弹窗：选中天的完整 items 列表
 const dayDialog = ref(false)
 const selectedDay = ref(null)
+const createTodoDialog = ref(false)
+const savingTodo = ref(false)
+const todoErrorVisible = ref(false)
+const todoErrorMessage = ref('')
+const todoSuccessVisible = ref(false)
+const todoForm = ref(createCalendarTodoForm(dateKey(now)))
 const weekDayKeys = ['weekMon', 'weekTue', 'weekWed', 'weekThu', 'weekFri', 'weekSat', 'weekSun']
 
 const dialogItems = computed(() => selectedDay.value?.items || [])
 const dialogMonth = computed(() => (selectedDay.value ? Number(selectedDay.value.date.slice(5, 7)) : ''))
 const dialogDay = computed(() => (selectedDay.value ? Number(selectedDay.value.date.slice(8, 10)) : ''))
+const canCreateTodo = computed(() => Boolean(todoForm.value.title.trim() && todoForm.value.deadline))
+const selectedTodoDateLabel = computed(() => {
+  if (!todoForm.value.deadline) return ''
+  const date = new Date(`${todoForm.value.deadline}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return todoForm.value.deadline
+  return new Intl.DateTimeFormat(locale.value, { dateStyle: 'full' }).format(date)
+})
+
+const priorityOptions = [
+  { titleKey: 'common.low', value: 'low' },
+  { titleKey: 'common.medium', value: 'medium' },
+  { titleKey: 'common.high', value: 'high' },
+  { titleKey: 'common.urgent', value: 'urgent' },
+]
+
+const reminderModeOptions = computed(() => [
+  { title: t('tasks.reminderInherit'), value: 'inherit' },
+  { title: t('tasks.reminderCustom'), value: 'custom' },
+  { title: t('tasks.reminderOff'), value: 'off' },
+])
 
 const monthItemCount = computed(() => Object.entries(monthData.value)
   .filter(([date]) => Number(date.slice(5, 7)) === currentMonth.value)
@@ -176,6 +292,10 @@ function dateKey(date) {
 
 function priorityWeight(priority) {
   return { urgent: 4, high: 3, medium: 2, low: 1 }[priority] || 0
+}
+
+function priorityTitle(item) {
+  return item.titleKey ? t(item.titleKey) : item.title
 }
 
 // Process 任务调色板（按 parent_task_id 分组循环）
@@ -272,6 +392,51 @@ function openDay(day) {
   dayDialog.value = true
 }
 
+function handleDayCellClick(day, event) {
+  if (loading.value || !isCalendarCellBlankClick(event.target)) return
+  openTodoForDay(day)
+}
+
+function openTodoForDay(day) {
+  if (loading.value) return
+  todoForm.value = createCalendarTodoForm(day.date)
+  todoErrorVisible.value = false
+  createTodoDialog.value = true
+}
+
+async function createTodo() {
+  if (!canCreateTodo.value) return
+  savingTodo.value = true
+  try {
+    const payload = buildCalendarTodoPayload(todoForm.value)
+    const response = await authFetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      throw new Error(data.detail || `HTTP ${response.status}`)
+    }
+
+    const createdDate = String(payload.deadline).slice(0, 10)
+    const [year, month] = createdDate.split('-').map(Number)
+    createTodoDialog.value = false
+    todoSuccessVisible.value = true
+    if (year && month && (year !== currentYear.value || month !== currentMonth.value)) {
+      currentYear.value = year
+      currentMonth.value = month
+      await router.replace({ query: { ...route.query, year, month } })
+    }
+    notifyTasksChanged()
+  } catch (error) {
+    todoErrorMessage.value = t('tasks.createFail', { msg: error.message })
+    todoErrorVisible.value = true
+  } finally {
+    savingTodo.value = false
+  }
+}
+
 // 弹窗内点击条目：先关弹窗再走与月历一致的跳转逻辑
 function openDialogItem(item) {
   dayDialog.value = false
@@ -332,10 +497,11 @@ onBeforeUnmount(() => stopTaskSync?.())
 .weekday-grid { border-bottom: 1px solid #edf0f5; background: #fafbfe; }
 .weekday-grid > div { padding: 11px 12px; color: #929bad; text-align: center; font-size: 10px; font-weight: 750; letter-spacing: .04em; }
 .month-grid { position: relative; }
-.calendar-day { min-height: clamp(112px, 14vh, 148px); padding: 10px; border-right: 1px solid #edf0f5; border-bottom: 1px solid #edf0f5; background: rgba(255,255,255,.72); transition: background .15s; }
+.calendar-day { position: relative; min-height: clamp(112px, 14vh, 148px); padding: 10px; border-right: 1px solid #edf0f5; border-bottom: 1px solid #edf0f5; background: rgba(255,255,255,.72); cursor: pointer; transition: background .15s, box-shadow .15s; }
 .calendar-day:nth-child(7n) { border-right: 0; }
 .calendar-day:nth-last-child(-n+7) { border-bottom: 0; }
 .calendar-day:hover { background: #fafbff; }
+.calendar-day:focus { outline: none; box-shadow: inset 0 0 0 1.5px rgba(80,114,233,.55); }
 .calendar-day--muted { background: #fafbfc; opacity: .55; }
 .calendar-day--weekend:not(.calendar-day--muted) { background: #fdfdff; }
 .calendar-day--today { background: #f5f7ff; box-shadow: inset 0 0 0 1.5px #5072e9; }
@@ -345,6 +511,13 @@ onBeforeUnmount(() => stopTaskSync?.())
 .today-label { color: #4169e8; font-size: 9px; font-weight: 750; }
 .item-count { min-width: 18px; height: 18px; display: grid; place-items: center; padding: 0 5px; border-radius: 999px; color: #778196; background: #f0f2f7; font-size: 9px; }
 .calendar-day__items { display: flex; flex-direction: column; gap: 4px; }
+.calendar-day__add-hint {
+  position: absolute; right: 8px; bottom: 7px; display: inline-flex; align-items: center; gap: 2px;
+  color: #6f82c7; font-size: 9px; font-weight: 700; opacity: 0; pointer-events: none;
+  transform: translateY(2px); transition: opacity .15s, transform .15s;
+}
+.calendar-day:hover > .calendar-day__add-hint,
+.calendar-day:focus > .calendar-day__add-hint { opacity: 1; transform: translateY(0); }
 /* --- Schedule pills --- */
 .schedule-pill {
   width: 100%; display: flex; align-items: center; gap: 6px; border: 0; padding: 5px 6px;
@@ -499,6 +672,11 @@ onBeforeUnmount(() => stopTaskSync?.())
 .day-dialog__count { color: #8993a6; font-size: 12px; font-weight: 500; }
 .day-dialog__body { display: flex; flex-direction: column; gap: 6px; padding: 4px 20px 20px; }
 .day-dialog__body .schedule-pill { font-size: 12px; padding: 8px 10px; }
+.calendar-todo-context { display: flex; align-items: center; gap: 11px; margin-bottom: 16px; padding: 12px 14px; border: 1px solid #e2e7f5; border-radius: 13px; background: #f6f8ff; }
+.calendar-todo-context strong, .calendar-todo-context span { display: block; }
+.calendar-todo-context strong { color: #34415d; font-size: 12px; }
+.calendar-todo-context span { margin-top: 2px; color: #7d889e; font-size: 11px; }
+.reminder-offsets-box { margin: 4px 0 16px; padding: 12px; border: 1px dashed #d5dbe7; border-radius: 10px; }
 .month-grid--loading { min-height: 500px; }
 .calendar-loading { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #7e889d; background: rgba(255,255,255,.78); backdrop-filter: blur(3px); font-size: 12px; }
 @media (max-width: 900px) {
